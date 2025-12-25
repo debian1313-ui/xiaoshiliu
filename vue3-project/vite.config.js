@@ -30,11 +30,11 @@ export default defineConfig({
     },
   },
   server: {
-    /* allowedHosts: [   //添加白名单域名，手动部署取消前面的注释把qq.com替换成你的白名单域名
+     allowedHosts: [   //添加白名单域名，手动部署取消前面的注释把qq.com替换成你的白名单域名
         'localhost',
         '127.0.0.1',
-        'qq.com'
-      ],  */
+        'xiaoshiliu.yuelk.com'
+      ],  
     proxy: {
       '/api': {
         target: 'http://localhost:3001',//后端接口地址
