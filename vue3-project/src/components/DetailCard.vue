@@ -12,13 +12,90 @@
           'video-note-mode': isVideoNote
         }"
         @animationend="handleAnimationEnd">
-      <button v-if="!pageMode" class="close-btn" @click="closeModal" @mouseenter="showTooltip = true"
+      <button v-if="!pageMode && !(isVideoNote && isMobile)" class="close-btn" @click="closeModal" @mouseenter="showTooltip = true"
         @mouseleave="showTooltip = false">
         <SvgIcon name="close" />
         <div v-if="showTooltip" class="tooltip">
           关闭 <span class="key-hint">Esc</span>
         </div>
       </button>
+
+      <!-- 移动端抖音风格视频笔记叠加层 -->
+      <div v-if="isVideoNote && isMobile" class="tiktok-overlay">
+        <!-- 顶部栏：返回按钮 + 搜索按钮 -->
+        <div class="tiktok-top-bar">
+          <button class="tiktok-back-btn" @click="closeModal">
+            <SvgIcon name="leftArrow" width="24" height="24" />
+          </button>
+          <button class="tiktok-search-btn" @click="handleTagClick(postData.tags?.[0] || '')">
+            <SvgIcon name="search" width="24" height="24" />
+          </button>
+        </div>
+
+        <!-- 右侧垂直操作按钮 -->
+        <div class="tiktok-right-actions">
+          <div class="tiktok-action-item" @click="toggleLike(!isLiked)">
+            <div class="tiktok-action-icon" :class="{ 'active': isLiked }">
+              <SvgIcon :name="isLiked ? 'liked' : 'like'" width="32" height="32" />
+            </div>
+            <span class="tiktok-action-count">{{ likeCount }}</span>
+          </div>
+          <div class="tiktok-action-item" @click="handleCommentButtonClick">
+            <div class="tiktok-action-icon">
+              <SvgIcon name="chat" width="32" height="32" />
+            </div>
+            <span class="tiktok-action-count">{{ commentCount }}</span>
+          </div>
+          <div class="tiktok-action-item" @click="toggleCollect">
+            <div class="tiktok-action-icon" :class="{ 'active': isCollected }">
+              <SvgIcon :name="isCollected ? 'collected' : 'collect'" width="32" height="32" />
+            </div>
+            <span class="tiktok-action-count">{{ collectCount }}</span>
+          </div>
+          <div class="tiktok-action-item" @click="handleShare">
+            <div class="tiktok-action-icon">
+              <SvgIcon :name="isShared ? 'tick' : 'share'" width="32" height="32" />
+            </div>
+            <span class="tiktok-action-count">分享</span>
+          </div>
+        </div>
+
+        <!-- 底部左侧用户信息 -->
+        <div class="tiktok-bottom-left">
+          <div class="tiktok-user-row">
+            <div class="tiktok-avatar-container" @click="onUserClick(authorData.id)">
+              <img :src="authorData.avatar" :alt="authorData.name" class="tiktok-avatar" @error="handleAvatarError" />
+            </div>
+            <FollowButton v-if="!isCurrentUserPost" :is-following="authorData.isFollowing" :user-id="authorData.id"
+              @follow="handleFollow" @unfollow="handleUnfollow" class="tiktok-follow-btn" />
+          </div>
+          <div class="tiktok-tags">
+            <span v-for="tag in postData.tags" :key="tag" class="tiktok-tag" @click="handleTagClick(tag)">#{{ tag }}</span>
+          </div>
+          <div v-if="postData.location" class="tiktok-location">
+            <SvgIcon name="hash" width="14" height="14" />
+            <span>{{ postData.location }}</span>
+          </div>
+        </div>
+
+        <!-- 底部评论输入框 -->
+        <div class="tiktok-bottom-bar">
+          <div class="tiktok-comment-input" @click="toggleInfoPanel">
+            <span class="tiktok-input-placeholder">有话要说，快来评论</span>
+          </div>
+          <div class="tiktok-input-icons">
+            <button class="tiktok-input-icon" @click.stop="toggleMentionPanel">
+              <SvgIcon name="mention" width="20" height="20" />
+            </button>
+            <button class="tiktok-input-icon" @click.stop="toggleEmojiPanel">
+              <SvgIcon name="emoji" width="20" height="20" />
+            </button>
+            <button class="tiktok-input-icon" @click.stop="toggleImageUpload">
+              <SvgIcon name="imgNote" width="20" height="20" />
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div class="detail-content" :class="{ 'video-note-content': isVideoNote }">
         <div class="image-section" :class="{ 'video-note-section': isVideoNote }" :style="isVideoNote ? {} : { width: imageSectionWidth + 'px' }" @mouseenter="showImageControls = true"
@@ -3113,6 +3190,15 @@ function handleAvatarError(event) {
   background: rgba(255, 255, 255, 0.25);
 }
 
+/* ============================================
+   抖音风格叠加层样式 (TikTok Style Overlay)
+   ============================================ */
+
+/* 抖音叠加层容器 */
+.tiktok-overlay {
+  display: none;
+}
+
 /* 图片容器和控制样式 */
 .image-container {
   position: relative;
@@ -4753,13 +4839,13 @@ function handleAvatarError(event) {
     min-width: 100%;
     max-width: 100%;
     height: auto;
-    max-height: 60vh;
+    max-height: 70vh;
     background: var(--bg-color-primary);
     border-radius: 16px 16px 0 0;
-    z-index: 100;
+    z-index: 200;
     overflow-y: auto;
     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
-    transform: translateY(calc(100% - 120px));
+    transform: translateY(100%);
     transition: transform 0.3s ease;
     -webkit-overflow-scrolling: touch;
   }
@@ -4782,20 +4868,9 @@ function handleAvatarError(event) {
     border-bottom: 1px solid var(--border-color-secondary);
   }
 
-  /* 移动端视频笔记：关闭按钮样式 */
+  /* 移动端视频笔记：隐藏原关闭按钮 */
   .detail-card.video-note-mode .close-btn {
-    position: fixed;
-    top: calc(16px + env(safe-area-inset-top));
-    left: 16px;
-    z-index: 1001;
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(10px);
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-  }
-
-  .detail-card.video-note-mode .close-btn:hover {
-    background: rgba(255, 255, 255, 0.25);
+    display: none;
   }
 
   /* 移动端视频笔记：可滚动内容区域 */
@@ -4830,6 +4905,218 @@ function handleAvatarError(event) {
 
   .detail-card.video-note-mode .drag-handle:hover .drag-handle-bar {
     background: var(--text-color-secondary);
+  }
+
+  /* ============================================
+     移动端抖音风格叠加层样式 (TikTok Style Overlay)
+     ============================================ */
+
+  /* 抖音叠加层容器 */
+  .detail-card.video-note-mode .tiktok-overlay {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 150;
+    pointer-events: none;
+  }
+
+  .detail-card.video-note-mode .tiktok-overlay > * {
+    pointer-events: auto;
+  }
+
+  /* 顶部栏 */
+  .tiktok-top-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: calc(16px + env(safe-area-inset-top)) 16px 16px 16px;
+    z-index: 10;
+  }
+
+  .tiktok-back-btn,
+  .tiktok-search-btn {
+    width: 40px;
+    height: 40px;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: white;
+    transition: background 0.2s ease;
+  }
+
+  .tiktok-back-btn:hover,
+  .tiktok-search-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  /* 右侧垂直操作按钮 */
+  .tiktok-right-actions {
+    position: absolute;
+    right: 12px;
+    bottom: 180px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    z-index: 10;
+  }
+
+  .tiktok-action-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+  }
+
+  .tiktok-action-icon {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    transition: transform 0.2s ease;
+  }
+
+  .tiktok-action-icon:hover {
+    transform: scale(1.1);
+  }
+
+  .tiktok-action-icon.active {
+    color: #ff2d55;
+  }
+
+  .tiktok-action-count {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 500;
+  }
+
+  /* 底部左侧用户信息 */
+  .tiktok-bottom-left {
+    position: absolute;
+    left: 16px;
+    bottom: 100px;
+    right: 80px;
+    z-index: 10;
+  }
+
+  .tiktok-user-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .tiktok-avatar-container {
+    cursor: pointer;
+  }
+
+  .tiktok-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid white;
+  }
+
+  .tiktok-follow-btn {
+    transform: scale(0.9);
+  }
+
+  .tiktok-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .tiktok-tag {
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  }
+
+  .tiktok-tag:hover {
+    text-decoration: underline;
+  }
+
+  .tiktok-location {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    backdrop-filter: blur(4px);
+  }
+
+  /* 底部评论输入栏 */
+  .tiktok-bottom-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
+  }
+
+  .tiktok-comment-input {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    padding: 10px 16px;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+  }
+
+  .tiktok-input-placeholder {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 14px;
+  }
+
+  .tiktok-input-icons {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .tiktok-input-icon {
+    width: 36px;
+    height: 36px;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.8);
+    transition: background 0.2s ease;
+  }
+
+  .tiktok-input-icon:hover {
+    background: rgba(255, 255, 255, 0.1);
   }
 }
 
