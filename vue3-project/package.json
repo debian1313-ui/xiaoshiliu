@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
+    "build:h5": "vite build --mode h5 --outDir dist-h5",
     "preview": "vite build && vite preview --host"
   },
   "dependencies": {
