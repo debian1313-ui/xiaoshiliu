@@ -1,5 +1,5 @@
 <template>
-  <div :class="[pageMode ? 'detail-card-page' : 'detail-card-overlay', { 'animating': isAnimating && !pageMode }]"
+  <div :class="[pageMode ? 'detail-card-page' : 'detail-card-overlay', { 'animating': isAnimating && !pageMode, 'video-note-overlay': isVideoNote }]"
     v-click-outside.mousedown="!pageMode ? closeModal : undefined" v-escape-key="!pageMode ? closeModal : undefined">
     <div class="detail-card" @click="handleDetailCardClick"
         :style="pageMode ? {} : { width: cardWidth + 'px', ...(isClosing ? {} : animationStyle) }"
@@ -8,7 +8,8 @@
           'scale-out': isClosing && !pageMode && !isMobile,
           'slide-in': isAnimating && !pageMode && isMobile,
           'slide-out': isClosing && !pageMode && isMobile,
-          'page-mode': pageMode 
+          'page-mode': pageMode,
+          'video-note-mode': isVideoNote
         }"
         @animationend="handleAnimationEnd">
       <button v-if="!pageMode" class="close-btn" @click="closeModal" @mouseenter="showTooltip = true"
@@ -19,8 +20,8 @@
         </div>
       </button>
 
-      <div class="detail-content">
-        <div class="image-section" :style="{ width: imageSectionWidth + 'px' }" @mouseenter="showImageControls = true"
+      <div class="detail-content" :class="{ 'video-note-content': isVideoNote }">
+        <div class="image-section" :class="{ 'video-note-section': isVideoNote }" :style="isVideoNote ? {} : { width: imageSectionWidth + 'px' }" @mouseenter="showImageControls = true"
           @mouseleave="showImageControls = false">
           <!-- 视频播放器（桌面端） -->
           <div v-if="props.item.type === 2" class="video-container">
@@ -80,7 +81,7 @@
           </div>
         </div>
 
-        <div class="content-section" ref="contentSection" :style="windowWidth > 768 ? { width: contentSectionWidth + 'px' } : {}">
+        <div class="content-section" :class="{ 'video-note-info-section': isVideoNote }" ref="contentSection" :style="!isVideoNote && windowWidth > 768 ? { width: contentSectionWidth + 'px' } : {}">
           <div class="author-wrapper" ref="authorWrapper">
             <div class="author-info">
               <div class="author-avatar-container">
@@ -590,6 +591,9 @@ const isVideoLoaded = ref(false) // 视频加载状态
 // 移动端检测
 const isMobile = computed(() => windowWidth.value <= 768)
 
+// 检测是否为视频笔记 (抖音风格)
+const isVideoNote = computed(() => props.item.type === 2)
+
 // 视频进度与音量记忆
 const getStorageKeys = (url) => {
   const safeKey = url ? encodeURIComponent(url) : 'unknown'
@@ -773,6 +777,10 @@ const contentSectionWidth = computed(() => {
 })
 
 const cardWidth = computed(() => {
+  // 视频笔记模式使用更大的宽度（抖音风格）
+  if (isVideoNote.value) {
+    return Math.min(windowWidth.value - 40, 1400)
+  }
   return imageSectionWidth.value + contentSectionWidth.value
 })
 
@@ -2999,6 +3007,95 @@ function handleAvatarError(event) {
   font-size: 14px;
 }
 
+/* ============================================
+   抖音风格视频笔记样式 (TikTok Style Video Note)
+   ============================================ */
+
+/* 视频笔记遮罩层 - 深色背景 */
+.detail-card-overlay.video-note-overlay {
+  background: rgba(0, 0, 0, 0.95);
+}
+
+/* 视频笔记模式卡片 - 全屏沉浸式 */
+.detail-card.video-note-mode {
+  width: calc(100vw - 40px) !important;
+  max-width: 1400px;
+  height: calc(100vh - 40px);
+  max-height: 95vh;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
+}
+
+/* 视频笔记内容布局 - 视频为主，信息栏在右侧 */
+.detail-content.video-note-content {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  background: #000;
+}
+
+/* 视频区域 - 占据主要空间 */
+.image-section.video-note-section {
+  flex: 1;
+  width: auto !important;
+  min-width: 0;
+  height: 100%;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* 视频笔记模式下的视频容器 */
+.video-note-mode .video-container {
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+/* 视频笔记模式下的视频播放器 */
+.video-note-mode .video-player {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: contain;
+  background: #000;
+}
+
+/* 视频笔记模式下的视频封面占位 */
+.video-note-mode .video-cover-placeholder {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+/* 视频笔记信息区域 - 右侧面板 */
+.content-section.video-note-info-section {
+  width: 380px;
+  min-width: 380px;
+  max-width: 380px;
+  height: 100%;
+  background: var(--bg-color-primary);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 视频笔记关闭按钮样式 */
+.video-note-mode .close-btn {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.video-note-mode .close-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
 /* 图片容器和控制样式 */
 .image-container {
   position: relative;
@@ -4572,6 +4669,128 @@ function handleAvatarError(event) {
 
   .action-buttons {
     gap: 1px;
+  }
+
+  /* ============================================
+     移动端抖音风格视频笔记样式
+     ============================================ */
+  
+  /* 移动端视频笔记遮罩层 */
+  .detail-card-overlay.video-note-overlay {
+    background: #000;
+  }
+
+  /* 移动端视频笔记模式卡片 - 全屏沉浸式 */
+  .detail-card.video-note-mode {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw;
+    max-height: 100vh;
+    border-radius: 0;
+    background: #000;
+  }
+
+  /* 移动端视频笔记内容布局 */
+  .detail-content.video-note-content {
+    flex-direction: column;
+    background: #000;
+    position: relative;
+  }
+
+  /* 移动端视频笔记：显示视频区域 */
+  .video-note-mode .image-section.video-note-section {
+    display: flex !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 1;
+    background: #000;
+  }
+
+  /* 移动端视频笔记：显示桌面端视频容器 */
+  .video-note-mode .video-container {
+    display: flex !important;
+    width: 100%;
+    height: 100%;
+    background: #000;
+  }
+
+  /* 移动端视频笔记：视频播放器全屏 */
+  .video-note-mode .video-player {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  /* 移动端视频笔记信息区域 - 底部滑动面板 */
+  .content-section.video-note-info-section {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100% !important;
+    min-width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: 60vh;
+    background: var(--bg-color-primary);
+    border-radius: 16px 16px 0 0;
+    z-index: 100;
+    overflow-y: auto;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+    transform: translateY(calc(100% - 120px));
+    transition: transform 0.3s ease;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 移动端视频笔记：展开信息面板 */
+  .content-section.video-note-info-section:focus-within,
+  .content-section.video-note-info-section.expanded {
+    transform: translateY(0);
+  }
+
+  /* 移动端视频笔记：隐藏移动端视频容器（使用桌面端全屏视频） */
+  .video-note-mode .mobile-video-container {
+    display: none !important;
+  }
+
+  /* 移动端视频笔记：作者信息样式调整 */
+  .video-note-mode .author-wrapper {
+    padding: 16px !important;
+    padding-left: 16px !important;
+    background: var(--bg-color-primary);
+    border-bottom: 1px solid var(--border-color-secondary);
+  }
+
+  /* 移动端视频笔记：关闭按钮样式 */
+  .video-note-mode .close-btn {
+    position: fixed;
+    top: calc(16px + env(safe-area-inset-top));
+    left: 16px;
+    z-index: 1001;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .video-note-mode .close-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  /* 移动端视频笔记：可滚动内容区域 */
+  .video-note-mode .scrollable-content {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+
+  /* 移动端视频笔记：底部操作栏 */
+  .video-note-mode .footer-actions {
+    position: relative;
+    background: var(--bg-color-primary);
   }
 }
 
