@@ -5,7 +5,7 @@ import SimpleSpinner from './spinner/SimpleSpinner.vue'
 import DetailCard from './DetailCard.vue'
 import LikeButton from './LikeButton.vue'
 import SvgIcon from './SvgIcon.vue'
-import { ref, nextTick, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useLikeStore } from '@/stores/like.js'
@@ -68,6 +68,17 @@ const isInitialLoad = ref(true)
 const showDetailCard = ref(false)
 const selectedItem = ref(null)
 const clickPosition = ref({ x: 0, y: 0 })
+
+// 视频列表（用于上下滑动切换视频）
+const videoList = computed(() => {
+    return contentList.value.filter(item => item.type === 2)
+})
+
+// 当前选中视频在视频列表中的索引
+const currentVideoIndex = computed(() => {
+    if (!selectedItem.value || selectedItem.value.type !== 2) return -1
+    return videoList.value.findIndex(item => item.id === selectedItem.value.id)
+})
 
 // 瀑布流相关状态
 const containerRef = ref(null)
@@ -799,6 +810,31 @@ const handleDetailCardCollect = (data) => {
     emit('collect', data)
 }
 
+// 处理视频切换事件
+const handleVideoSwitch = (newIndex) => {
+    if (newIndex >= 0 && newIndex < videoList.value.length) {
+        const newVideo = videoList.value[newIndex]
+        // 更新选中的视频（使用深拷贝避免影响原始数据）
+        selectedItem.value = JSON.parse(JSON.stringify(newVideo))
+        
+        // 更新URL
+        const newUrl = `/post?id=${newVideo.id}`
+        window.history.replaceState(
+            {
+                previousUrl: window.location.pathname + window.location.search,
+                showDetailCard: true,
+                postId: newVideo.id,
+                originalTitle: document.title
+            },
+            newVideo.title || '视频笔记',
+            newUrl
+        )
+        
+        // 更新页面标题
+        document.title = newVideo.title || '视频笔记'
+    }
+}
+
 async function onLikeClick(item, willBeLiked, e) {
     e.stopPropagation()
 
@@ -955,9 +991,11 @@ function handleImageError(event) {
 
 
     <Teleport to="body">
-        <DetailCard v-if="showDetailCard" :item="selectedItem" :click-position="clickPosition" @close="closeDetailCard"
+        <DetailCard v-if="showDetailCard" :item="selectedItem" :click-position="clickPosition" 
+            :video-list="videoList" :current-video-index="currentVideoIndex"
+            @close="closeDetailCard"
             @follow="handleDetailCardFollow" @unfollow="handleDetailCardUnfollow" @like="handleDetailCardLike"
-            @collect="handleDetailCardCollect" />
+            @collect="handleDetailCardCollect" @switch-video="handleVideoSwitch" />
     </Teleport>
 
 

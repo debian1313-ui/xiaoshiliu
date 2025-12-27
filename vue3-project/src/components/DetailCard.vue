@@ -21,7 +21,10 @@
       </button>
 
       <!-- 移动端抖音风格视频笔记叠加层 -->
-      <div v-if="isVideoNote && isMobile" class="tiktok-overlay">
+      <div v-if="isVideoNote && isMobile" class="tiktok-overlay"
+        @touchstart="handleVideoTouchStart"
+        @touchmove="handleVideoTouchMove"
+        @touchend="handleVideoTouchEnd">
         <!-- 顶部栏：返回按钮 + 搜索按钮 -->
         <div class="tiktok-top-bar">
           <button class="tiktok-back-btn" @click="closeModal">
@@ -102,6 +105,14 @@
             <button class="tiktok-input-icon" @click.stop="toggleImageUpload">
               <SvgIcon name="imgNote" width="20" height="20" />
             </button>
+          </div>
+        </div>
+
+        <!-- 滑动提示指示器 -->
+        <div v-if="videoList.length > 1" class="swipe-hint">
+          <div class="swipe-hint-text">
+            <SvgIcon name="down" width="14" height="14" />
+            <span>下滑查看评论</span>
           </div>
         </div>
       </div>
@@ -568,6 +579,16 @@ const props = defineProps({
   targetCommentId: {
     type: [String, Number],
     default: null
+  },
+  // 视频列表（用于上下滑动切换视频）
+  videoList: {
+    type: Array,
+    default: () => []
+  },
+  // 当前视频在列表中的索引
+  currentVideoIndex: {
+    type: Number,
+    default: -1
   }
 })
 
@@ -632,7 +653,7 @@ const autoPlayVideo = () => {
   }
 }
 
-const emit = defineEmits(['close', 'follow', 'unfollow', 'like', 'collect'])
+const emit = defineEmits(['close', 'follow', 'unfollow', 'like', 'collect', 'switch-video'])
 
 const themeStore = useThemeStore()
 const userStore = useUserStore()
@@ -2864,6 +2885,95 @@ function handleAvatarError(event) {
   event.target.src = defaultAvatar
 }
 
+// 视频区域触摸相关状态（用于移动端视频笔记的上下滑动切换视频和下滑显示评论）
+const videoTouchStartY = ref(0)
+const videoTouchEndY = ref(0)
+const videoTouchStartTime = ref(0)
+const isVideoTouching = ref(false)
+const VIDEO_SWIPE_THRESHOLD = 80 // 垂直滑动阈值
+const VIDEO_SWIPE_VELOCITY_THRESHOLD = 0.3 // 滑动速度阈值（像素/毫秒）
+
+// 视频区域触摸开始
+const handleVideoTouchStart = (e) => {
+  // 如果评论面板已展开，不处理视频区域的触摸
+  if (isInfoPanelExpanded.value) return
+  
+  if (e.touches.length !== 1) return
+  
+  isVideoTouching.value = true
+  videoTouchStartY.value = e.touches[0].clientY
+  videoTouchEndY.value = videoTouchStartY.value
+  videoTouchStartTime.value = Date.now()
+}
+
+// 视频区域触摸移动
+const handleVideoTouchMove = (e) => {
+  if (!isVideoTouching.value || e.touches.length !== 1) return
+  
+  videoTouchEndY.value = e.touches[0].clientY
+  
+  const deltaY = videoTouchEndY.value - videoTouchStartY.value
+  
+  // 如果垂直滑动距离超过阈值，阻止默认行为
+  if (Math.abs(deltaY) > 20) {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+}
+
+// 视频区域触摸结束
+const handleVideoTouchEnd = (e) => {
+  if (!isVideoTouching.value) return
+  
+  if (e.changedTouches.length > 0) {
+    videoTouchEndY.value = e.changedTouches[0].clientY
+  }
+  
+  const deltaY = videoTouchEndY.value - videoTouchStartY.value
+  const touchDuration = Date.now() - videoTouchStartTime.value
+  const velocity = Math.abs(deltaY) / touchDuration // 像素/毫秒
+  
+  // 判断是否为有效的垂直滑动
+  const isValidSwipe = Math.abs(deltaY) > VIDEO_SWIPE_THRESHOLD || velocity > VIDEO_SWIPE_VELOCITY_THRESHOLD
+  
+  if (isValidSwipe) {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    if (deltaY > 0) {
+      // 向下滑动 - 显示评论面板
+      toggleInfoPanel()
+    } else {
+      // 向上滑动 - 切换到下一个视频
+      switchToNextVideo()
+    }
+  }
+  
+  // 重置触摸状态
+  isVideoTouching.value = false
+  setTimeout(() => {
+    if (!isVideoTouching.value) {
+      videoTouchStartY.value = 0
+      videoTouchEndY.value = 0
+    }
+  }, 100)
+}
+
+// 切换到上一个视频
+const switchToPrevVideo = () => {
+  if (props.videoList.length === 0 || props.currentVideoIndex <= 0) return
+  
+  emit('switch-video', props.currentVideoIndex - 1)
+}
+
+// 切换到下一个视频
+const switchToNextVideo = () => {
+  if (props.videoList.length === 0 || props.currentVideoIndex < 0) return
+  if (props.currentVideoIndex >= props.videoList.length - 1) return
+  
+  emit('switch-video', props.currentVideoIndex + 1)
+}
+
 
 </script>
 
@@ -4873,7 +4983,7 @@ function handleAvatarError(event) {
     min-width: 100%;
     max-width: 100%;
     height: auto;
-    max-height: 70vh;
+    max-height: 50vh;
     background: var(--bg-color-primary);
     border-radius: 16px 16px 0 0;
     z-index: 200;
@@ -5207,6 +5317,37 @@ function handleAvatarError(event) {
 
   .tiktok-input-icon:hover {
     background: rgba(255, 255, 255, 0.1);
+  }
+
+  /* 滑动提示指示器样式 */
+  .swipe-hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    opacity: 0;
+    animation: fadeInOut 3s ease-in-out;
+    animation-delay: 1s;
+  }
+
+  .swipe-hint-text {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.5);
+    color: rgba(255, 255, 255, 0.8);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    backdrop-filter: blur(4px);
+  }
+
+  @keyframes fadeInOut {
+    0% { opacity: 0; }
+    20% { opacity: 1; }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
   }
 }
 
