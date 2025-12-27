@@ -35,14 +35,6 @@
           </button>
         </div>
 
-        <!-- 视频播放/暂停点击区域 -->
-        <div class="tiktok-video-tap-area" @click="toggleVideoPlayback">
-          <!-- 暂停时显示播放按钮 -->
-          <div v-if="!isVideoPlaying && isVideoLoaded" class="tiktok-play-button">
-            <SvgIcon name="play" width="64" height="64" />
-          </div>
-        </div>
-
         <!-- 右侧垂直操作按钮 -->
         <div class="tiktok-right-actions">
           <div class="tiktok-action-item" @click="toggleLike(!isLiked)">
@@ -275,9 +267,6 @@
                 controlsList="nodownload nofullscreen noremoteplayback"
                 :class="['mobile-video-player', { 'video-note-player': isVideoNote }]"
                 @loadedmetadata="handleVideoLoad"
-                @play="isVideoPlaying = true"
-                @pause="isVideoPlaying = false"
-                @ended="isVideoPlaying = false"
               >
                 您的浏览器不支持视频播放
               </video>
@@ -751,7 +740,6 @@ const isAnimating = ref(true)
 const showContent = ref(false) // 新增：控制内容显示
 const isClosing = ref(false) // 新增：控制关闭动画状态
 const isVideoLoaded = ref(false) // 视频加载状态
-const isVideoPlaying = ref(false) // 视频播放状态
 const isInfoPanelExpanded = ref(false) // 移动端视频笔记信息面板展开状态
 
 // 移动端检测
@@ -759,20 +747,6 @@ const isMobile = computed(() => windowWidth.value <= 768)
 
 // 检测是否为视频笔记 (抖音风格)
 const isVideoNote = computed(() => props.item.type === 2)
-
-// 切换视频播放/暂停（用于移动端视频笔记模式）
-const toggleVideoPlayback = () => {
-  const player = isMobile.value ? mobileVideoPlayer.value : videoPlayer.value
-  if (!player) return
-  
-  if (player.paused) {
-    player.play()
-    isVideoPlaying.value = true
-  } else {
-    player.pause()
-    isVideoPlaying.value = false
-  }
-}
 
 // 切换移动端视频笔记信息面板展开状态
 const toggleInfoPanel = () => {
@@ -2961,9 +2935,6 @@ const VIDEO_SWIPE_VELOCITY_THRESHOLD = 0.3 // 滑动速度阈值（像素/毫秒
 
 // 视频区域触摸开始
 const handleVideoTouchStart = (e) => {
-  // 如果评论面板已展开，不处理视频区域的触摸
-  if (isInfoPanelExpanded.value) return
-  
   if (e.touches.length !== 1) return
   
   isVideoTouching.value = true
@@ -3007,11 +2978,23 @@ const handleVideoTouchEnd = (e) => {
     e.stopPropagation()
     
     if (deltaY > 0) {
-      // 向下滑动 - 显示评论面板
-      toggleInfoPanel()
+      // 向下滑动
+      if (isInfoPanelExpanded.value) {
+        // 如果面板已展开，向下滑动关闭面板
+        isInfoPanelExpanded.value = false
+      } else {
+        // 如果面板未展开，向下滑动打开面板
+        toggleInfoPanel()
+      }
     } else {
-      // 向上滑动 - 切换到下一个视频
-      switchToNextVideo()
+      // 向上滑动
+      if (isInfoPanelExpanded.value) {
+        // 如果面板已展开，向上滑动关闭面板
+        isInfoPanelExpanded.value = false
+      } else {
+        // 如果面板未展开，向上滑动切换到下一个视频
+        switchToNextVideo()
+      }
     }
   }
   
@@ -5131,37 +5114,6 @@ const switchToNextVideo = () => {
 
   .detail-card.video-note-mode .tiktok-overlay > * {
     pointer-events: auto;
-  }
-
-  /* 视频播放/暂停点击区域 */
-  .tiktok-video-tap-area {
-    position: absolute;
-    top: 80px;
-    left: 0;
-    right: 80px;
-    bottom: 200px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 5;
-  }
-
-  /* 播放按钮样式 */
-  .tiktok-play-button {
-    width: 80px;
-    height: 80px;
-    background: rgba(0, 0, 0, 0.5);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    backdrop-filter: blur(4px);
-    animation: fadeIn 0.2s ease;
-  }
-
-  .tiktok-play-button svg {
-    margin-left: 4px;
   }
 
   /* 顶部栏 */
