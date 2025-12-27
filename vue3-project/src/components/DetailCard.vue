@@ -21,9 +21,13 @@
       </button>
 
       <!-- 移动端抖音风格视频笔记叠加层 -->
-      <div v-if="isVideoNote && isMobile" class="tiktok-overlay">
+      <div v-if="isVideoNote && isMobile" class="tiktok-overlay"
+        :class="{ 'video-playing': isVideoPlaying }"
+        @touchstart="handleVideoTouchStart"
+        @touchmove="handleVideoTouchMove"
+        @touchend="handleVideoTouchEnd">
         <!-- 顶部栏：返回按钮 + 搜索按钮 -->
-        <div class="tiktok-top-bar">
+        <div class="tiktok-top-bar" :class="{ 'hidden': isVideoPlaying }">
           <button class="tiktok-back-btn" @click="closeModal">
             <SvgIcon name="leftArrow" width="24" height="24" />
           </button>
@@ -32,8 +36,11 @@
           </button>
         </div>
 
+        <!-- 视频播放/暂停点击区域 -->
+        <div class="tiktok-video-tap-area" @click="toggleVideoPlayback"></div>
+
         <!-- 右侧垂直操作按钮 -->
-        <div class="tiktok-right-actions">
+        <div class="tiktok-right-actions" :class="{ 'hidden': isVideoPlaying }">
           <div class="tiktok-action-item" @click="toggleLike(!isLiked)">
             <div class="tiktok-action-icon" :class="{ 'active': isLiked }">
               <SvgIcon :name="isLiked ? 'liked' : 'like'" width="32" height="32" />
@@ -61,7 +68,7 @@
         </div>
 
         <!-- 底部左侧用户信息 -->
-        <div class="tiktok-bottom-left">
+        <div class="tiktok-bottom-left" :class="{ 'hidden': isVideoPlaying }">
           <div class="tiktok-user-row">
             <div class="tiktok-avatar-container" @click="onUserClick(authorData.id)">
               <img :src="authorData.avatar" :alt="authorData.name" class="tiktok-avatar" @error="handleAvatarError" />
@@ -88,7 +95,7 @@
         </div>
 
         <!-- 底部评论输入框 -->
-        <div class="tiktok-bottom-bar">
+        <div class="tiktok-bottom-bar" :class="{ 'hidden': isVideoPlaying }">
           <div class="tiktok-comment-input" @click="toggleInfoPanel">
             <span class="tiktok-input-placeholder">有话要说，快来评论</span>
           </div>
@@ -102,6 +109,14 @@
             <button class="tiktok-input-icon" @click.stop="toggleImageUpload">
               <SvgIcon name="imgNote" width="20" height="20" />
             </button>
+          </div>
+        </div>
+
+        <!-- 滑动提示指示器 -->
+        <div v-if="videoList.length > 1" class="swipe-hint" :class="{ 'hidden': isVideoPlaying }">
+          <div class="swipe-hint-text">
+            <SvgIcon name="down" width="14" height="14" />
+            <span>下滑查看评论</span>
           </div>
         </div>
       </div>
@@ -119,17 +134,23 @@
                 class="video-cover-placeholder"
               />
             </div>
+            <!-- x5-* attributes are for Tencent X5 browser engine (WeChat/QQ) to prevent native fullscreen -->
             <video 
               v-show="isVideoLoaded"
               ref="videoPlayer"
               :src="props.item.video_url" 
               :poster="props.item.cover_url || (props.item.images && props.item.images[0])"
-              controls 
+              :controls="!isVideoNote || !isMobile"
               preload="metadata"
               webkit-playsinline="true"
               playsinline="true"
+              x5-playsinline="true"
+              x5-video-player-type="h5"
+              x5-video-player-fullscreen="false"
+              disablePictureInPicture
+              controlsList="nodownload nofullscreen noremoteplayback"
               loop
-              class="video-player"
+              :class="['video-player', { 'video-note-player': isVideoNote && isMobile }]"
               @loadedmetadata="handleVideoLoad"
             >
               您的浏览器不支持视频播放
@@ -172,6 +193,34 @@
           <div v-if="isVideoNote && isMobile" class="drag-handle" @click="toggleInfoPanel">
             <div class="drag-handle-bar"></div>
           </div>
+          
+          <!-- 移动端视频笔记：评论区内的视频信息区域（以作者评论样式显示） -->
+          <div v-if="isVideoNote && isMobile && isInfoPanelExpanded" class="comment-item video-info-comment">
+            <div class="comment-avatar-container">
+              <img :src="authorData.avatar" :alt="authorData.name" class="comment-avatar clickable-avatar"
+                @click="onUserClick(authorData.id)" @error="handleAvatarError" />
+              <VerifiedBadge :verified="authorData.verified" size="small" class="comment-verified-badge" />
+            </div>
+            <div class="comment-content">
+              <div class="comment-header">
+                <div class="comment-user-info">
+                  <span class="comment-username" @click="onUserClick(authorData.id)">{{ authorData.name }}</span>
+                  <div class="author-badge author-badge--parent">作者</div>
+                </div>
+              </div>
+              <div v-if="postData.title" class="comment-text video-info-title-text">
+                <strong>{{ postData.title }}</strong>
+              </div>
+              <div v-if="postData.content" class="comment-text">
+                <ContentRenderer :text="postData.content" />
+              </div>
+              <div v-if="postData.tags && postData.tags.length > 0" class="video-info-tags-inline">
+                <span v-for="tag in postData.tags" :key="tag" class="video-info-tag" @click="handleTagClick(tag)">#{{ tag }}</span>
+              </div>
+              <span class="comment-time">{{ postData.time }} {{ postData.location }}</span>
+            </div>
+          </div>
+          
           <!-- 移动端视频笔记模式隐藏作者信息（已在抖音风格叠加层显示） -->
           <div v-if="!(isVideoNote && isMobile)" class="author-wrapper" ref="authorWrapper" @click="toggleInfoPanel">
             <div class="author-info">
@@ -205,17 +254,26 @@
                   <p>视频加载中...</p>
                 </div>
               </div>
+              <!-- x5-* attributes are for Tencent X5 browser engine (WeChat/QQ) to prevent native fullscreen -->
               <video 
                 v-show="isVideoLoaded"
                 ref="mobileVideoPlayer"
                 :src="props.item.video_url" 
                 :poster="props.item.cover_url || (props.item.images && props.item.images[0])"
-                controls 
+                :controls="!isVideoNote"
                 preload="metadata"
                 webkit-playsinline="true"
                 playsinline="true"
-                class="mobile-video-player"
+                x5-playsinline="true"
+                x5-video-player-type="h5"
+                x5-video-player-fullscreen="false"
+                disablePictureInPicture
+                controlsList="nodownload nofullscreen noremoteplayback"
+                :class="['mobile-video-player', { 'video-note-player': isVideoNote }]"
                 @loadedmetadata="handleVideoLoad"
+                @play="isVideoPlaying = true"
+                @pause="isVideoPlaying = false"
+                @ended="isVideoPlaying = false"
               >
                 您的浏览器不支持视频播放
               </video>
@@ -568,6 +626,16 @@ const props = defineProps({
   targetCommentId: {
     type: [String, Number],
     default: null
+  },
+  // 视频列表（用于上下滑动切换视频）
+  videoList: {
+    type: Array,
+    default: () => []
+  },
+  // 当前视频在列表中的索引
+  currentVideoIndex: {
+    type: Number,
+    default: -1
   }
 })
 
@@ -632,7 +700,7 @@ const autoPlayVideo = () => {
   }
 }
 
-const emit = defineEmits(['close', 'follow', 'unfollow', 'like', 'collect'])
+const emit = defineEmits(['close', 'follow', 'unfollow', 'like', 'collect', 'switch-video'])
 
 const themeStore = useThemeStore()
 const userStore = useUserStore()
@@ -679,6 +747,7 @@ const isAnimating = ref(true)
 const showContent = ref(false) // 新增：控制内容显示
 const isClosing = ref(false) // 新增：控制关闭动画状态
 const isVideoLoaded = ref(false) // 视频加载状态
+const isVideoPlaying = ref(false) // 视频播放状态
 const isInfoPanelExpanded = ref(false) // 移动端视频笔记信息面板展开状态
 
 // 移动端检测
@@ -686,6 +755,20 @@ const isMobile = computed(() => windowWidth.value <= 768)
 
 // 检测是否为视频笔记 (抖音风格)
 const isVideoNote = computed(() => props.item.type === 2)
+
+// 切换视频播放/暂停
+const toggleVideoPlayback = () => {
+  const player = isMobile.value ? mobileVideoPlayer.value : videoPlayer.value
+  if (!player) return
+  
+  if (player.paused) {
+    player.play()
+    isVideoPlaying.value = true
+  } else {
+    player.pause()
+    isVideoPlaying.value = false
+  }
+}
 
 // 切换移动端视频笔记信息面板展开状态
 const toggleInfoPanel = () => {
@@ -2864,6 +2947,100 @@ function handleAvatarError(event) {
   event.target.src = defaultAvatar
 }
 
+// 视频区域触摸相关状态（用于移动端视频笔记的上下滑动切换视频和下滑显示评论）
+const videoTouchStartY = ref(0)
+const videoTouchEndY = ref(0)
+const videoTouchStartTime = ref(0)
+const isVideoTouching = ref(false)
+const VIDEO_SWIPE_THRESHOLD = 80 // 垂直滑动阈值
+const VIDEO_SWIPE_VELOCITY_THRESHOLD = 0.3 // 滑动速度阈值（像素/毫秒）
+
+// 视频区域触摸开始
+const handleVideoTouchStart = (e) => {
+  if (e.touches.length !== 1) return
+  
+  isVideoTouching.value = true
+  videoTouchStartY.value = e.touches[0].clientY
+  videoTouchEndY.value = videoTouchStartY.value
+  videoTouchStartTime.value = Date.now()
+}
+
+// 视频区域触摸移动
+const handleVideoTouchMove = (e) => {
+  if (!isVideoTouching.value || e.touches.length !== 1) return
+  
+  videoTouchEndY.value = e.touches[0].clientY
+  
+  const deltaY = videoTouchEndY.value - videoTouchStartY.value
+  
+  // 如果垂直滑动距离超过阈值，阻止默认行为
+  if (Math.abs(deltaY) > 20) {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+}
+
+// 视频区域触摸结束
+const handleVideoTouchEnd = (e) => {
+  if (!isVideoTouching.value) return
+  
+  if (e.changedTouches.length > 0) {
+    videoTouchEndY.value = e.changedTouches[0].clientY
+  }
+  
+  const deltaY = videoTouchEndY.value - videoTouchStartY.value
+  const touchDuration = Date.now() - videoTouchStartTime.value
+  const velocity = Math.abs(deltaY) / touchDuration // 像素/毫秒
+  
+  // 判断是否为有效的垂直滑动
+  const isValidSwipe = Math.abs(deltaY) > VIDEO_SWIPE_THRESHOLD || velocity > VIDEO_SWIPE_VELOCITY_THRESHOLD
+  
+  if (isValidSwipe) {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    if (deltaY > 0) {
+      // 向下滑动
+      if (isInfoPanelExpanded.value) {
+        // 如果面板已展开，向下滑动关闭面板
+        isInfoPanelExpanded.value = false
+      } else {
+        // 如果面板未展开，向下滑动打开面板
+        toggleInfoPanel()
+      }
+    } else {
+      // 向上滑动
+      if (isInfoPanelExpanded.value) {
+        // 如果面板已展开，向上滑动关闭面板
+        isInfoPanelExpanded.value = false
+      } else {
+        // 如果面板未展开，向上滑动切换到下一个视频
+        switchToNextVideo()
+      }
+    }
+  }
+  
+  // 重置触摸状态
+  isVideoTouching.value = false
+  videoTouchStartY.value = 0
+  videoTouchEndY.value = 0
+}
+
+// 切换到上一个视频
+const switchToPrevVideo = () => {
+  if (props.videoList.length === 0 || props.currentVideoIndex <= 0) return
+  
+  emit('switch-video', props.currentVideoIndex - 1)
+}
+
+// 切换到下一个视频
+const switchToNextVideo = () => {
+  if (props.videoList.length === 0 || props.currentVideoIndex < 0) return
+  if (props.currentVideoIndex >= props.videoList.length - 1) return
+  
+  emit('switch-video', props.currentVideoIndex + 1)
+}
+
 
 </script>
 
@@ -3717,22 +3894,22 @@ function handleAvatarError(event) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--primary-color-shadow);
-  color: var(--primary-color);
+  background-color: var(--primary-color);
+  color: white;
   font-weight: 600;
   border-radius: 999px;
-  font-size: 9px;
+  font-size: 10px;
   white-space: nowrap;
-  opacity: 0.7;
   flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .author-badge--parent {
-  padding: 2px 6px;
+  padding: 3px 8px;
 }
 
 .author-badge--reply {
-  padding: 1px 5px;
+  padding: 2px 6px;
 }
 
 .comment-username {
@@ -4873,7 +5050,7 @@ function handleAvatarError(event) {
     min-width: 100%;
     max-width: 100%;
     height: auto;
-    max-height: 70vh;
+    max-height: 50vh;
     background: var(--bg-color-primary);
     border-radius: 16px 16px 0 0;
     z-index: 200;
@@ -4959,6 +5136,32 @@ function handleAvatarError(event) {
 
   .detail-card.video-note-mode .tiktok-overlay > * {
     pointer-events: auto;
+  }
+
+  /* 视频播放/暂停点击区域 */
+  .tiktok-video-tap-area {
+    position: absolute;
+    top: 80px;
+    left: 0;
+    right: 80px;
+    bottom: 180px;
+    z-index: 5;
+    pointer-events: auto;
+  }
+
+  /* 播放时隐藏UI元素 */
+  .tiktok-overlay .hidden {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .tiktok-overlay .tiktok-top-bar,
+  .tiktok-overlay .tiktok-right-actions,
+  .tiktok-overlay .tiktok-bottom-left,
+  .tiktok-overlay .tiktok-bottom-bar,
+  .tiktok-overlay .swipe-hint {
+    transition: opacity 0.3s ease;
   }
 
   /* 顶部栏 */
@@ -5208,6 +5411,111 @@ function handleAvatarError(event) {
   .tiktok-input-icon:hover {
     background: rgba(255, 255, 255, 0.1);
   }
+
+  /* 滑动提示指示器样式 */
+  .swipe-hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    opacity: 0;
+    animation: fadeInOut 3s ease-in-out;
+    animation-delay: 1s;
+  }
+
+  .swipe-hint-text {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.5);
+    color: rgba(255, 255, 255, 0.8);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    backdrop-filter: blur(4px);
+  }
+
+  @keyframes fadeInOut {
+    0% { opacity: 0; }
+    20% { opacity: 1; }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+}
+
+/* 视频播放器：隐藏原生全屏按钮和控制条 */
+.video-player::-webkit-media-controls-fullscreen-button,
+.mobile-video-player::-webkit-media-controls-fullscreen-button {
+  display: none !important;
+}
+
+/* 视频笔记模式：完全隐藏原生控制条并禁用点击 */
+.video-note-player {
+  pointer-events: none;
+}
+
+.video-note-player::-webkit-media-controls {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  -webkit-appearance: none !important;
+}
+
+.video-note-player::-webkit-media-controls-enclosure {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+.video-note-player::-webkit-media-controls-panel {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+.video-note-player::-webkit-media-controls-start-playback-button {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+.video-note-player::-webkit-media-controls-overlay-play-button {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+/* 移动端视频笔记：以评论样式显示的视频信息 */
+.video-info-comment {
+  background: var(--bg-color-secondary);
+  border-bottom: 1px solid var(--border-color-secondary);
+  margin-bottom: 8px;
+  padding: 12px 16px;
+}
+
+.video-info-comment .video-info-title-text {
+  margin-bottom: 4px;
+}
+
+.video-info-comment .video-info-title-text strong {
+  font-size: 15px;
+  color: var(--text-color-primary);
+}
+
+.video-info-tags-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.video-info-tag {
+  font-size: 14px;
+  color: var(--primary-color);
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.video-info-tag:hover {
+  opacity: 0.7;
 }
 
 
