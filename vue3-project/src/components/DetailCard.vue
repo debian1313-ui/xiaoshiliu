@@ -130,6 +130,7 @@
                 class="video-cover-placeholder"
               />
             </div>
+            <!-- x5-* attributes are for Tencent X5 browser engine (WeChat/QQ) to prevent native fullscreen -->
             <video 
               v-show="isVideoLoaded"
               ref="videoPlayer"
@@ -242,6 +243,7 @@
                   <p>视频加载中...</p>
                 </div>
               </div>
+              <!-- x5-* attributes are for Tencent X5 browser engine (WeChat/QQ) to prevent native fullscreen -->
               <video 
                 v-show="isVideoLoaded"
                 ref="mobileVideoPlayer"
