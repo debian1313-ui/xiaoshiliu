@@ -136,7 +136,7 @@
               ref="videoPlayer"
               :src="props.item.video_url" 
               :poster="props.item.cover_url || (props.item.images && props.item.images[0])"
-              controls 
+              :controls="!isVideoNote || !isMobile"
               preload="metadata"
               webkit-playsinline="true"
               playsinline="true"
@@ -146,7 +146,7 @@
               disablePictureInPicture
               controlsList="nodownload nofullscreen noremoteplayback"
               loop
-              class="video-player"
+              :class="['video-player', { 'video-note-player': isVideoNote && isMobile }]"
               @loadedmetadata="handleVideoLoad"
             >
               您的浏览器不支持视频播放
@@ -5402,17 +5402,36 @@ const switchToNextVideo = () => {
   display: none !important;
 }
 
-/* 视频笔记模式：完全隐藏原生控制条 */
+/* 视频笔记模式：完全隐藏原生控制条并禁用点击 */
+.video-note-player {
+  pointer-events: none;
+}
+
 .video-note-player::-webkit-media-controls {
   display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  -webkit-appearance: none !important;
 }
 
 .video-note-player::-webkit-media-controls-enclosure {
   display: none !important;
+  opacity: 0 !important;
 }
 
 .video-note-player::-webkit-media-controls-panel {
   display: none !important;
+  opacity: 0 !important;
+}
+
+.video-note-player::-webkit-media-controls-start-playback-button {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+.video-note-player::-webkit-media-controls-overlay-play-button {
+  display: none !important;
+  opacity: 0 !important;
 }
 
 /* 移动端视频笔记：以评论样式显示的视频信息 */
