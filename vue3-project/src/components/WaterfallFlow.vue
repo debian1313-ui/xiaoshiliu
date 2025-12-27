@@ -815,7 +815,7 @@ const handleVideoSwitch = (newIndex) => {
     if (newIndex >= 0 && newIndex < videoList.value.length) {
         const newVideo = videoList.value[newIndex]
         // 更新选中的视频（使用深拷贝避免影响原始数据）
-        selectedItem.value = JSON.parse(JSON.stringify(newVideo))
+        selectedItem.value = structuredClone(newVideo)
         
         // 更新URL
         const newUrl = `/post?id=${newVideo.id}`

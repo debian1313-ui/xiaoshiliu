@@ -2951,12 +2951,8 @@ const handleVideoTouchEnd = (e) => {
   
   // 重置触摸状态
   isVideoTouching.value = false
-  setTimeout(() => {
-    if (!isVideoTouching.value) {
-      videoTouchStartY.value = 0
-      videoTouchEndY.value = 0
-    }
-  }, 100)
+  videoTouchStartY.value = 0
+  videoTouchEndY.value = 0
 }
 
 // 切换到上一个视频
