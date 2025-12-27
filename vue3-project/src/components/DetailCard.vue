@@ -35,6 +35,14 @@
           </button>
         </div>
 
+        <!-- 视频播放/暂停点击区域 -->
+        <div class="tiktok-video-tap-area" @click="toggleVideoPlayback">
+          <!-- 暂停时显示播放按钮 -->
+          <div v-if="!isVideoPlaying && isVideoLoaded" class="tiktok-play-button">
+            <SvgIcon name="play" width="64" height="64" />
+          </div>
+        </div>
+
         <!-- 右侧垂直操作按钮 -->
         <div class="tiktok-right-actions">
           <div class="tiktok-action-item" @click="toggleLike(!isLiked)">
@@ -190,23 +198,30 @@
             <div class="drag-handle-bar"></div>
           </div>
           
-          <!-- 移动端视频笔记：评论区内的视频信息区域 -->
-          <div v-if="isVideoNote && isMobile && isInfoPanelExpanded" class="video-info-in-panel">
-            <div class="video-info-header">
-              <div class="video-info-avatar" @click="onUserClick(authorData.id)">
-                <img :src="authorData.avatar" :alt="authorData.name" @error="handleAvatarError" />
-              </div>
-              <div class="video-info-user">
-                <span class="video-info-username" @click="onUserClick(authorData.id)">{{ authorData.name }}</span>
-                <span class="video-info-time">{{ postData.time }}</span>
-              </div>
+          <!-- 移动端视频笔记：评论区内的视频信息区域（以作者评论样式显示） -->
+          <div v-if="isVideoNote && isMobile && isInfoPanelExpanded" class="comment-item video-info-comment">
+            <div class="comment-avatar-container">
+              <img :src="authorData.avatar" :alt="authorData.name" class="comment-avatar clickable-avatar"
+                @click="onUserClick(authorData.id)" @error="handleAvatarError" />
+              <VerifiedBadge :verified="authorData.verified" size="small" class="comment-verified-badge" />
             </div>
-            <div v-if="postData.title" class="video-info-title">{{ postData.title }}</div>
-            <div v-if="postData.content" class="video-info-content">
-              <ContentRenderer :text="postData.content" />
-            </div>
-            <div v-if="postData.tags && postData.tags.length > 0" class="video-info-tags">
-              <span v-for="tag in postData.tags" :key="tag" class="video-info-tag" @click="handleTagClick(tag)">#{{ tag }}</span>
+            <div class="comment-content">
+              <div class="comment-header">
+                <div class="comment-user-info">
+                  <span class="comment-username" @click="onUserClick(authorData.id)">{{ authorData.name }}</span>
+                  <div class="author-badge author-badge--parent">作者</div>
+                </div>
+              </div>
+              <div v-if="postData.title" class="comment-text video-info-title-text">
+                <strong>{{ postData.title }}</strong>
+              </div>
+              <div v-if="postData.content" class="comment-text">
+                <ContentRenderer :text="postData.content" />
+              </div>
+              <div v-if="postData.tags && postData.tags.length > 0" class="video-info-tags-inline">
+                <span v-for="tag in postData.tags" :key="tag" class="video-info-tag" @click="handleTagClick(tag)">#{{ tag }}</span>
+              </div>
+              <span class="comment-time">{{ postData.time }} {{ postData.location }}</span>
             </div>
           </div>
           
@@ -249,7 +264,7 @@
                 ref="mobileVideoPlayer"
                 :src="props.item.video_url" 
                 :poster="props.item.cover_url || (props.item.images && props.item.images[0])"
-                controls 
+                :controls="!isVideoNote"
                 preload="metadata"
                 webkit-playsinline="true"
                 playsinline="true"
@@ -258,8 +273,11 @@
                 x5-video-player-fullscreen="false"
                 disablePictureInPicture
                 controlsList="nodownload nofullscreen noremoteplayback"
-                class="mobile-video-player"
+                :class="['mobile-video-player', { 'video-note-player': isVideoNote }]"
                 @loadedmetadata="handleVideoLoad"
+                @play="isVideoPlaying = true"
+                @pause="isVideoPlaying = false"
+                @ended="isVideoPlaying = false"
               >
                 您的浏览器不支持视频播放
               </video>
@@ -733,6 +751,7 @@ const isAnimating = ref(true)
 const showContent = ref(false) // 新增：控制内容显示
 const isClosing = ref(false) // 新增：控制关闭动画状态
 const isVideoLoaded = ref(false) // 视频加载状态
+const isVideoPlaying = ref(false) // 视频播放状态
 const isInfoPanelExpanded = ref(false) // 移动端视频笔记信息面板展开状态
 
 // 移动端检测
@@ -740,6 +759,20 @@ const isMobile = computed(() => windowWidth.value <= 768)
 
 // 检测是否为视频笔记 (抖音风格)
 const isVideoNote = computed(() => props.item.type === 2)
+
+// 切换视频播放/暂停（用于移动端视频笔记模式）
+const toggleVideoPlayback = () => {
+  const player = isMobile.value ? mobileVideoPlayer.value : videoPlayer.value
+  if (!player) return
+  
+  if (player.paused) {
+    player.play()
+    isVideoPlaying.value = true
+  } else {
+    player.pause()
+    isVideoPlaying.value = false
+  }
+}
 
 // 切换移动端视频笔记信息面板展开状态
 const toggleInfoPanel = () => {
@@ -5100,6 +5133,37 @@ const switchToNextVideo = () => {
     pointer-events: auto;
   }
 
+  /* 视频播放/暂停点击区域 */
+  .tiktok-video-tap-area {
+    position: absolute;
+    top: 80px;
+    left: 0;
+    right: 80px;
+    bottom: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+  }
+
+  /* 播放按钮样式 */
+  .tiktok-play-button {
+    width: 80px;
+    height: 80px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.2s ease;
+  }
+
+  .tiktok-play-button svg {
+    margin-left: 4px;
+  }
+
   /* 顶部栏 */
   .tiktok-top-bar {
     position: absolute;
@@ -5380,87 +5444,48 @@ const switchToNextVideo = () => {
   }
 }
 
-/* 视频播放器：隐藏原生全屏按钮 */
+/* 视频播放器：隐藏原生全屏按钮和控制条 */
 .video-player::-webkit-media-controls-fullscreen-button,
 .mobile-video-player::-webkit-media-controls-fullscreen-button {
   display: none !important;
 }
 
-/* 移动端视频笔记：评论区内视频信息区域 */
-.video-info-in-panel {
-  padding: 16px;
+/* 视频笔记模式：完全隐藏原生控制条 */
+.video-note-player::-webkit-media-controls {
+  display: none !important;
+}
+
+.video-note-player::-webkit-media-controls-enclosure {
+  display: none !important;
+}
+
+.video-note-player::-webkit-media-controls-panel {
+  display: none !important;
+}
+
+/* 移动端视频笔记：以评论样式显示的视频信息 */
+.video-info-comment {
   background: var(--bg-color-secondary);
   border-bottom: 1px solid var(--border-color-secondary);
   margin-bottom: 8px;
+  padding: 12px 16px;
 }
 
-.video-info-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+.video-info-comment .video-info-title-text {
+  margin-bottom: 4px;
 }
 
-.video-info-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  overflow: hidden;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.video-info-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.video-info-user {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.video-info-username {
+.video-info-comment .video-info-title-text strong {
   font-size: 15px;
-  font-weight: 600;
   color: var(--text-color-primary);
-  cursor: pointer;
 }
 
-.video-info-username:hover {
-  color: var(--primary-color);
-}
-
-.video-info-time {
-  font-size: 12px;
-  color: var(--text-color-tertiary);
-}
-
-.video-info-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-color-primary);
-  margin-bottom: 8px;
-  line-height: 1.4;
-}
-
-.video-info-content {
-  font-size: 14px;
-  color: var(--text-color-secondary);
-  line-height: 1.6;
-  margin-bottom: 12px;
-}
-
-.video-info-content :deep(p) {
-  margin: 0;
-}
-
-.video-info-tags {
+.video-info-tags-inline {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
+  margin-top: 8px;
+  margin-bottom: 4px;
 }
 
 .video-info-tag {
