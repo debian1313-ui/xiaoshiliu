@@ -139,6 +139,11 @@
               preload="metadata"
               webkit-playsinline="true"
               playsinline="true"
+              x5-playsinline="true"
+              x5-video-player-type="h5"
+              x5-video-player-fullscreen="false"
+              disablePictureInPicture
+              controlsList="nodownload nofullscreen noremoteplayback"
               loop
               class="video-player"
               @loadedmetadata="handleVideoLoad"
@@ -183,6 +188,27 @@
           <div v-if="isVideoNote && isMobile" class="drag-handle" @click="toggleInfoPanel">
             <div class="drag-handle-bar"></div>
           </div>
+          
+          <!-- 移动端视频笔记：评论区内的视频信息区域 -->
+          <div v-if="isVideoNote && isMobile && isInfoPanelExpanded" class="video-info-in-panel">
+            <div class="video-info-header">
+              <div class="video-info-avatar" @click="onUserClick(authorData.id)">
+                <img :src="authorData.avatar" :alt="authorData.name" @error="handleAvatarError" />
+              </div>
+              <div class="video-info-user">
+                <span class="video-info-username" @click="onUserClick(authorData.id)">{{ authorData.name }}</span>
+                <span class="video-info-time">{{ postData.time }}</span>
+              </div>
+            </div>
+            <div v-if="postData.title" class="video-info-title">{{ postData.title }}</div>
+            <div v-if="postData.content" class="video-info-content">
+              <ContentRenderer :text="postData.content" />
+            </div>
+            <div v-if="postData.tags && postData.tags.length > 0" class="video-info-tags">
+              <span v-for="tag in postData.tags" :key="tag" class="video-info-tag" @click="handleTagClick(tag)">#{{ tag }}</span>
+            </div>
+          </div>
+          
           <!-- 移动端视频笔记模式隐藏作者信息（已在抖音风格叠加层显示） -->
           <div v-if="!(isVideoNote && isMobile)" class="author-wrapper" ref="authorWrapper" @click="toggleInfoPanel">
             <div class="author-info">
@@ -225,6 +251,11 @@
                 preload="metadata"
                 webkit-playsinline="true"
                 playsinline="true"
+                x5-playsinline="true"
+                x5-video-player-type="h5"
+                x5-video-player-fullscreen="false"
+                disablePictureInPicture
+                controlsList="nodownload nofullscreen noremoteplayback"
                 class="mobile-video-player"
                 @loadedmetadata="handleVideoLoad"
               >
@@ -3823,22 +3854,22 @@ const switchToNextVideo = () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--primary-color-shadow);
-  color: var(--primary-color);
+  background-color: var(--primary-color);
+  color: white;
   font-weight: 600;
   border-radius: 999px;
-  font-size: 9px;
+  font-size: 10px;
   white-space: nowrap;
-  opacity: 0.7;
   flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .author-badge--parent {
-  padding: 2px 6px;
+  padding: 3px 8px;
 }
 
 .author-badge--reply {
-  padding: 1px 5px;
+  padding: 2px 6px;
 }
 
 .comment-username {
@@ -5345,6 +5376,100 @@ const switchToNextVideo = () => {
     80% { opacity: 1; }
     100% { opacity: 0; }
   }
+}
+
+/* 视频播放器：隐藏原生全屏按钮 */
+.video-player::-webkit-media-controls-fullscreen-button,
+.mobile-video-player::-webkit-media-controls-fullscreen-button {
+  display: none !important;
+}
+
+/* 移动端视频笔记：评论区内视频信息区域 */
+.video-info-in-panel {
+  padding: 16px;
+  background: var(--bg-color-secondary);
+  border-bottom: 1px solid var(--border-color-secondary);
+  margin-bottom: 8px;
+}
+
+.video-info-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.video-info-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.video-info-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-info-user {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.video-info-username {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-color-primary);
+  cursor: pointer;
+}
+
+.video-info-username:hover {
+  color: var(--primary-color);
+}
+
+.video-info-time {
+  font-size: 12px;
+  color: var(--text-color-tertiary);
+}
+
+.video-info-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-color-primary);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.video-info-content {
+  font-size: 14px;
+  color: var(--text-color-secondary);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.video-info-content :deep(p) {
+  margin: 0;
+}
+
+.video-info-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.video-info-tag {
+  font-size: 14px;
+  color: var(--primary-color);
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.video-info-tag:hover {
+  opacity: 0.7;
 }
 
 
