@@ -22,11 +22,12 @@
 
       <!-- 移动端抖音风格视频笔记叠加层 -->
       <div v-if="isVideoNote && isMobile" class="tiktok-overlay"
+        :class="{ 'video-playing': isVideoPlaying }"
         @touchstart="handleVideoTouchStart"
         @touchmove="handleVideoTouchMove"
         @touchend="handleVideoTouchEnd">
         <!-- 顶部栏：返回按钮 + 搜索按钮 -->
-        <div class="tiktok-top-bar">
+        <div class="tiktok-top-bar" :class="{ 'hidden': isVideoPlaying }">
           <button class="tiktok-back-btn" @click="closeModal">
             <SvgIcon name="leftArrow" width="24" height="24" />
           </button>
@@ -35,8 +36,11 @@
           </button>
         </div>
 
+        <!-- 视频播放/暂停点击区域 -->
+        <div class="tiktok-video-tap-area" @click="toggleVideoPlayback"></div>
+
         <!-- 右侧垂直操作按钮 -->
-        <div class="tiktok-right-actions">
+        <div class="tiktok-right-actions" :class="{ 'hidden': isVideoPlaying }">
           <div class="tiktok-action-item" @click="toggleLike(!isLiked)">
             <div class="tiktok-action-icon" :class="{ 'active': isLiked }">
               <SvgIcon :name="isLiked ? 'liked' : 'like'" width="32" height="32" />
@@ -64,7 +68,7 @@
         </div>
 
         <!-- 底部左侧用户信息 -->
-        <div class="tiktok-bottom-left">
+        <div class="tiktok-bottom-left" :class="{ 'hidden': isVideoPlaying }">
           <div class="tiktok-user-row">
             <div class="tiktok-avatar-container" @click="onUserClick(authorData.id)">
               <img :src="authorData.avatar" :alt="authorData.name" class="tiktok-avatar" @error="handleAvatarError" />
@@ -91,7 +95,7 @@
         </div>
 
         <!-- 底部评论输入框 -->
-        <div class="tiktok-bottom-bar">
+        <div class="tiktok-bottom-bar" :class="{ 'hidden': isVideoPlaying }">
           <div class="tiktok-comment-input" @click="toggleInfoPanel">
             <span class="tiktok-input-placeholder">有话要说，快来评论</span>
           </div>
@@ -109,7 +113,7 @@
         </div>
 
         <!-- 滑动提示指示器 -->
-        <div v-if="videoList.length > 1" class="swipe-hint">
+        <div v-if="videoList.length > 1" class="swipe-hint" :class="{ 'hidden': isVideoPlaying }">
           <div class="swipe-hint-text">
             <SvgIcon name="down" width="14" height="14" />
             <span>下滑查看评论</span>
@@ -267,6 +271,9 @@
                 controlsList="nodownload nofullscreen noremoteplayback"
                 :class="['mobile-video-player', { 'video-note-player': isVideoNote }]"
                 @loadedmetadata="handleVideoLoad"
+                @play="isVideoPlaying = true"
+                @pause="isVideoPlaying = false"
+                @ended="isVideoPlaying = false"
               >
                 您的浏览器不支持视频播放
               </video>
@@ -740,6 +747,7 @@ const isAnimating = ref(true)
 const showContent = ref(false) // 新增：控制内容显示
 const isClosing = ref(false) // 新增：控制关闭动画状态
 const isVideoLoaded = ref(false) // 视频加载状态
+const isVideoPlaying = ref(false) // 视频播放状态
 const isInfoPanelExpanded = ref(false) // 移动端视频笔记信息面板展开状态
 
 // 移动端检测
@@ -747,6 +755,20 @@ const isMobile = computed(() => windowWidth.value <= 768)
 
 // 检测是否为视频笔记 (抖音风格)
 const isVideoNote = computed(() => props.item.type === 2)
+
+// 切换视频播放/暂停
+const toggleVideoPlayback = () => {
+  const player = isMobile.value ? mobileVideoPlayer.value : videoPlayer.value
+  if (!player) return
+  
+  if (player.paused) {
+    player.play()
+    isVideoPlaying.value = true
+  } else {
+    player.pause()
+    isVideoPlaying.value = false
+  }
+}
 
 // 切换移动端视频笔记信息面板展开状态
 const toggleInfoPanel = () => {
@@ -5114,6 +5136,32 @@ const switchToNextVideo = () => {
 
   .detail-card.video-note-mode .tiktok-overlay > * {
     pointer-events: auto;
+  }
+
+  /* 视频播放/暂停点击区域 */
+  .tiktok-video-tap-area {
+    position: absolute;
+    top: 80px;
+    left: 0;
+    right: 80px;
+    bottom: 180px;
+    z-index: 5;
+    pointer-events: auto;
+  }
+
+  /* 播放时隐藏UI元素 */
+  .tiktok-overlay .hidden {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .tiktok-overlay .tiktok-top-bar,
+  .tiktok-overlay .tiktok-right-actions,
+  .tiktok-overlay .tiktok-bottom-left,
+  .tiktok-overlay .tiktok-bottom-bar,
+  .tiktok-overlay .swipe-hint {
+    transition: opacity 0.3s ease;
   }
 
   /* 顶部栏 */
