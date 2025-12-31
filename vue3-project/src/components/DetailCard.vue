@@ -24,29 +24,50 @@
           @mouseleave="showImageControls = false">
           <!-- 视频播放器（桌面端） -->
           <div v-if="props.item.type === 2" class="video-container">
-            <div v-if="!isVideoLoaded" class="video-placeholder">
-              <img 
-                v-if="props.item.cover_url || (props.item.images && props.item.images[0])" 
-                :src="props.item.cover_url || props.item.images[0]" 
-                :alt="props.item.title || '视频封面'"
-                class="video-cover-placeholder"
-              />
-            </div>
-            <video 
-              v-show="isVideoLoaded"
-              ref="videoPlayer"
-              :src="props.item.video_url" 
+            <!-- 使用Shaka Player播放DASH流（当MPD可用时） -->
+            <ShakaPlayer
+              v-if="effectiveVideoUrl && effectiveVideoUrl.endsWith('.mpd')"
+              ref="shakaPlayerRef"
+              :src="effectiveVideoUrl"
               :poster="props.item.cover_url || (props.item.images && props.item.images[0])"
-              controls 
-              preload="metadata"
-              webkit-playsinline="true"
-              playsinline="true"
-              loop
-              class="video-player"
-              @loadedmetadata="handleVideoLoad"
-            >
-              您的浏览器不支持视频播放
-            </video>
+              :autoplay="true"
+              :loop="true"
+              class="shaka-video-player"
+              @play="handleShakaPlay"
+            />
+            <!-- 普通视频播放（原始视频或无MPD时） -->
+            <template v-else>
+              <div v-if="!isVideoLoaded" class="video-placeholder">
+                <img 
+                  v-if="props.item.cover_url || (props.item.images && props.item.images[0])" 
+                  :src="props.item.cover_url || props.item.images[0]" 
+                  :alt="props.item.title || '视频封面'"
+                  class="video-cover-placeholder"
+                />
+              </div>
+              <video 
+                v-show="isVideoLoaded"
+                ref="videoPlayer"
+                :src="effectiveVideoUrl" 
+                :poster="props.item.cover_url || (props.item.images && props.item.images[0])"
+                controls 
+                preload="metadata"
+                webkit-playsinline="true"
+                playsinline="true"
+                loop
+                class="video-player"
+                @loadedmetadata="handleVideoLoad"
+              >
+                您的浏览器不支持视频播放
+              </video>
+            </template>
+            <!-- 转码状态提示 -->
+            <div v-if="transcodeStatus === 'processing' || transcodeStatus === 'pending'" class="transcode-status-overlay">
+              <div class="transcode-status-content">
+                <div class="transcode-spinner"></div>
+                <span>{{ transcodeStatus === 'processing' ? '视频转码中...' : '转码排队中...' }}</span>
+              </div>
+            </div>
           </div>
           <!-- 图片轮播（图文笔记） -->
           <div v-else class="image-container">
@@ -101,32 +122,48 @@
           <div class="scrollable-content" ref="scrollableContent">
             <!-- 视频播放器（移动端） -->
             <div v-if="props.item.type === 2" class="mobile-video-container">
-              <div v-if="!isVideoLoaded" class="video-placeholder">
-                <img 
-                  v-if="props.item.cover_url || (props.item.images && props.item.images[0])" 
-                  :src="props.item.cover_url || props.item.images[0]" 
-                  :alt="props.item.title || '视频封面'"
-                  class="video-cover-placeholder"
-                />
-                <div v-else class="placeholder-content">
-                  <SvgIcon name="video" width="48" height="48" />
-                  <p>视频加载中...</p>
-                </div>
-              </div>
-              <video 
-                v-show="isVideoLoaded"
-                ref="mobileVideoPlayer"
-                :src="props.item.video_url" 
+              <!-- 使用Shaka Player播放DASH流（当MPD可用时） -->
+              <ShakaPlayer
+                v-if="effectiveVideoUrl && effectiveVideoUrl.endsWith('.mpd')"
+                ref="mobileShakaPlayerRef"
+                :src="effectiveVideoUrl"
                 :poster="props.item.cover_url || (props.item.images && props.item.images[0])"
-                controls 
-                preload="metadata"
-                webkit-playsinline="true"
-                playsinline="true"
-                class="mobile-video-player"
-                @loadedmetadata="handleVideoLoad"
-              >
-                您的浏览器不支持视频播放
-              </video>
+                :autoplay="false"
+                class="mobile-shaka-player"
+              />
+              <!-- 普通视频播放（原始视频或无MPD时） -->
+              <template v-else>
+                <div v-if="!isVideoLoaded" class="video-placeholder">
+                  <img 
+                    v-if="props.item.cover_url || (props.item.images && props.item.images[0])" 
+                    :src="props.item.cover_url || props.item.images[0]" 
+                    :alt="props.item.title || '视频封面'"
+                    class="video-cover-placeholder"
+                  />
+                  <div v-else class="placeholder-content">
+                    <SvgIcon name="video" width="48" height="48" />
+                    <p>视频加载中...</p>
+                  </div>
+                </div>
+                <video 
+                  v-show="isVideoLoaded"
+                  ref="mobileVideoPlayer"
+                  :src="effectiveVideoUrl" 
+                  :poster="props.item.cover_url || (props.item.images && props.item.images[0])"
+                  controls 
+                  preload="metadata"
+                  webkit-playsinline="true"
+                  playsinline="true"
+                  class="mobile-video-player"
+                  @loadedmetadata="handleVideoLoad"
+                >
+                  您的浏览器不支持视频播放
+                </video>
+              </template>
+              <!-- 转码状态提示 -->
+              <div v-if="transcodeStatus === 'processing' || transcodeStatus === 'pending'" class="transcode-status-badge">
+                <span>{{ transcodeStatus === 'processing' ? '转码中' : '排队中' }}</span>
+              </div>
             </div>
             <!-- 图片轮播（图文笔记） -->
             <div v-else-if="imageList && imageList.length > 0" class="mobile-image-container">
@@ -439,6 +476,7 @@ import ContentEditableInput from './ContentEditableInput.vue'
 import ImageUploadModal from './modals/ImageUploadModal.vue'
 import ImageViewer from './ImageViewer.vue'
 import VerifiedBadge from './VerifiedBadge.vue'
+import ShakaPlayer from './ShakaPlayer.vue'
 import { useThemeStore } from '@/stores/theme'
 import { useUserStore } from '@/stores/user'
 import { useLikeStore } from '@/stores/like.js'
@@ -449,6 +487,7 @@ import { useCommentStore } from '@/stores/comment'
 import { useCommentLikeStore } from '@/stores/commentLike'
 import { commentApi, userApi, postApi, imageUploadApi } from '@/api/index.js'
 import { getPostDetail } from '@/api/posts.js'
+import { videoApi } from '@/api/video.js'
 import { useScrollLock } from '@/composables/useScrollLock'
 import { formatTime } from '@/utils/timeFormat'
 import defaultAvatar from '@/assets/imgs/avatar.png'
@@ -586,6 +625,66 @@ const isAnimating = ref(true)
 const showContent = ref(false) // 新增：控制内容显示
 const isClosing = ref(false) // 新增：控制关闭动画状态
 const isVideoLoaded = ref(false) // 视频加载状态
+
+// Shaka Player refs
+const shakaPlayerRef = ref(null)
+const mobileShakaPlayerRef = ref(null)
+
+// 转码状态相关
+const transcodeStatus = ref(props.item.transcode_status || 'none')
+const mpdPath = ref(props.item.mpd_path || null)
+let transcodeStatusPollTimer = null
+
+// 有效的视频URL（优先使用MPD，否则使用原始视频）
+const effectiveVideoUrl = computed(() => {
+  if (mpdPath.value && transcodeStatus.value === 'completed') {
+    // 如果MPD路径是相对路径，添加服务器前缀
+    if (mpdPath.value.startsWith('/')) {
+      return mpdPath.value
+    }
+    return mpdPath.value
+  }
+  return props.item.video_url
+})
+
+// 开始轮询转码状态
+const startTranscodeStatusPoll = () => {
+  if (props.item.type !== 2) return
+  if (transcodeStatus.value === 'completed' || transcodeStatus.value === 'none' || transcodeStatus.value === 'failed') return
+  
+  // 每5秒检查一次转码状态
+  transcodeStatusPollTimer = setInterval(async () => {
+    try {
+      const result = await videoApi.getTranscodeStatus(props.item.id)
+      if (result.success && result.data) {
+        transcodeStatus.value = result.data.transcode_status
+        if (result.data.mpd_path) {
+          mpdPath.value = result.data.mpd_path
+        }
+        
+        // 如果转码完成或失败，停止轮询
+        if (result.data.transcode_status === 'completed' || result.data.transcode_status === 'failed') {
+          stopTranscodeStatusPoll()
+        }
+      }
+    } catch (error) {
+      console.error('获取转码状态失败:', error)
+    }
+  }, 5000)
+}
+
+// 停止轮询转码状态
+const stopTranscodeStatusPoll = () => {
+  if (transcodeStatusPollTimer) {
+    clearInterval(transcodeStatusPollTimer)
+    transcodeStatusPollTimer = null
+  }
+}
+
+// Shaka Player播放事件处理
+const handleShakaPlay = () => {
+  console.log('Shaka Player 开始播放')
+}
 
 // 移动端检测
 const isMobile = computed(() => windowWidth.value <= 768)
@@ -731,10 +830,16 @@ onMounted(() => {
       if (mobileVideoPlayer.value) mobileVideoPlayer.value.volume = 0.5
     }
   } catch (_) {}
+  
+  // 如果视频正在转码，开始轮询状态
+  if (props.item.type === 2 && (props.item.transcode_status === 'pending' || props.item.transcode_status === 'processing')) {
+    startTranscodeStatusPoll()
+  }
 })
 
 onUnmounted(() => {
   teardownMediaPersistence()
+  stopTranscodeStatusPoll()
 })
 
 const showToast = ref(false)
@@ -2967,6 +3072,62 @@ function handleAvatarError(event) {
   max-width: 1000px;
   object-fit: contain;
   background: #000;
+}
+
+/* Shaka Player 样式 */
+.shaka-video-player {
+  width: 100%;
+  height: 100%;
+  max-width: 1000px;
+}
+
+.mobile-shaka-player {
+  width: 100%;
+  height: 100%;
+}
+
+/* 转码状态覆盖层 */
+.transcode-status-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.transcode-status-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: white;
+  font-size: 14px;
+}
+
+.transcode-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.transcode-status-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  z-index: 10;
 }
 
 /* 视频占位符样式 */

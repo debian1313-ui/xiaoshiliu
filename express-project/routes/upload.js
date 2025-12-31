@@ -4,10 +4,11 @@ const { HTTP_STATUS, RESPONSE_CODES } = require('../constants');
 const multer = require('multer');
 const { authenticateToken } = require('../middleware/auth');
 const { uploadFile, uploadVideo } = require('../utils/uploadHelper');
-const { getTranscodeConfig, transcodeToDash, checkFfmpegAvailable } = require('../utils/videoTranscode');
+const { getTranscodeConfig, transcodeToDash, checkFfmpegAvailable, transcodeQueue } = require('../utils/videoTranscode');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { pool } = require('../config/config');
 
 // 配置 multer 内存存储（用于云端图床）
 const storage = multer.memoryStorage();
@@ -193,54 +194,7 @@ router.post('/video', authenticateToken, videoUpload.fields([
       console.log(`包含前端生成的缩略图: ${thumbnailFile.originalname}`);
     }
 
-    // 检查是否需要转码
-    const transcodeConfig = await getTranscodeConfig();
-    let transcodeResult = null;
-    
-    if (transcodeConfig.enabled) {
-      console.log('视频转码已启用，开始转码处理...');
-      
-      // 检查FFmpeg是否可用
-      const ffmpegAvailable = await checkFfmpegAvailable();
-      
-      if (ffmpegAvailable) {
-        // 将视频buffer写入临时文件
-        const tempDir = path.join(process.cwd(), 'uploads', 'temp');
-        if (!fs.existsSync(tempDir)) {
-          fs.mkdirSync(tempDir, { recursive: true });
-        }
-        
-        const tempInputPath = path.join(tempDir, `input_${Date.now()}_${crypto.randomBytes(4).toString('hex')}${path.extname(videoFile.originalname)}`);
-        fs.writeFileSync(tempInputPath, videoFile.buffer);
-        
-        // 转码输出目录
-        const outputDir = path.join(process.cwd(), 'uploads', 'videos', 'dash');
-        
-        try {
-          transcodeResult = await transcodeToDash(tempInputPath, outputDir, {
-            minBitrate: transcodeConfig.minBitrate,
-            maxBitrate: transcodeConfig.maxBitrate
-          });
-          
-          if (transcodeResult.success) {
-            console.log('视频转码成功:', transcodeResult.data);
-          } else {
-            console.warn('视频转码失败，将使用原始视频:', transcodeResult.message);
-          }
-        } catch (transcodeError) {
-          console.error('视频转码异常:', transcodeError);
-        } finally {
-          // 清理临时输入文件
-          if (fs.existsSync(tempInputPath)) {
-            fs.unlinkSync(tempInputPath);
-          }
-        }
-      } else {
-        console.warn('FFmpeg不可用，跳过视频转码');
-      }
-    }
-
-    // 上传原始视频文件
+    // 先上传原始视频文件（不阻塞用户）
     const uploadResult = await uploadVideo(
       videoFile.buffer,
       videoFile.originalname,
@@ -277,26 +231,62 @@ router.post('/video', authenticateToken, videoUpload.fields([
       }
     }
 
-
-    // 记录用户上传操作日志
-    console.log(`视频上传成功 - 用户ID: ${req.user.id}, 文件名: ${videoFile.originalname}, 缩略图: ${coverUrl ? '有' : '无'}, 转码: ${transcodeResult?.success ? '成功' : '未转码'}`);
-
+    // 构建响应数据
     const responseData = {
       originalname: videoFile.originalname,
       size: videoFile.size,
       url: uploadResult.url,
       filePath: uploadResult.filePath,
-      coverUrl: coverUrl
+      coverUrl: coverUrl,
+      transcode: {
+        status: 'none',
+        taskId: null
+      }
     };
+
+    // 检查是否需要转码（异步处理，不阻塞响应）
+    const transcodeConfig = await getTranscodeConfig();
     
-    // 如果转码成功，添加DASH相关信息
-    if (transcodeResult?.success) {
-      responseData.dash = {
-        enabled: true,
-        mpdPath: transcodeResult.data.mpdPath,
-        qualities: transcodeResult.data.qualities
-      };
+    if (transcodeConfig.enabled) {
+      console.log('视频转码已启用，将在后台异步处理...');
+      
+      // 检查FFmpeg是否可用
+      const ffmpegAvailable = await checkFfmpegAvailable();
+      
+      if (ffmpegAvailable) {
+        // 将视频buffer写入临时文件
+        const tempDir = path.join(process.cwd(), 'uploads', 'temp');
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+        
+        const tempInputPath = path.join(tempDir, `input_${Date.now()}_${crypto.randomBytes(4).toString('hex')}${path.extname(videoFile.originalname)}`);
+        fs.writeFileSync(tempInputPath, videoFile.buffer);
+        
+        // 转码输出目录
+        const outputDir = path.join(process.cwd(), 'uploads', 'videos', 'dash');
+        
+        // 使用队列模式异步转码
+        const transcodeResult = await transcodeToDash(tempInputPath, outputDir, {
+          minBitrate: transcodeConfig.minBitrate,
+          maxBitrate: transcodeConfig.maxBitrate,
+          useQueue: true  // 使用队列模式，立即返回任务ID
+        });
+        
+        if (transcodeResult.queued && transcodeResult.taskId) {
+          responseData.transcode = {
+            status: 'pending',
+            taskId: transcodeResult.taskId
+          };
+          console.log(`视频转码任务已加入队列 - 任务ID: ${transcodeResult.taskId}`);
+        }
+      } else {
+        console.warn('FFmpeg不可用，跳过视频转码');
+      }
     }
+
+    // 记录用户上传操作日志
+    console.log(`视频上传成功 - 用户ID: ${req.user.id}, 文件名: ${videoFile.originalname}, 缩略图: ${coverUrl ? '有' : '无'}, 转码: ${responseData.transcode.status}`);
 
     res.json({
       code: RESPONSE_CODES.SUCCESS,

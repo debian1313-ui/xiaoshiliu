@@ -56,9 +56,11 @@ router.get('/', optionalAuth, async (req, res) => {
         // 根据笔记类型获取图片或视频封面
         if (post.type === 2) {
           // 视频笔记：获取视频封面
-          const [videos] = await pool.execute('SELECT video_url, cover_url FROM post_videos WHERE post_id = ?', [post.id]);
+          const [videos] = await pool.execute('SELECT video_url, cover_url, mpd_path, transcode_status FROM post_videos WHERE post_id = ?', [post.id]);
           post.images = videos.length > 0 && videos[0].cover_url ? [videos[0].cover_url] : [];
           post.video_url = videos.length > 0 ? videos[0].video_url : null;
+          post.mpd_path = videos.length > 0 ? videos[0].mpd_path : null;
+          post.transcode_status = videos.length > 0 ? videos[0].transcode_status : null;
           // 为瀑布流设置image字段
           post.image = videos.length > 0 && videos[0].cover_url ? videos[0].cover_url : null;
         } else {
@@ -201,9 +203,11 @@ router.get('/', optionalAuth, async (req, res) => {
       // 根据笔记类型获取图片或视频封面
       if (post.type === 2) {
         // 视频笔记：获取视频封面
-        const [videos] = await pool.execute('SELECT video_url, cover_url FROM post_videos WHERE post_id = ?', [post.id]);
+        const [videos] = await pool.execute('SELECT video_url, cover_url, mpd_path, transcode_status FROM post_videos WHERE post_id = ?', [post.id]);
         post.images = videos.length > 0 && videos[0].cover_url ? [videos[0].cover_url] : [];
         post.video_url = videos.length > 0 ? videos[0].video_url : null;
+        post.mpd_path = videos.length > 0 ? videos[0].mpd_path : null;
+        post.transcode_status = videos.length > 0 ? videos[0].transcode_status : null;
         // 为瀑布流设置image字段
         post.image = videos.length > 0 && videos[0].cover_url ? videos[0].cover_url : null;
       } else {
@@ -532,12 +536,15 @@ router.get('/:id', optionalAuth, async (req, res) => {
       post.images = images.map(img => img.image_url);
     } else if (post.type === 2) {
       // 视频类型：获取视频
-      const [videos] = await pool.execute('SELECT video_url, cover_url FROM post_videos WHERE post_id = ?', [postId]);
+      const [videos] = await pool.execute('SELECT video_url, cover_url, mpd_path, transcode_status, transcode_task_id FROM post_videos WHERE post_id = ?', [postId]);
       post.videos = videos;
       // 将第一个视频的URL和封面提取到主对象中，方便前端使用
       if (videos.length > 0) {
         post.video_url = videos[0].video_url;
         post.cover_url = videos[0].cover_url;
+        post.mpd_path = videos[0].mpd_path;
+        post.transcode_status = videos[0].transcode_status;
+        post.transcode_task_id = videos[0].transcode_task_id;
       }
     }
 

@@ -97,8 +97,12 @@ CREATE TABLE IF NOT EXISTS `post_videos` (
   `post_id` bigint(20) NOT NULL COMMENT '笔记ID',
   `cover_url` varchar(500) DEFAULT NULL COMMENT '视频封面URL',
   `video_url` varchar(500) NOT NULL COMMENT '视频URL',
+  `mpd_path` varchar(500) DEFAULT NULL COMMENT 'DASH MPD文件路径',
+  `transcode_status` ENUM('pending', 'processing', 'completed', 'failed', 'none') DEFAULT 'none' COMMENT '转码状态',
+  `transcode_task_id` varchar(100) DEFAULT NULL COMMENT '转码任务ID',
   PRIMARY KEY (`id`),
   KEY `idx_post_id` (`post_id`),
+  KEY `idx_transcode_status` (`transcode_status`),
   CONSTRAINT `post_videos_ibfk_1` FOREIGN KEY (`post_id`) REFERENCES `posts` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='笔记视频表';
 
