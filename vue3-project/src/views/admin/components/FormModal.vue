@@ -1103,7 +1103,7 @@ const handleVideoFileSelect = async (event, fieldKey) => {
   if (!file) return
 
   // 验证文件类型和大小
-  const validTypes = ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv']
+  const validTypes = ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm', 'video/quicktime', 'video/3gpp']
   const maxSize = 100 * 1024 * 1024 // 100MB
 
   if (!validTypes.includes(file.type)) {

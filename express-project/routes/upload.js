@@ -20,8 +20,8 @@ const imageFileFilter = (req, file, cb) => {
 
 // 文件过滤器 - 视频
 const videoFileFilter = (req, file, cb) => {
-  // 检查文件类型
-  const allowedTypes = ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm'];
+  // 检查文件类型（包含 video/quicktime 和 video/3gpp 以支持移动端设备录制的视频）
+  const allowedTypes = ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm', 'video/quicktime', 'video/3gpp'];
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {

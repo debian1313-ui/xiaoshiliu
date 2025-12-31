@@ -34,7 +34,7 @@ export const apiConfig = {
     // 视频上传配置
     video: {
       maxFileSize: 100 * 1024 * 1024, // 100MB
-      allowedTypes: ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm'],
+      allowedTypes: ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm', 'video/quicktime', 'video/3gpp'],
       maxCount: 1 // 最多上传1个视频
     }
   }

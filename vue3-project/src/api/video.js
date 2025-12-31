@@ -70,7 +70,9 @@ export const videoApi = {
       'video/mov', 
       'video/wmv', 
       'video/flv', 
-      'video/webm'
+      'video/webm',
+      'video/quicktime',
+      'video/3gpp'
     ]
 
     // 检查文件类型
