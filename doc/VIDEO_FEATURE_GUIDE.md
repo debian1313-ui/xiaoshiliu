@@ -9,6 +9,7 @@
 项目使用 [Shaka Player](https://github.com/shaka-project/shaka-player) 作为视频播放器，提供以下功能：
 
 - ✅ **DASH格式支持** - 支持播放 MPEG-DASH (.mpd) 流媒体
+- ✅ **自动播放** - 点击视频后自动播放，无需手动点击播放按钮
 - ✅ **自适应码率** - 根据网络状况自动切换视频质量
 - ✅ **手动画质选择** - 支持手动选择视频清晰度（360p、480p、720p、1080p等）
 - ✅ **美观的自定义控制栏** - 完全自定义的播放控制界面
@@ -58,7 +59,7 @@ VITE_VIDEO_ADAPTIVE_BITRATE=true
 
 **配置项说明：**
 
-- `VITE_VIDEO_AUTOPLAY`: 设置为 `true` 时视频自动播放
+- `VITE_VIDEO_AUTOPLAY`: 设置为 `true` 时视频自动播放（注意：在实际使用中，DetailCard 和 VideoPlayerModal 组件会覆盖此配置，始终启用自动播放以提供更好的用户体验）
 - `VITE_VIDEO_CONTROLS`: 设置为 `false` 隐藏控制栏
 - `VITE_VIDEO_SHOW_PLAY_BUTTON`: 设置为 `false` 隐藏播放按钮
 - `VITE_VIDEO_MUTED`: 设置为 `true` 静音播放

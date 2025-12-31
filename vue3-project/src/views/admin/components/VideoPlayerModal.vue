@@ -12,7 +12,7 @@
           v-if="videoUrl"
           :src="videoUrl"
           :poster-url="posterUrl"
-          :autoplay="false"
+          :autoplay="true"
           :show-controls="true"
           :show-play-button="true"
           class="modal-video-player"
