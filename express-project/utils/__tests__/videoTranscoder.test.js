@@ -20,7 +20,8 @@ describe('Video Transcoder - Aspect Ratio Preservation', () => {
 
     test('should maintain 9:16 aspect ratio for portrait video', () => {
       const result = calculateAspectRatioSize(720, 1280, 360);
-      expect(result.width).toBe(204); // 720/1280 * 360 = 202.5, rounded to even 204
+      // 720/1280 * 360 = 202.5 → Math.round() = 203 → adjust to even = 204
+      expect(result.width).toBe(204);
       expect(result.height).toBe(360);
       // Verify aspect ratio is preserved
       const originalRatio = 720 / 1280;

@@ -200,6 +200,8 @@ let controlsTimeout = null
 
 // 全屏状态更新函数引用（用于清理事件监听器）
 let fullscreenStateHandler = null
+let webkitBeginFullscreenHandler = null
+let webkitEndFullscreenHandler = null
 
 // 检查是否是 DASH 格式
 const isDashVideo = (url) => {
@@ -425,23 +427,17 @@ const toggleFullscreen = async () => {
       } else if (element.webkitRequestFullscreen) {
         // iOS Safari 和旧版 Safari
         await element.webkitRequestFullscreen()
-      } else if (element.webkitEnterFullscreen) {
-        // iOS Safari 视频元素
-        await element.webkitEnterFullscreen()
       } else if (element.mozRequestFullScreen) {
         // Firefox
         await element.mozRequestFullScreen()
       } else if (element.msRequestFullscreen) {
         // IE11
         await element.msRequestFullscreen()
+      } else if (videoElement.value?.webkitEnterFullscreen) {
+        // iOS Safari 视频元素专用 (容器不支持时的回退方案)
+        videoElement.value.webkitEnterFullscreen()
       } else {
-        // 如果容器不支持，尝试让视频元素全屏
-        const video = videoElement.value
-        if (video.webkitEnterFullscreen) {
-          video.webkitEnterFullscreen()
-        } else {
-          console.warn('浏览器不支持全屏功能')
-        }
+        console.warn('浏览器不支持全屏功能')
       }
     } else {
       // 退出全屏 - 支持多种浏览器 API
@@ -557,12 +553,15 @@ const setupVideoListeners = () => {
   
   // iOS Safari 特殊处理
   if (videoElement.value) {
-    videoElement.value.addEventListener('webkitbeginfullscreen', () => {
+    webkitBeginFullscreenHandler = () => {
       isFullscreen.value = true
-    })
-    videoElement.value.addEventListener('webkitendfullscreen', () => {
+    }
+    webkitEndFullscreenHandler = () => {
       isFullscreen.value = false
-    })
+    }
+    
+    videoElement.value.addEventListener('webkitbeginfullscreen', webkitBeginFullscreenHandler)
+    videoElement.value.addEventListener('webkitendfullscreen', webkitEndFullscreenHandler)
   }
 
   // 鼠标移动显示控制栏
@@ -617,6 +616,16 @@ onBeforeUnmount(() => {
     document.removeEventListener('webkitfullscreenchange', fullscreenStateHandler)
     document.removeEventListener('mozfullscreenchange', fullscreenStateHandler)
     document.removeEventListener('MSFullscreenChange', fullscreenStateHandler)
+  }
+  
+  // 清理 iOS Safari 特殊事件监听器
+  if (videoElement.value) {
+    if (webkitBeginFullscreenHandler) {
+      videoElement.value.removeEventListener('webkitbeginfullscreen', webkitBeginFullscreenHandler)
+    }
+    if (webkitEndFullscreenHandler) {
+      videoElement.value.removeEventListener('webkitendfullscreen', webkitEndFullscreenHandler)
+    }
   }
 })
 

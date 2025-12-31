@@ -67,6 +67,12 @@ async function analyzeVideo(videoPath) {
  * @returns {Object} 缩放后的宽度和高度
  */
 function calculateAspectRatioSize(sourceWidth, sourceHeight, targetHeight) {
+  // 输入验证
+  if (!sourceWidth || !sourceHeight || !targetHeight || 
+      sourceWidth <= 0 || sourceHeight <= 0 || targetHeight <= 0) {
+    throw new Error('Invalid dimensions: width, height, and targetHeight must be positive numbers');
+  }
+  
   const aspectRatio = sourceWidth / sourceHeight;
   const targetWidth = Math.round(targetHeight * aspectRatio);
   
