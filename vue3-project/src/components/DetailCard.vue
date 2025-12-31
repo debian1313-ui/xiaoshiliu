@@ -33,7 +33,6 @@
               :show-controls="true"
               :show-play-button="true"
               :muted="false"
-              :loop="true"
               class="video-player"
               @loaded="handleVideoLoad"
             />
@@ -528,81 +527,6 @@ const isVideoLoaded = ref(false) // 视频加载状态
 // 移动端检测
 const isMobile = computed(() => windowWidth.value <= 768)
 
-// 视频进度与音量记忆
-const getStorageKeys = (url) => {
-  const safeKey = url ? encodeURIComponent(url) : 'unknown'
-  return {
-    timeKey: `video_progress_${safeKey}`,
-    volumeKey: 'video_volume_global'
-  }
-}
-
-const restoreMediaStateFor = (el, url) => {
-  if (!el) return
-  const { timeKey, volumeKey } = getStorageKeys(url)
-  try {
-    // 恢复音量（默认 0.5）
-    const savedVolume = localStorage.getItem(volumeKey)
-    const volume = savedVolume !== null ? Number(savedVolume) : 0.5
-    el.volume = Math.max(0, Math.min(1, isNaN(volume) ? 0.5 : volume))
-
-    // 恢复进度
-    const savedTime = localStorage.getItem(timeKey)
-    if (savedTime !== null) {
-      const targetTime = Number(savedTime)
-      const seekOnMetadata = () => {
-        el.currentTime = isNaN(targetTime) ? 0 : targetTime
-        el.removeEventListener('loadedmetadata', seekOnMetadata)
-      }
-      if (el.readyState >= 1) {
-        el.currentTime = isNaN(targetTime) ? 0 : targetTime
-      } else {
-        el.addEventListener('loadedmetadata', seekOnMetadata)
-      }
-    }
-  } catch (_) {}
-}
-
-const mediaHandlersMap = new WeakMap()
-
-const bindMediaListenersFor = (el, url) => {
-  if (!el) return
-  const { timeKey, volumeKey } = getStorageKeys(url)
-  const handlers = {
-    timeupdate: () => {
-      try { localStorage.setItem(timeKey, String(el.currentTime || 0)) } catch (_) {}
-    },
-    volumechange: () => {
-      try { localStorage.setItem(volumeKey, String(el.volume)) } catch (_) {}
-    }
-  }
-  el.addEventListener('timeupdate', handlers.timeupdate)
-  el.addEventListener('volumechange', handlers.volumechange)
-  mediaHandlersMap.set(el, handlers)
-}
-
-const unbindMediaListenersFor = (el) => {
-  if (!el) return
-  const handlers = mediaHandlersMap.get(el)
-  if (handlers) {
-    el.removeEventListener('timeupdate', handlers.timeupdate)
-    el.removeEventListener('volumechange', handlers.volumechange)
-    mediaHandlersMap.delete(el)
-  }
-}
-
-// Media persistence functions - Disabled as ShakaVideoPlayer handles volume and progress internally
-// The player component maintains its own state through localStorage
-
-const setupMediaPersistence = () => {
-  // ShakaVideoPlayer handles volume persistence internally
-  // No need to manually setup listeners
-}
-
-const teardownMediaPersistence = () => {
-  // ShakaVideoPlayer cleans up its own listeners
-}
-
 // 动画完成后再显示复杂内容
 const handleAnimationEnd = (event) => {
   // 只处理detail-card元素的动画结束事件，避免子元素动画干扰
@@ -643,28 +567,6 @@ onMounted(() => {
 })
 
 // 当视频加载完成或引用可用时，恢复与绑定；URL 变更时重置
-watch(() => isVideoLoaded.value, (loaded) => {
-  if (loaded) {
-    teardownMediaPersistence()
-    setupMediaPersistence()
-  }
-})
-
-watch(() => props.item?.video_url, () => {
-  teardownMediaPersistence()
-  nextTick(() => setupMediaPersistence())
-})
-
-// Volume is now handled by ShakaVideoPlayer through .env configuration
-// Default volume is set via VITE_VIDEO_DEFAULT_VOLUME
-onMounted(() => {
-  // ShakaVideoPlayer manages volume internally
-})
-
-onUnmounted(() => {
-  // ShakaVideoPlayer handles cleanup internally
-})
-
 const showToast = ref(false)
 const toastMessage = ref('')
 const toastType = ref('success')
