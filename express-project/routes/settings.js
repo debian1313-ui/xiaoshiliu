@@ -262,6 +262,56 @@ router.get('/video/status', adminAuth, async (req, res) => {
 });
 
 /**
+ * 获取视频播放器公开设置（无需认证）
+ * GET /api/settings/video/player
+ */
+router.get('/video/player', async (req, res) => {
+  try {
+    // 获取视频播放器相关设置
+    const [rows] = await pool.execute(
+      `SELECT setting_key, setting_value FROM system_settings 
+       WHERE setting_key IN ('video_player_show_center_play_button', 'video_player_autoplay', 'video_player_loop', 'video_player_show_controls')`
+    );
+    
+    const settings = {
+      showCenterPlayButton: false,
+      autoplay: false,
+      loop: false,
+      showControls: true
+    };
+    
+    rows.forEach(row => {
+      switch (row.setting_key) {
+        case 'video_player_show_center_play_button':
+          settings.showCenterPlayButton = row.setting_value === 'true';
+          break;
+        case 'video_player_autoplay':
+          settings.autoplay = row.setting_value === 'true';
+          break;
+        case 'video_player_loop':
+          settings.loop = row.setting_value === 'true';
+          break;
+        case 'video_player_show_controls':
+          settings.showControls = row.setting_value !== 'false';
+          break;
+      }
+    });
+    
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      message: '获取播放器设置成功',
+      data: settings
+    });
+  } catch (error) {
+    console.error('获取播放器设置失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      code: RESPONSE_CODES.ERROR,
+      message: '获取播放器设置失败'
+    });
+  }
+});
+
+/**
  * 获取转码队列状态
  * GET /api/settings/video/queue
  */

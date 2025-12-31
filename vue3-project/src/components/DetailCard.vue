@@ -30,8 +30,10 @@
               ref="shakaPlayerRef"
               :src="effectiveVideoUrl"
               :poster="props.item.cover_url || (props.item.images && props.item.images[0])"
-              :autoplay="true"
-              :loop="true"
+              :autoplay="playerSettings.autoplay"
+              :loop="playerSettings.loop"
+              :showControls="playerSettings.showControls"
+              :showCenterPlayButton="playerSettings.showCenterPlayButton"
               class="shaka-video-player"
               @play="handleShakaPlay"
             />
@@ -102,7 +104,10 @@
                 ref="mobileShakaPlayerRef"
                 :src="effectiveVideoUrl"
                 :poster="props.item.cover_url || (props.item.images && props.item.images[0])"
-                :autoplay="false"
+                :autoplay="playerSettings.autoplay"
+                :loop="playerSettings.loop"
+                :showControls="playerSettings.showControls"
+                :showCenterPlayButton="playerSettings.showCenterPlayButton"
                 class="mobile-shaka-player"
               />
               <!-- 转码状态提示 -->
@@ -433,6 +438,7 @@ import { useCommentLikeStore } from '@/stores/commentLike'
 import { commentApi, userApi, postApi, imageUploadApi } from '@/api/index.js'
 import { getPostDetail } from '@/api/posts.js'
 import { videoApi } from '@/api/video.js'
+import { settingsApi } from '@/api/settings.js'
 import { useScrollLock } from '@/composables/useScrollLock'
 import { formatTime } from '@/utils/timeFormat'
 import defaultAvatar from '@/assets/imgs/avatar.png'
@@ -574,6 +580,26 @@ const isVideoLoaded = ref(false) // 视频加载状态
 // Shaka Player refs
 const shakaPlayerRef = ref(null)
 const mobileShakaPlayerRef = ref(null)
+
+// 播放器UI设置（从后端获取）
+const playerSettings = ref({
+  showCenterPlayButton: false,
+  autoplay: false,
+  loop: false,
+  showControls: true
+})
+
+// 获取播放器设置
+const fetchPlayerSettings = async () => {
+  try {
+    const result = await settingsApi.getVideoPlayerSettings()
+    if (result.success && result.data) {
+      playerSettings.value = result.data
+    }
+  } catch (error) {
+    console.error('获取播放器设置失败:', error)
+  }
+}
 
 // 转码状态相关
 const transcodeStatus = ref(props.item.transcode_status || 'none')
@@ -771,6 +797,11 @@ onMounted(() => {
       if (mobileVideoPlayer.value) mobileVideoPlayer.value.volume = 0.5
     }
   } catch (_) {}
+  
+  // 获取视频播放器设置
+  if (props.item.type === 2) {
+    fetchPlayerSettings()
+  }
   
   // 如果视频正在转码，开始轮询状态
   if (props.item.type === 2 && (props.item.transcode_status === 'pending' || props.item.transcode_status === 'processing')) {

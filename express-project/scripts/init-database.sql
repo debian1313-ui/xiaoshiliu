@@ -303,7 +303,11 @@ INSERT INTO `system_settings` (`setting_key`, `setting_value`, `setting_group`, 
 ('video_transcode_enabled', 'false', 'video', '是否启用视频转码'),
 ('video_transcode_min_bitrate', '500', 'video', '视频转码最小码率(kbps)'),
 ('video_transcode_max_bitrate', '2500', 'video', '视频转码最大码率(kbps)'),
-('video_transcode_format', 'dash', 'video', '视频转码格式(dash/hls)')
+('video_transcode_format', 'dash', 'video', '视频转码格式(dash/hls)'),
+('video_player_show_center_play_button', 'false', 'video', '视频播放器是否显示中心播放按钮'),
+('video_player_autoplay', 'false', 'video', '视频播放器是否自动播放'),
+('video_player_loop', 'false', 'video', '视频播放器是否循环播放'),
+('video_player_show_controls', 'true', 'video', '视频播放器是否显示控制栏')
 ON DUPLICATE KEY UPDATE `setting_key` = VALUES(`setting_key`);
 
 -- 插入默认管理员账户
