@@ -161,7 +161,9 @@ const config = {
     // FFmpeg 二进制文件路径（留空则使用系统PATH中的ffmpeg）
     ffmpegPath: process.env.FFMPEG_PATH || '',
     // FFprobe 二进制文件路径（留空则使用系统PATH中的ffprobe）
-    ffprobePath: process.env.FFPROBE_PATH || ''
+    ffprobePath: process.env.FFPROBE_PATH || '',
+    // DASH分辨率配置（格式: 宽x高:码率kbps 或 高度p:码率kbps，逗号分隔）
+    dashResolutions: process.env.DASH_RESOLUTIONS || '1920x1080:5000,1280x720:2500,854x480:1000,640x360:500'
   }
 };
 
