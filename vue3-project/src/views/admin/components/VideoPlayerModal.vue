@@ -8,17 +8,15 @@
         </button>
       </div>
       <div class="video-modal-body">
-        <video
+        <ShakaVideoPlayer
           v-if="videoUrl"
-          ref="videoPlayer"
           :src="videoUrl"
-          :poster="posterUrl"
-          controls
-          preload="metadata"
+          :poster-url="posterUrl"
+          :autoplay="false"
+          :show-controls="true"
+          :show-play-button="true"
           class="modal-video-player"
-        >
-          您的浏览器不支持视频播放
-        </video>
+        />
         <div v-else class="video-placeholder">
           <SvgIcon name="video" width="48" height="48" />
           <p>视频加载中...</p>
@@ -29,8 +27,9 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { watch } from 'vue'
 import SvgIcon from '@/components/SvgIcon.vue'
+import ShakaVideoPlayer from '@/components/ShakaVideoPlayer.vue'
 
 const props = defineProps({
   visible: {
@@ -49,25 +48,10 @@ const props = defineProps({
 
 const emit = defineEmits(['update:visible', 'close'])
 
-const videoPlayer = ref(null)
-
 const closeModal = () => {
   emit('update:visible', false)
   emit('close')
 }
-
-// 监听visible变化，处理视频播放
-watch(() => props.visible, async (newVisible) => {
-  if (newVisible) {
-    await nextTick()
-    // 模态框打开时，可以在这里添加自动播放逻辑
-  } else {
-    // 模态框关闭时，暂停视频
-    if (videoPlayer.value) {
-      videoPlayer.value.pause()
-    }
-  }
-})
 
 // ESC键关闭模态框
 const handleKeydown = (event) => {
