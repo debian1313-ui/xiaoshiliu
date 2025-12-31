@@ -2417,12 +2417,8 @@ onMounted(async () => {
     })
   }
 
-  // 自动播放视频
-  if (props.item.type === 2 && props.item.video_url) {
-    nextTick(() => {
-      autoPlayVideo()
-    })
-  }
+  // 注意：视频自动播放由 ShakaVideoPlayer 组件的 autoplay 属性控制
+  // 不再需要单独的 autoPlayVideo 函数调用
 
   adjustMobilePadding()
 })
