@@ -1,5 +1,5 @@
 <template>
-  <div :class="[pageMode ? 'detail-card-page' : 'detail-card-overlay', { 'animating': isAnimating && !pageMode, 'video-note-overlay': isVideoNote }]"
+  <div :class="[pageMode ? 'detail-card-page' : 'detail-card-overlay', { 'animating': isAnimating && !pageMode }]"
     v-click-outside.mousedown="!pageMode ? closeModal : undefined" v-escape-key="!pageMode ? closeModal : undefined">
     <div class="detail-card" @click="handleDetailCardClick"
         :style="pageMode ? {} : { width: cardWidth + 'px', ...(isClosing ? {} : animationStyle) }"
@@ -8,11 +8,10 @@
           'scale-out': isClosing && !pageMode && !isMobile,
           'slide-in': isAnimating && !pageMode && isMobile,
           'slide-out': isClosing && !pageMode && isMobile,
-          'page-mode': pageMode,
-          'video-note-mode': isVideoNote
+          'page-mode': pageMode 
         }"
         @animationend="handleAnimationEnd">
-      <button v-if="!pageMode && !(isVideoNote && isMobile)" class="close-btn" @click="closeModal" @mouseenter="showTooltip = true"
+      <button v-if="!pageMode" class="close-btn" @click="closeModal" @mouseenter="showTooltip = true"
         @mouseleave="showTooltip = false">
         <SvgIcon name="close" />
         <div v-if="showTooltip" class="tooltip">
@@ -20,94 +19,8 @@
         </div>
       </button>
 
-      <!-- 移动端抖音风格视频笔记叠加层 -->
-      <div v-if="isVideoNote && isMobile" class="tiktok-overlay">
-        <!-- 顶部栏：返回按钮 + 搜索按钮 -->
-        <div class="tiktok-top-bar">
-          <button class="tiktok-back-btn" @click="closeModal">
-            <SvgIcon name="leftArrow" width="24" height="24" />
-          </button>
-          <button class="tiktok-search-btn" @click="handleSearchClick">
-            <SvgIcon name="search" width="24" height="24" />
-          </button>
-        </div>
-
-        <!-- 右侧垂直操作按钮 -->
-        <div class="tiktok-right-actions">
-          <div class="tiktok-action-item" @click="toggleLike(!isLiked)">
-            <div class="tiktok-action-icon" :class="{ 'active': isLiked }">
-              <SvgIcon :name="isLiked ? 'liked' : 'like'" width="32" height="32" />
-            </div>
-            <span class="tiktok-action-count">{{ likeCount }}</span>
-          </div>
-          <div class="tiktok-action-item" @click="handleCommentButtonClick">
-            <div class="tiktok-action-icon">
-              <SvgIcon name="chat" width="32" height="32" />
-            </div>
-            <span class="tiktok-action-count">{{ commentCount }}</span>
-          </div>
-          <div class="tiktok-action-item" @click="toggleCollect">
-            <div class="tiktok-action-icon" :class="{ 'active': isCollected }">
-              <SvgIcon :name="isCollected ? 'collected' : 'collect'" width="32" height="32" />
-            </div>
-            <span class="tiktok-action-count">{{ collectCount }}</span>
-          </div>
-          <div class="tiktok-action-item" @click="handleShare">
-            <div class="tiktok-action-icon">
-              <SvgIcon :name="isShared ? 'tick' : 'share'" width="32" height="32" />
-            </div>
-            <span class="tiktok-action-count">分享</span>
-          </div>
-        </div>
-
-        <!-- 底部左侧用户信息 -->
-        <div class="tiktok-bottom-left">
-          <div class="tiktok-user-row">
-            <div class="tiktok-avatar-container" @click="onUserClick(authorData.id)">
-              <img :src="authorData.avatar" :alt="authorData.name" class="tiktok-avatar" @error="handleAvatarError" />
-            </div>
-            <span class="tiktok-username" tabindex="0" @click="onUserClick(authorData.id)" @keyup.enter="onUserClick(authorData.id)">{{ authorData.name }}</span>
-            <FollowButton v-if="!isCurrentUserPost" :is-following="authorData.isFollowing" :user-id="authorData.id"
-              @follow="handleFollow" @unfollow="handleUnfollow" class="tiktok-follow-btn" />
-          </div>
-          <!-- 标题 -->
-          <div v-if="postData.title" class="tiktok-title">{{ postData.title }}</div>
-          <!-- 详情内容（可展开） -->
-          <div v-if="postData.content" class="tiktok-content-wrapper">
-            <div class="tiktok-content" :class="{ 'expanded': isContentExpanded }">
-              <ContentRenderer :text="postData.content" />
-            </div>
-            <span v-if="shouldShowExpandBtn" class="tiktok-expand-btn" tabindex="0" @click="toggleContentExpand" @keyup.enter="toggleContentExpand">
-              {{ isContentExpanded ? '收起' : '展开' }}
-            </span>
-          </div>
-          <!-- 话题标签 -->
-          <div class="tiktok-tags">
-            <span v-for="tag in postData.tags" :key="tag" class="tiktok-tag" tabindex="0" @click="handleTagClick(tag)" @keyup.enter="handleTagClick(tag)">#{{ tag }}</span>
-          </div>
-        </div>
-
-        <!-- 底部评论输入框 -->
-        <div class="tiktok-bottom-bar">
-          <div class="tiktok-comment-input" @click="toggleInfoPanel">
-            <span class="tiktok-input-placeholder">有话要说，快来评论</span>
-          </div>
-          <div class="tiktok-input-icons">
-            <button class="tiktok-input-icon" @click.stop="toggleMentionPanel">
-              <SvgIcon name="mention" width="20" height="20" />
-            </button>
-            <button class="tiktok-input-icon" @click.stop="toggleEmojiPanel">
-              <SvgIcon name="emoji" width="20" height="20" />
-            </button>
-            <button class="tiktok-input-icon" @click.stop="toggleImageUpload">
-              <SvgIcon name="imgNote" width="20" height="20" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="detail-content" :class="{ 'video-note-content': isVideoNote }">
-        <div class="image-section" :class="{ 'video-note-section': isVideoNote }" :style="isVideoNote ? {} : { width: imageSectionWidth + 'px' }" @mouseenter="showImageControls = true"
+      <div class="detail-content">
+        <div class="image-section" :style="{ width: imageSectionWidth + 'px' }" @mouseenter="showImageControls = true"
           @mouseleave="showImageControls = false">
           <!-- 视频播放器（桌面端） -->
           <div v-if="props.item.type === 2" class="video-container">
@@ -167,13 +80,8 @@
           </div>
         </div>
 
-        <div class="content-section" :class="{ 'video-note-info-section': isVideoNote, 'expanded': isInfoPanelExpanded }" ref="contentSection" :style="!isVideoNote && windowWidth > 768 ? { width: contentSectionWidth + 'px' } : {}">
-          <!-- 移动端视频笔记拖拽指示条 -->
-          <div v-if="isVideoNote && isMobile" class="drag-handle" @click="toggleInfoPanel">
-            <div class="drag-handle-bar"></div>
-          </div>
-          <!-- 移动端视频笔记模式隐藏作者信息（已在抖音风格叠加层显示） -->
-          <div v-if="!(isVideoNote && isMobile)" class="author-wrapper" ref="authorWrapper" @click="toggleInfoPanel">
+        <div class="content-section" ref="contentSection" :style="windowWidth > 768 ? { width: contentSectionWidth + 'px' } : {}">
+          <div class="author-wrapper" ref="authorWrapper">
             <div class="author-info">
               <div class="author-avatar-container">
                 <img :src="authorData.avatar" :alt="authorData.name" class="author-avatar "
@@ -250,8 +158,7 @@
                   :class="{ active: index === currentImageIndex }" @click="goToImage(index)"></span>
               </div>
             </div>
-            <!-- 移动端视频笔记模式不显示标题、详情等（已在抖音风格叠加层显示） -->
-            <div v-if="!(isVideoNote && isMobile)" class="post-content">
+            <div class="post-content">
               <h2 class="post-title">{{ postData.title }}</h2>
               <p class="post-text">
                 <ContentRenderer :text="postData.content" />
@@ -679,37 +586,9 @@ const isAnimating = ref(true)
 const showContent = ref(false) // 新增：控制内容显示
 const isClosing = ref(false) // 新增：控制关闭动画状态
 const isVideoLoaded = ref(false) // 视频加载状态
-const isInfoPanelExpanded = ref(false) // 移动端视频笔记信息面板展开状态
 
 // 移动端检测
 const isMobile = computed(() => windowWidth.value <= 768)
-
-// 检测是否为视频笔记 (抖音风格)
-const isVideoNote = computed(() => props.item.type === 2)
-
-// 切换移动端视频笔记信息面板展开状态
-const toggleInfoPanel = () => {
-  if (isVideoNote.value && isMobile.value) {
-    isInfoPanelExpanded.value = !isInfoPanelExpanded.value
-  }
-}
-
-// 抖音风格内容展开状态
-const isContentExpanded = ref(false)
-const CONTENT_MAX_LENGTH = 50 // 内容超过这个长度显示展开按钮
-
-// 是否显示展开按钮
-const shouldShowExpandBtn = computed(() => {
-  const content = postData.value?.content || ''
-  // 去除HTML标签后计算长度
-  const plainText = content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ')
-  return plainText.length > CONTENT_MAX_LENGTH
-})
-
-// 切换内容展开状态
-const toggleContentExpand = () => {
-  isContentExpanded.value = !isContentExpanded.value
-}
 
 // 视频进度与音量记忆
 const getStorageKeys = (url) => {
@@ -894,10 +773,6 @@ const contentSectionWidth = computed(() => {
 })
 
 const cardWidth = computed(() => {
-  // 视频笔记模式使用更大的宽度（抖音风格）
-  if (isVideoNote.value) {
-    return Math.min(windowWidth.value - 40, 1400)
-  }
   return imageSectionWidth.value + contentSectionWidth.value
 })
 
@@ -1510,12 +1385,6 @@ const handleTagClick = (tag) => {
 
   // 在新标签页打开搜索页面
   window.open(searchUrl, '_blank')
-}
-
-// 处理搜索按钮点击（抖音风格界面）
-const handleSearchClick = () => {
-  // 导航到搜索页面
-  router.push('/search_result')
 }
 
 // 显示消息提示
@@ -3130,109 +2999,6 @@ function handleAvatarError(event) {
   font-size: 14px;
 }
 
-/* ============================================
-   抖音风格视频笔记样式 (TikTok Style Video Note)
-   ============================================ */
-
-/* 视频笔记遮罩层 - 深色背景 */
-.detail-card-overlay.video-note-overlay {
-  background: rgba(0, 0, 0, 0.95);
-}
-
-/* 视频笔记模式卡片 - 全屏沉浸式 */
-.detail-card-overlay .detail-card.video-note-mode {
-  width: calc(100vw - 40px);
-  max-width: 1400px;
-  height: calc(100vh - 40px);
-  max-height: 95vh;
-  border-radius: 16px;
-  overflow: hidden;
-  background: #000;
-}
-
-/* 视频笔记内容布局 - 视频为主，信息栏在右侧 */
-.detail-card.video-note-mode .detail-content.video-note-content {
-  display: flex;
-  flex-direction: row;
-  height: 100%;
-  background: #000;
-}
-
-/* 视频区域 - 占据主要空间 */
-.detail-card.video-note-mode .image-section.video-note-section {
-  flex: 1;
-  width: auto;
-  min-width: 0;
-  height: 100%;
-  background: #000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-/* 视频笔记模式下的视频容器 */
-.detail-card.video-note-mode .video-container {
-  width: 100%;
-  height: 100%;
-  background: #000;
-}
-
-/* 视频笔记模式下的视频播放器 */
-.detail-card.video-note-mode .video-player {
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  object-fit: contain;
-  background: #000;
-}
-
-/* 视频笔记模式下的视频封面占位 */
-.detail-card.video-note-mode .video-cover-placeholder {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  background: #000;
-}
-
-/* 视频笔记信息区域 - 右侧面板 */
-.detail-card.video-note-mode .content-section.video-note-info-section {
-  width: 380px;
-  min-width: 380px;
-  max-width: 380px;
-  height: 100%;
-  background: var(--bg-color-primary);
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* 视频笔记拖拽指示条（移动端） */
-.drag-handle {
-  display: none;
-}
-
-/* 视频笔记关闭按钮样式 */
-.detail-card.video-note-mode .close-btn {
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.detail-card.video-note-mode .close-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-/* ============================================
-   抖音风格叠加层样式 (TikTok Style Overlay)
-   ============================================ */
-
-/* 抖音叠加层容器 */
-.tiktok-overlay {
-  display: none;
-}
-
 /* 图片容器和控制样式 */
 .image-container {
   position: relative;
@@ -4806,407 +4572,6 @@ function handleAvatarError(event) {
 
   .action-buttons {
     gap: 1px;
-  }
-
-  /* ============================================
-     移动端抖音风格视频笔记样式
-     ============================================ */
-  
-  /* 移动端视频笔记遮罩层 */
-  .detail-card-overlay.video-note-overlay {
-    background: rgba(0, 0, 0, 0.95);
-  }
-
-  /* 移动端视频笔记模式卡片 - 全屏沉浸式 */
-  .detail-card-overlay .detail-card.video-note-mode {
-    width: 100vw;
-    height: 100vh;
-    max-width: 100vw;
-    max-height: 100vh;
-    border-radius: 0;
-    background: #000;
-  }
-
-  /* 移动端视频笔记内容布局 */
-  .detail-card.video-note-mode .detail-content.video-note-content {
-    flex-direction: column;
-    background: #000;
-    position: relative;
-  }
-
-  /* 移动端视频笔记：显示视频区域 */
-  .detail-card.video-note-mode .image-section.video-note-section {
-    display: flex;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 1;
-    background: #000;
-  }
-
-  /* 移动端视频笔记：显示桌面端视频容器 */
-  .detail-card.video-note-mode .video-container {
-    display: flex;
-    width: 100%;
-    height: 100%;
-    background: #000;
-  }
-
-  /* 移动端视频笔记：视频播放器全屏 */
-  .detail-card.video-note-mode .video-player {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-  }
-
-  /* 移动端视频笔记信息区域 - 底部滑动面板 */
-  .detail-card.video-note-mode .content-section.video-note-info-section {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    width: 100%;
-    min-width: 100%;
-    max-width: 100%;
-    height: auto;
-    max-height: 70vh;
-    background: var(--bg-color-primary);
-    border-radius: 16px 16px 0 0;
-    z-index: 200;
-    overflow-y: auto;
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
-    transform: translateY(100%);
-    transition: transform 0.3s ease;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  /* 移动端视频笔记：展开信息面板 */
-  .detail-card.video-note-mode .content-section.video-note-info-section:focus-within,
-  .detail-card.video-note-mode .content-section.video-note-info-section.expanded {
-    transform: translateY(0);
-  }
-
-  /* 移动端视频笔记：隐藏移动端视频容器（使用桌面端全屏视频） */
-  .detail-card.video-note-mode .mobile-video-container {
-    display: none;
-  }
-
-  /* 移动端视频笔记：作者信息样式调整 */
-  .detail-card.video-note-mode .author-wrapper {
-    padding: 16px;
-    background: var(--bg-color-primary);
-    border-bottom: 1px solid var(--border-color-secondary);
-  }
-
-  /* 移动端视频笔记：隐藏原关闭按钮 */
-  .detail-card.video-note-mode .close-btn {
-    display: none;
-  }
-
-  /* 移动端视频笔记：可滚动内容区域 */
-  .detail-card.video-note-mode .scrollable-content {
-    padding-bottom: calc(80px + env(safe-area-inset-bottom));
-  }
-
-  /* 移动端视频笔记：底部操作栏 */
-  .detail-card.video-note-mode .footer-actions {
-    position: relative;
-    background: var(--bg-color-primary);
-  }
-
-  /* 移动端视频笔记：拖拽指示条 */
-  .detail-card.video-note-mode .drag-handle {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 12px 0 8px 0;
-    cursor: pointer;
-    background: var(--bg-color-primary);
-    border-radius: 16px 16px 0 0;
-  }
-
-  .detail-card.video-note-mode .drag-handle-bar {
-    width: 40px;
-    height: 4px;
-    background: var(--text-color-quaternary);
-    border-radius: 2px;
-    transition: background 0.2s ease;
-  }
-
-  .detail-card.video-note-mode .drag-handle:hover .drag-handle-bar {
-    background: var(--text-color-secondary);
-  }
-
-  /* ============================================
-     移动端抖音风格叠加层样式 (TikTok Style Overlay)
-     ============================================ */
-
-  /* 抖音叠加层容器 */
-  .detail-card.video-note-mode .tiktok-overlay {
-    display: block;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 150;
-    pointer-events: none;
-  }
-
-  .detail-card.video-note-mode .tiktok-overlay > * {
-    pointer-events: auto;
-  }
-
-  /* 顶部栏 */
-  .tiktok-top-bar {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: calc(16px + env(safe-area-inset-top)) 16px 16px 16px;
-    z-index: 10;
-  }
-
-  .tiktok-back-btn,
-  .tiktok-search-btn {
-    width: 40px;
-    height: 40px;
-    background: transparent;
-    border: none;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: white;
-    transition: background 0.2s ease;
-  }
-
-  .tiktok-back-btn:hover,
-  .tiktok-search-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  /* 右侧垂直操作按钮 */
-  .tiktok-right-actions {
-    position: absolute;
-    right: 12px;
-    bottom: 180px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 20px;
-    z-index: 10;
-  }
-
-  .tiktok-action-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    cursor: pointer;
-  }
-
-  .tiktok-action-icon {
-    width: 44px;
-    height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    transition: transform 0.2s ease;
-  }
-
-  .tiktok-action-icon:hover {
-    transform: scale(1.1);
-  }
-
-  .tiktok-action-icon.active {
-    color: #ff2d55;
-  }
-
-  .tiktok-action-count {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.8);
-    font-weight: 500;
-  }
-
-  /* 底部左侧用户信息 */
-  .tiktok-bottom-left {
-    position: absolute;
-    left: 16px;
-    bottom: 100px;
-    right: 80px;
-    z-index: 10;
-  }
-
-  .tiktok-user-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
-  }
-
-  .tiktok-avatar-container {
-    cursor: pointer;
-  }
-
-  .tiktok-avatar {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid white;
-  }
-
-  .tiktok-follow-btn {
-    transform: scale(0.9);
-  }
-
-  /* 用户名 */
-  .tiktok-username {
-    color: white;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  }
-
-  .tiktok-username:hover {
-    text-decoration: underline;
-  }
-
-  /* 标题 */
-  .tiktok-title {
-    color: white;
-    font-size: 15px;
-    font-weight: 600;
-    margin-bottom: 8px;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-    line-height: 1.4;
-  }
-
-  /* 内容详情（可展开） */
-  .tiktok-content-wrapper {
-    margin-bottom: 8px;
-  }
-
-  .tiktok-content {
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 14px;
-    line-height: 1.5;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-  }
-
-  .tiktok-content.expanded {
-    -webkit-line-clamp: unset;
-    display: block;
-  }
-
-  .tiktok-expand-btn {
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 13px;
-    cursor: pointer;
-    margin-top: 4px;
-    display: inline-block;
-  }
-
-  .tiktok-expand-btn:hover {
-    color: white;
-  }
-
-  .tiktok-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 8px;
-  }
-
-  .tiktok-tag {
-    color: white;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  }
-
-  .tiktok-tag:hover {
-    text-decoration: underline;
-  }
-
-  .tiktok-location {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    background: rgba(255, 255, 255, 0.15);
-    color: white;
-    font-size: 12px;
-    padding: 6px 12px;
-    border-radius: 20px;
-    backdrop-filter: blur(4px);
-  }
-
-  /* 底部评论输入栏 */
-  .tiktok-bottom-bar {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    padding-bottom: calc(12px + env(safe-area-inset-bottom));
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
-  }
-
-  .tiktok-comment-input {
-    flex: 1;
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 20px;
-    padding: 10px 16px;
-    cursor: pointer;
-    backdrop-filter: blur(4px);
-  }
-
-  .tiktok-input-placeholder {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 14px;
-  }
-
-  .tiktok-input-icons {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .tiktok-input-icon {
-    width: 36px;
-    height: 36px;
-    background: transparent;
-    border: none;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: rgba(255, 255, 255, 0.8);
-    transition: background 0.2s ease;
-  }
-
-  .tiktok-input-icon:hover {
-    background: rgba(255, 255, 255, 0.1);
   }
 }
 
