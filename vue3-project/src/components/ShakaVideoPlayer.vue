@@ -238,7 +238,10 @@ const initPlayer = async () => {
       }
 
       // 创建播放器实例
-      player = new shaka.Player(videoElement.value)
+      player = new shaka.Player()
+      
+      // 附加到视频元素
+      await player.attach(videoElement.value)
 
       // 配置播放器
       player.configure({
