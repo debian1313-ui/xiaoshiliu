@@ -4,6 +4,8 @@ const { HTTP_STATUS, RESPONSE_CODES } = require('../constants');
 const multer = require('multer');
 const { authenticateToken } = require('../middleware/auth');
 const { uploadFile, uploadVideo } = require('../utils/uploadHelper');
+const { convertToDash } = require('../utils/videoTranscoder');
+const config = require('../config/config');
 
 // 配置 multer 内存存储（用于云端图床）
 const storage = multer.memoryStorage();
@@ -226,6 +228,33 @@ router.post('/video', authenticateToken, videoUpload.fields([
       }
     }
 
+    // 如果启用了视频转码，且是本地存储策略，则启动DASH转码
+    let dashManifestUrl = null;
+    if (config.videoTranscoding.enabled && 
+        config.upload.video.strategy === 'local' && 
+        uploadResult.filePath) {
+      try {
+        console.log('🎬 启动视频DASH转码...');
+        // 异步转码，不阻塞响应
+        convertToDash(uploadResult.filePath, req.user.id, (progress) => {
+          console.log(`转码进度: ${progress}%`);
+        }).then((transcodeResult) => {
+          if (transcodeResult.success) {
+            console.log('✅ DASH转码完成:', transcodeResult.manifestUrl);
+            // TODO: 这里可以更新数据库记录，存储 manifest URL
+          } else {
+            console.error('❌ DASH转码失败:', transcodeResult.message);
+          }
+        }).catch((err) => {
+          console.error('❌ DASH转码异常:', err);
+        });
+        
+        console.log('⏳ DASH转码已在后台启动');
+      } catch (error) {
+        console.error('❌ 启动DASH转码失败:', error.message);
+        // 转码失败不影响视频上传
+      }
+    }
 
     // 记录用户上传操作日志
     console.log(`视频上传成功 - 用户ID: ${req.user.id}, 文件名: ${videoFile.originalname}, 缩略图: ${coverUrl ? '有' : '无'}`);
@@ -238,7 +267,8 @@ router.post('/video', authenticateToken, videoUpload.fields([
         size: videoFile.size,
         url: uploadResult.url,
         filePath: uploadResult.filePath,
-        coverUrl: coverUrl
+        coverUrl: coverUrl,
+        transcoding: config.videoTranscoding.enabled && config.upload.video.strategy === 'local'
       }
     });
   } catch (error) {

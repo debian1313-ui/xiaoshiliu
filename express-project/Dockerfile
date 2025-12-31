@@ -1,8 +1,16 @@
 # 使用官方Node.js运行时作为基础镜像
 FROM node:18-alpine
 
+# 安装 FFmpeg 和 FFprobe
+RUN apk add --no-cache ffmpeg
+
 # 设置工作目录
 WORKDIR /app
+
+# 创建 ffmpeg 二进制文件的符号链接到 /app/bin
+RUN mkdir -p /app/bin && \
+    ln -s /usr/bin/ffmpeg /app/bin/ffmpeg && \
+    ln -s /usr/bin/ffprobe /app/bin/ffprobe
 
 # 复制package.json和package-lock.json
 COPY package*.json ./
