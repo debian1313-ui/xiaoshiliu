@@ -411,18 +411,18 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import SvgIcon from './SvgIcon.vue'
-import FollowButton from './FollowButton.vue'
-import LikeButton from './LikeButton.vue'
-import MessageToast from './MessageToast.vue'
-import EmojiPicker from '@/components/EmojiPicker.vue'
-import MentionModal from '@/components/mention/MentionModal.vue'
-import ContentRenderer from './ContentRenderer.vue'
 import ContentEditableInput from './ContentEditableInput.vue'
+import ContentRenderer from './ContentRenderer.vue'
+import EmojiPicker from '@/components/EmojiPicker.vue'
+import FollowButton from './FollowButton.vue'
 import ImageUploadModal from './modals/ImageUploadModal.vue'
 import ImageViewer from './ImageViewer.vue'
-import VerifiedBadge from './VerifiedBadge.vue'
+import LikeButton from './LikeButton.vue'
+import MentionModal from '@/components/mention/MentionModal.vue'
+import MessageToast from './MessageToast.vue'
 import ShakaVideoPlayer from './ShakaVideoPlayer.vue'
+import SvgIcon from './SvgIcon.vue'
+import VerifiedBadge from './VerifiedBadge.vue'
 import { useThemeStore } from '@/stores/theme'
 import { useUserStore } from '@/stores/user'
 import { useLikeStore } from '@/stores/like.js'
@@ -466,11 +466,8 @@ const props = defineProps({
 
 // 处理视频加载
 const handleVideoLoad = () => {
-  // 视频加载完成
-  isVideoLoaded.value = true
-  
-  // ShakaVideoPlayer handles sizing automatically, no need for manual calculations
-  // The player component uses object-fit: contain which handles aspect ratios properly
+  // ShakaVideoPlayer handles sizing and loading states automatically
+  // No additional actions needed here
 }
 
 // 自动播放视频 - Not needed anymore as ShakaVideoPlayer handles autoplay internally
@@ -522,7 +519,6 @@ const likeButtonRef = ref(null)
 const isAnimating = ref(true)
 const showContent = ref(false) // 新增：控制内容显示
 const isClosing = ref(false) // 新增：控制关闭动画状态
-const isVideoLoaded = ref(false) // 视频加载状态
 
 // 移动端检测
 const isMobile = computed(() => windowWidth.value <= 768)
