@@ -44,7 +44,11 @@ async function analyzeVideo(videoPath) {
         duration: metadata.format.duration,
         bitrate: metadata.format.bit_rate,
         codec: videoStream.codec_name,
-        fps: eval(videoStream.r_frame_rate) // 如 "30/1" 转换为 30
+        fps: videoStream.r_frame_rate ? 
+          (() => {
+            const [num, den] = videoStream.r_frame_rate.split('/').map(Number);
+            return den ? num / den : num;
+          })() : 30
       };
 
       console.log('📊 视频分析结果:', info);
@@ -78,10 +82,21 @@ function selectResolutions(videoWidth, videoHeight, configResolutions) {
   // 如果没有合适的预设分辨率，使用原视频分辨率
   if (selectedResolutions.length === 0) {
     console.log('⚠️ 没有找到合适的预设分辨率，使用原视频分辨率');
+    
+    // 计算基于像素数和帧率的比特率
+    // 公式: (width * height * fps * bitDepth) / compressionRatio
+    // 其中 bitDepth ≈ 0.1 bits/pixel, compressionRatio ≈ 1000
+    const DEFAULT_FPS = 30;
+    const BIT_DEPTH = 0.1;
+    const COMPRESSION_RATIO = 1000;
+    const calculatedBitrate = Math.floor(
+      (videoWidth * videoHeight * DEFAULT_FPS * BIT_DEPTH) / COMPRESSION_RATIO
+    );
+    
     selectedResolutions.push({
       width: videoWidth,
       height: videoHeight,
-      bitrate: Math.min(Math.floor((videoWidth * videoHeight * 30) / 1000000 * 0.1), config.videoTranscoding.dash.maxBitrate)
+      bitrate: Math.min(calculatedBitrate, config.videoTranscoding.dash.maxBitrate)
     });
   }
 
@@ -226,8 +241,11 @@ async function convertToDash(inputPath, userId, progressCallback) {
         const relativePath = path.relative(
           path.join(process.cwd(), config.upload.video.local.uploadDir),
           outputDir
-        );
-        const manifestUrl = `${config.upload.video.local.baseUrl}/${config.upload.video.local.uploadDir}/${relativePath}/manifest.mpd`.replace(/\\/g, '/');
+        ).replace(/\\/g, '/');
+        
+        const baseUrl = config.upload.video.local.baseUrl;
+        const videoDir = config.upload.video.local.uploadDir;
+        const manifestUrl = `${baseUrl}/${videoDir}/${relativePath}/manifest.mpd`;
 
         resolve({
           success: true,

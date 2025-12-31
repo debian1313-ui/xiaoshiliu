@@ -97,7 +97,7 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
-import shaka from 'shaka-player/dist/shaka-player.ui.js'
+import shaka from 'shaka-player'
 import 'shaka-player/dist/controls.css'
 import SvgIcon from './SvgIcon.vue'
 
@@ -562,7 +562,7 @@ defineExpose({
 .progress-played {
   position: absolute;
   height: 100%;
-  background: var(--primary-color, #ff2442);
+  background: var(--primary-color);
   border-radius: 2px;
   transition: width 0.1s linear;
 }
@@ -662,7 +662,7 @@ defineExpose({
 }
 
 .quality-item.active {
-  background: var(--primary-color, #ff2442);
+  background: var(--primary-color);
   font-weight: 500;
 }
 
