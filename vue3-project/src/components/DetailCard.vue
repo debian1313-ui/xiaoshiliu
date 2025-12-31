@@ -128,7 +128,7 @@
                 ref="mobileShakaPlayerRef"
                 :src="effectiveVideoUrl"
                 :poster="props.item.cover_url || (props.item.images && props.item.images[0])"
-                :autoplay="false"
+                :autoplay="true"
                 class="mobile-shaka-player"
               />
               <!-- 普通视频播放（原始视频或无MPD时） -->

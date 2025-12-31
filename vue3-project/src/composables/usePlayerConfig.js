@@ -3,7 +3,7 @@ import { settingsApi } from '@/api/settings.js'
 
 // 单例状态
 const playerConfig = reactive({
-  autoplay: false,
+  autoplay: true,
   loop: false,
   muted: false,
   default_volume: 0.5,
