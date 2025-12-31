@@ -33,6 +33,7 @@ async function analyzeVideo(videoPath) {
       }
 
       const videoStream = metadata.streams.find(s => s.codec_type === 'video');
+      const audioStream = metadata.streams.find(s => s.codec_type === 'audio');
       
       if (!videoStream) {
         return reject(new Error('未找到视频流'));
@@ -44,6 +45,7 @@ async function analyzeVideo(videoPath) {
         duration: metadata.format.duration,
         bitrate: metadata.format.bit_rate,
         codec: videoStream.codec_name,
+        hasAudio: !!audioStream,
         fps: videoStream.r_frame_rate ? 
           (() => {
             const [num, den] = videoStream.r_frame_rate.split('/').map(Number);
@@ -171,6 +173,9 @@ async function convertToDash(inputPath, userId, progressCallback) {
     return new Promise((resolve, reject) => {
       const command = ffmpeg(inputPath);
 
+      // 设置视频编码器
+      command.videoCodec('libx264');
+      
       // 为每个分辨率添加输出流
       selectedResolutions.forEach((resolution, index) => {
         command
@@ -179,30 +184,49 @@ async function convertToDash(inputPath, userId, progressCallback) {
             `-s:v:${index} ${resolution.width}x${resolution.height}`,
             `-b:v:${index} ${resolution.bitrate}k`,
             `-maxrate:v:${index} ${Math.floor(resolution.bitrate * 1.2)}k`,
-            `-bufsize:v:${index} ${Math.floor(resolution.bitrate * 2)}k`
+            `-bufsize:v:${index} ${Math.floor(resolution.bitrate * 2)}k`,
+            `-c:v:${index} libx264`,
+            `-profile:v:${index} main`,
+            `-preset:v:${index} medium`
           ]);
       });
 
-      // 添加音频流
-      command.outputOptions([
-        '-map 0:a:0',
-        '-c:a aac',
-        '-b:a 128k',
-        '-ac 2'
-      ]);
+      // 添加音频流（如果存在）
+      if (videoInfo.hasAudio) {
+        command.outputOptions([
+          '-map 0:a:0',
+          '-c:a aac',
+          '-b:a 128k',
+          '-ac 2'
+        ]);
+      }
 
       // DASH 输出配置
+      const dashOptions = [
+        '-f dash',
+        `-seg_duration ${config.videoTranscoding.dash.segmentDuration}`,
+        '-use_template 1',
+        '-use_timeline 1',
+        '-init_seg_name init-stream$RepresentationID$.$ext$',
+        '-media_seg_name chunk-stream$RepresentationID$-$Number%05d$.$ext$',
+        '-single_file 0'
+      ];
+
+      // 只在有音频时添加 adaptation_sets
+      if (videoInfo.hasAudio) {
+        dashOptions.push('-adaptation_sets id=0,streams=v id=1,streams=a');
+      } else {
+        dashOptions.push('-adaptation_sets id=0,streams=v');
+      }
+
       command
-        .outputOptions([
-          '-f dash',
-          `-seg_duration ${config.videoTranscoding.dash.segmentDuration}`,
-          '-use_template 1',
-          '-use_timeline 1',
-          '-adaptation_sets "id=0,streams=v id=1,streams=a"',
-          '-init_seg_name init-stream$RepresentationID$.$ext$',
-          '-media_seg_name chunk-stream$RepresentationID$-$Number%05d$.$ext$'
-        ])
+        .outputOptions(dashOptions)
         .output(manifestFile);
+
+      // 添加命令开始监听（用于调试）
+      command.on('start', (commandLine) => {
+        console.log('🎬 FFmpeg 命令:', commandLine);
+      });
 
       // 进度监听
       command.on('progress', (progress) => {
@@ -215,8 +239,11 @@ async function convertToDash(inputPath, userId, progressCallback) {
       });
 
       // 错误处理
-      command.on('error', (err) => {
+      command.on('error', (err, stdout, stderr) => {
         console.error('❌ 视频转码失败:', err.message);
+        if (stderr) {
+          console.error('FFmpeg stderr:', stderr);
+        }
         reject({
           success: false,
           message: `视频转码失败: ${err.message}`

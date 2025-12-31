@@ -36,6 +36,14 @@
   /* 危险颜色 */
   --danger-color: #ff0c30;
   --danger-color-dark: rgb(201, 9, 37);
+  
+  /* 成功颜色 */
+  --success-color: #2abc3b;
+  --success-color-dark: #1f9930;
+  
+  /* 警告颜色 */
+  --warning-color: #ff9500;
+  --warning-color-dark: #cc7700;
 }
 
 /* 深色主题 */
@@ -79,4 +87,12 @@
   /* 危险颜色 */
   --danger-color: #ff0c30;
   --danger-color-dark: rgb(201, 9, 37);
+  
+  /* 成功颜色 */
+  --success-color: #2abc3b;
+  --success-color-dark: #1f9930;
+  
+  /* 警告颜色 */
+  --warning-color: #ff9500;
+  --warning-color-dark: #cc7700;
 }

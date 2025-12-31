@@ -482,12 +482,15 @@ defineExpose({
   background: #000;
   border-radius: 8px;
   overflow: hidden;
+  box-shadow: 0 2px 8px var(--shadow-color);
 }
 
 .video-container {
   width: 100%;
   height: 100%;
   position: relative;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .video-element {
@@ -503,8 +506,8 @@ defineExpose({
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
-  padding: 12px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.6) 50%, transparent 100%);
+  padding: 20px 16px 12px;
   opacity: 0;
   transition: opacity 0.3s ease;
   z-index: 10;
@@ -525,37 +528,55 @@ defineExpose({
   border: none;
   color: white;
   cursor: pointer;
-  padding: 4px;
+  padding: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s ease;
+  transition: all 0.2s ease;
+  border-radius: 4px;
 }
 
 .control-btn:hover {
-  transform: scale(1.1);
+  transform: scale(1.15);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.control-btn:active {
+  transform: scale(1.05);
 }
 
 /* 进度条 */
 .progress-container {
   flex: 1;
   cursor: pointer;
-  padding: 8px 0;
+  padding: 10px 0;
+  margin: 0 4px;
+}
+
+.progress-container:hover .progress-bar {
+  height: 6px;
+}
+
+.progress-container:hover .progress-handle {
+  width: 14px;
+  height: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 .progress-bar {
   height: 4px;
   background: rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
+  border-radius: 3px;
   position: relative;
   overflow: visible;
+  transition: height 0.2s ease;
 }
 
 .progress-buffered {
   position: absolute;
   height: 100%;
-  background: rgba(255, 255, 255, 0.5);
-  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 3px;
   transition: width 0.2s ease;
 }
 
@@ -563,8 +584,9 @@ defineExpose({
   position: absolute;
   height: 100%;
   background: var(--primary-color);
-  border-radius: 2px;
+  border-radius: 3px;
   transition: width 0.1s linear;
+  box-shadow: 0 0 4px rgba(255, 36, 66, 0.4);
 }
 
 .progress-handle {
@@ -576,17 +598,22 @@ defineExpose({
   background: white;
   border-radius: 50%;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-  transition: left 0.1s linear;
+  transition: all 0.2s ease;
+  border: 2px solid var(--primary-color);
 }
 
 /* 时间显示 */
 .time-display {
   color: white;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   white-space: nowrap;
   display: flex;
   align-items: center;
   gap: 4px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  min-width: 90px;
+  justify-content: center;
 }
 
 /* 音量控制 */
@@ -597,13 +624,18 @@ defineExpose({
 }
 
 .volume-slider {
-  width: 60px;
+  width: 70px;
   height: 4px;
   -webkit-appearance: none;
   appearance: none;
   background: rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
+  border-radius: 3px;
   outline: none;
+  transition: all 0.2s ease;
+}
+
+.volume-slider:hover {
+  height: 5px;
 }
 
 .volume-slider::-webkit-slider-thumb {
@@ -614,6 +646,14 @@ defineExpose({
   background: white;
   border-radius: 50%;
   cursor: pointer;
+  border: 2px solid var(--primary-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+.volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
 .volume-slider::-moz-range-thumb {
@@ -622,7 +662,14 @@ defineExpose({
   background: white;
   border-radius: 50%;
   cursor: pointer;
-  border: none;
+  border: 2px solid var(--primary-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+.volume-slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
 /* 画质控制 */
@@ -632,38 +679,70 @@ defineExpose({
 
 .quality-text {
   color: white;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  min-width: 45px;
+  text-align: center;
 }
 
 .quality-menu {
   position: absolute;
   bottom: 100%;
   right: 0;
-  background: rgba(28, 28, 28, 0.95);
-  border-radius: 4px;
-  padding: 4px;
-  margin-bottom: 8px;
-  min-width: 80px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  background: rgba(18, 18, 18, 0.98);
+  border-radius: 8px;
+  padding: 6px;
+  margin-bottom: 12px;
+  min-width: 100px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  animation: fadeInUp 0.2s ease;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.quality-menu::before {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  right: 20px;
+  width: 12px;
+  height: 12px;
+  background: rgba(18, 18, 18, 0.98);
+  transform: rotate(45deg);
+  border-radius: 2px;
 }
 
 .quality-item {
-  padding: 8px 12px;
+  padding: 10px 16px;
   color: white;
   cursor: pointer;
-  font-size: 13px;
-  border-radius: 2px;
-  transition: background 0.2s ease;
+  font-size: 14px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  font-weight: 500;
+  text-align: center;
 }
 
 .quality-item:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateX(-2px);
 }
 
 .quality-item.active {
   background: var(--primary-color);
-  font-weight: 500;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(255, 36, 66, 0.4);
 }
 
 /* 加载指示器 */
@@ -675,18 +754,29 @@ defineExpose({
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   color: white;
   z-index: 20;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 30px 40px;
+  border-radius: 12px;
+  backdrop-filter: blur(5px);
+}
+
+.loading-indicator span {
+  font-size: 15px;
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 .spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--primary-color);
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
+  box-shadow: 0 0 10px rgba(255, 36, 66, 0.3);
 }
 
 @keyframes spin {
@@ -702,20 +792,33 @@ defineExpose({
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   color: white;
   text-align: center;
-  padding: 20px;
+  padding: 32px 40px;
   z-index: 20;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 12px;
+  backdrop-filter: blur(5px);
+  max-width: 80%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .error-overlay p {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #ffcccc;
 }
 
 /* 全屏模式 */
 .fullscreen {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.fullscreen .video-container {
   border-radius: 0;
 }
 

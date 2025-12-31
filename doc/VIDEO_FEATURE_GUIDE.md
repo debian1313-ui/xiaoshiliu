@@ -311,6 +311,25 @@ RUN mkdir -p /app/bin && \
 - 检查文件权限，确保应用有写入权限
 - 查看详细错误日志
 
+**常见错误：**
+
+**错误1: "Unrecognized option 'adaptation_sets'"**
+```
+❌ 视频转码失败: ffmpeg exited with code 8: Unrecognized option 'adaptation_sets'
+```
+**原因：** FFmpeg 版本过旧或 adaptation_sets 参数语法错误
+
+**解决方法：**
+- 确保使用 FFmpeg 4.1+ 版本
+- 检查 adaptation_sets 选项没有多余的引号
+- 已在最新版本中修复（v1.4.1+）
+
+**错误2: 视频没有音频流导致转码失败**
+
+**解决方法：**
+- 系统会自动检测音频流
+- 无音频的视频也可以正常转码（v1.4.1+）
+
 ### 3. 画质选择不显示
 
 **问题：** 播放器中没有画质选择选项
@@ -377,6 +396,23 @@ A: 可以。`ShakaVideoPlayer.vue` 组件的样式完全可自定义，您可以
 - [视频编码最佳实践](https://trac.ffmpeg.org/wiki/Encode/H.264)
 
 ## 更新日志
+
+### v1.4.1 (2025-12-31)
+
+**Bug 修复:**
+- ✅ 修复 FFmpeg adaptation_sets 参数错误导致转码失败
+- ✅ 修复视频无音频流时转码失败的问题
+- ✅ 改进 FFmpeg 命令构建逻辑
+
+**新功能:**
+- ✅ 自动更新数据库中的视频URL为DASH格式
+- ✅ 转码完成后直接替换原视频地址为manifest.mpd
+- ✅ 添加详细的FFmpeg命令日志输出
+
+**改进:**
+- ✅ 智能检测音频流，无音频视频也能正常转码
+- ✅ 更好的错误处理和日志记录
+- ✅ 添加FFmpeg stderr输出以便调试
 
 ### v1.4.0 (2025-12-31)
 
