@@ -119,6 +119,7 @@
 - **业务能力：** 鉴权流程、路由守卫、状态管理与接口封装
 - **体验优化：** 骨架屏、懒加载、预加载、无障碍与响应式适配
 - **组件与分层：** 可复用组件拆分、按领域分组与别名引入
+- **视频转码：** 智能DASH转码，支持多码率自适应播放，自动保持宽高比不变形
 - **后台管理：** 基础CRUD、数据管理与配置面板，支持后续扩展权限与统计
 - **快速部署：** 基于 Docker 的一键部署方案，支持多环境配置与自动化部署
 
@@ -214,6 +215,23 @@ VIDEO_UPLOAD_DIR=uploads/videos
 # 视频封面存储目录
 VIDEO_COVER_DIR=uploads/covers
 
+# 视频转码配置
+# 是否启用视频转码为DASH格式 (true/false)
+VIDEO_TRANSCODING_ENABLED=true
+# 原始视频最大码率 (kbps) - 对原始视频进行压缩时使用
+# 这将提供一个"原始"画质选项，保持原始分辨率但进行压缩
+ORIGINAL_VIDEO_MAX_BITRATE=8000
+# DASH分片时长（秒）
+DASH_SEGMENT_DURATION=4
+# 最小码率 (kbps)
+DASH_MIN_BITRATE=500
+# 最大码率 (kbps)
+DASH_MAX_BITRATE=5000
+# 支持的分辨率列表（逗号分隔）
+# 系统会自动根据视频宽高比等比例缩放，保证画面不变形
+# 例如: 720x1280 的竖屏视频会等比例缩放，360p 会转为 204x360
+DASH_RESOLUTIONS=1920x1080:5000,1280x720:2500,854x480:1000,640x360:750
+
 # 第三方图床配置（当IMAGE_UPLOAD_STRATEGY=imagehost时使用）
 IMAGEHOST_API_URL=https://api.xinyew.cn/api/jdtc
 IMAGEHOST_TIMEOUT=60000
@@ -249,6 +267,14 @@ EMAIL_FROM=your_email@example.com
 # 发件人名称
 EMAIL_FROM_NAME=小石榴校园图文社区
 ```
+
+> 💡 **视频转码配置说明**：
+> - 系统支持智能视频转码，可生成多个码率版本供用户选择
+> - **原始画质**：保持原始分辨率但进行压缩，码率由 `ORIGINAL_VIDEO_MAX_BITRATE` 控制
+> - **自适应码率**：系统自动根据视频宽高比等比例缩放，确保画面不变形
+> - **示例**：720x1280 竖屏视频转码为 360p 时，会变成 204x360（保持 9:16 比例），而不是 640x360（会变形）
+> - 只转码低于原视频分辨率的版本（例如 720p 视频不会转码为 1080p）
+> - 至少提供 4 个标准码率选项：360p、480p、720p、1080p（根据源视频分辨率）
 
 ### 前端配置 (vue3-project/.env)
 
