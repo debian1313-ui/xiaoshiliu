@@ -147,6 +147,7 @@ watch(() => props.visible, (newVisible) => {
 .modal-video-player {
   width: 100%;
   max-width: 100%;
+  height: 60vh;
   max-height: 60vh;
   border-radius: 8px;
   background: #000;
@@ -187,6 +188,7 @@ watch(() => props.visible, (newVisible) => {
   }
   
   .modal-video-player {
+    height: 50vh;
     max-height: 50vh;
   }
 }

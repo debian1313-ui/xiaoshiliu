@@ -97,13 +97,18 @@
 
 <script setup>
 /**
- * Shaka Video Player 组件
+ * Shaka Video Player 组件 (混合播放器)
  * 
  * 本地化说明:
  * - 使用动态 import() 加载 shaka-player，确保代码分割和按需加载
  * - 不依赖 shaka-player 的 CSS，完全使用自定义样式
  * - 所有 JS/CSS 资源在构建时会被打包到本地 bundle 中
  * - 需要确保 shaka-player 已在 package.json 中声明并安装
+ * 
+ * 播放器策略:
+ * - DASH 格式视频 (.mpd): 使用 Shaka Player 播放，支持自适应码率
+ * - 普通视频格式 (MP4等): 使用原生 HTML5 播放器
+ * - Shaka Player 加载失败时: 自动回退到原生播放器
  */
 import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
 import SvgIcon from './SvgIcon.vue'
@@ -193,60 +198,74 @@ const currentQualityLabel = computed(() => {
 // 控制栏自动隐藏定时器
 let controlsTimeout = null
 
+// 检查是否是 DASH 格式
+const isDashVideo = (url) => {
+  return url && url.toLowerCase().endsWith('.mpd')
+}
+
 // 初始化播放器
 const initPlayer = async () => {
   try {
-    // 动态导入 Shaka Player
-    if (!shaka) {
-      try {
-        const shakaModule = await import('shaka-player')
-        shaka = shakaModule.default || shakaModule
-      } catch (importError) {
-        console.error('Failed to load Shaka Player:', importError)
-        error.value = 'Shaka Player 加载失败，请检查依赖是否正确安装'
-        isLoading.value = false
+    // 检查是否是 DASH 视频
+    const useDash = isDashVideo(props.src)
+    
+    if (useDash) {
+      // 动态导入 Shaka Player for DASH videos
+      if (!shaka) {
+        try {
+          const shakaModule = await import('shaka-player')
+          shaka = shakaModule.default || shakaModule
+        } catch (importError) {
+          console.error('Failed to load Shaka Player:', importError)
+          console.warn('Falling back to native video player')
+          // 回退到原生播放器
+          useFallbackPlayer()
+          return
+        }
+      }
+
+      // 检查浏览器支持
+      if (!shaka.Player || !shaka.Player.isBrowserSupported()) {
+        console.error('浏览器不支持 Shaka Player')
+        console.warn('Falling back to native video player')
+        useFallbackPlayer()
         return
       }
-    }
 
-    // 检查浏览器支持
-    if (!shaka.Player || !shaka.Player.isBrowserSupported()) {
-      error.value = '您的浏览器不支持视频播放'
-      console.error('浏览器不支持 Shaka Player')
+      // 创建播放器实例
+      player = new shaka.Player(videoElement.value)
+
+      // 配置播放器
+      player.configure({
+        streaming: {
+          bufferingGoal: 30,
+          rebufferingGoal: 15,
+          bufferBehind: 30
+        },
+        abr: {
+          enabled: props.adaptiveBitrate
+        }
+      })
+
+      // 监听错误
+      player.addEventListener('error', onPlayerError)
+
+      // 加载视频源
+      await player.load(props.src)
+
+      // 加载完成
       isLoading.value = false
-      return
+      emit('loaded')
+
+      // 获取可用画质
+      loadQualities()
+
+      // 设置初始音量
+      videoElement.value.volume = volumeLevel.value / 100
+    } else {
+      // 使用原生 HTML5 播放器播放普通视频
+      useFallbackPlayer()
     }
-
-    // 创建播放器实例
-    player = new shaka.Player(videoElement.value)
-
-    // 配置播放器
-    player.configure({
-      streaming: {
-        bufferingGoal: 30,
-        rebufferingGoal: 15,
-        bufferBehind: 30
-      },
-      abr: {
-        enabled: props.adaptiveBitrate
-      }
-    })
-
-    // 监听错误
-    player.addEventListener('error', onPlayerError)
-
-    // 加载视频源
-    await player.load(props.src)
-
-    // 加载完成
-    isLoading.value = false
-    emit('loaded')
-
-    // 获取可用画质
-    loadQualities()
-
-    // 设置初始音量
-    videoElement.value.volume = volumeLevel.value / 100
 
     // 如果是自动播放，尝试播放
     if (props.autoplay) {
@@ -262,6 +281,35 @@ const initPlayer = async () => {
     error.value = '视频加载失败: ' + err.message
     isLoading.value = false
     emit('error', err)
+  }
+}
+
+// 使用原生 HTML5 播放器作为回退
+const useFallbackPlayer = () => {
+  console.log('使用原生 HTML5 视频播放器')
+  
+  // 设置视频源
+  videoElement.value.src = props.src
+  
+  // 为原生播放器添加 controls 属性，确保控制栏显示
+  if (!props.showControls) {
+    videoElement.value.controls = false
+  } else {
+    videoElement.value.controls = true
+  }
+  
+  // 设置初始音量
+  videoElement.value.volume = volumeLevel.value / 100
+  
+  // 加载完成
+  isLoading.value = false
+  emit('loaded')
+  
+  // 如果是自动播放，尝试播放
+  if (props.autoplay) {
+    videoElement.value.play().catch(err => {
+      console.warn('自动播放失败:', err)
+    })
   }
 }
 
@@ -458,9 +506,13 @@ const setupVideoListeners = () => {
 
 // 监听 src 变化
 watch(() => props.src, (newSrc) => {
-  if (newSrc && player) {
-    isLoading.value = true
-    error.value = null
+  if (!newSrc) return
+  
+  isLoading.value = true
+  error.value = null
+  
+  if (player && isDashVideo(newSrc)) {
+    // 如果有 Shaka Player 实例且是 DASH 视频，使用它加载
     player.load(newSrc).then(() => {
       isLoading.value = false
       loadQualities()
@@ -469,6 +521,10 @@ watch(() => props.src, (newSrc) => {
       error.value = '视频加载失败'
       isLoading.value = false
     })
+  } else {
+    // 否则使用原生播放器
+    videoElement.value.src = newSrc
+    isLoading.value = false
   }
 })
 
