@@ -107,6 +107,8 @@ const config = {
       minBitrate: parseInt(process.env.DASH_MIN_BITRATE) || 500,
       // 最大码率 (kbps)
       maxBitrate: parseInt(process.env.DASH_MAX_BITRATE) || 5000,
+      // 原始视频最大码率 (kbps) - 对原始视频进行压缩时使用
+      originalMaxBitrate: parseInt(process.env.ORIGINAL_VIDEO_MAX_BITRATE) || 8000,
       // 支持的分辨率配置（解析环境变量）
       resolutions: (process.env.DASH_RESOLUTIONS || '1920x1080:5000,1280x720:2500,854x480:1000,640x360:750')
         .split(',')

@@ -198,6 +198,11 @@ const currentQualityLabel = computed(() => {
 // 控制栏自动隐藏定时器
 let controlsTimeout = null
 
+// 全屏状态更新函数引用（用于清理事件监听器）
+let fullscreenStateHandler = null
+let webkitBeginFullscreenHandler = null
+let webkitEndFullscreenHandler = null
+
 // 检查是否是 DASH 格式
 const isDashVideo = (url) => {
   return url && url.toLowerCase().endsWith('.mpd')
@@ -405,14 +410,51 @@ const selectQuality = (quality) => {
 
 // 切换全屏
 const toggleFullscreen = async () => {
-  if (!document.fullscreenElement) {
-    try {
-      await videoContainer.value.requestFullscreen()
-    } catch (err) {
-      console.error('全屏请求失败:', err)
+  try {
+    // 检查当前是否处于全屏状态
+    const isCurrentlyFullscreen = 
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
+      document.msFullscreenElement
+    
+    if (!isCurrentlyFullscreen) {
+      // 进入全屏 - 支持多种浏览器 API
+      const element = videoContainer.value
+      
+      if (element.requestFullscreen) {
+        await element.requestFullscreen()
+      } else if (element.webkitRequestFullscreen) {
+        // iOS Safari 和旧版 Safari
+        await element.webkitRequestFullscreen()
+      } else if (element.mozRequestFullScreen) {
+        // Firefox
+        await element.mozRequestFullScreen()
+      } else if (element.msRequestFullscreen) {
+        // IE11
+        await element.msRequestFullscreen()
+      } else if (videoElement.value?.webkitEnterFullscreen) {
+        // iOS Safari 视频元素专用 (容器不支持时的回退方案)
+        videoElement.value.webkitEnterFullscreen()
+      } else {
+        console.warn('浏览器不支持全屏功能')
+      }
+    } else {
+      // 退出全屏 - 支持多种浏览器 API
+      if (document.exitFullscreen) {
+        await document.exitFullscreen()
+      } else if (document.webkitExitFullscreen) {
+        await document.webkitExitFullscreen()
+      } else if (document.mozCancelFullScreen) {
+        await document.mozCancelFullScreen()
+      } else if (document.msExitFullscreen) {
+        await document.msExitFullscreen()
+      } else if (videoElement.value?.webkitExitFullscreen) {
+        videoElement.value.webkitExitFullscreen()
+      }
     }
-  } else {
-    await document.exitFullscreen()
+  } catch (err) {
+    console.error('全屏切换失败:', err)
   }
 }
 
@@ -494,10 +536,33 @@ const setupVideoListeners = () => {
     isLoading.value = false
   })
 
-  // 全屏状态监听
-  document.addEventListener('fullscreenchange', () => {
-    isFullscreen.value = !!document.fullscreenElement
-  })
+  // 全屏状态监听 - 支持多种浏览器
+  fullscreenStateHandler = () => {
+    isFullscreen.value = !!(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
+      document.msFullscreenElement
+    )
+  }
+  
+  document.addEventListener('fullscreenchange', fullscreenStateHandler)
+  document.addEventListener('webkitfullscreenchange', fullscreenStateHandler)
+  document.addEventListener('mozfullscreenchange', fullscreenStateHandler)
+  document.addEventListener('MSFullscreenChange', fullscreenStateHandler)
+  
+  // iOS Safari 特殊处理
+  if (videoElement.value) {
+    webkitBeginFullscreenHandler = () => {
+      isFullscreen.value = true
+    }
+    webkitEndFullscreenHandler = () => {
+      isFullscreen.value = false
+    }
+    
+    videoElement.value.addEventListener('webkitbeginfullscreen', webkitBeginFullscreenHandler)
+    videoElement.value.addEventListener('webkitendfullscreen', webkitEndFullscreenHandler)
+  }
 
   // 鼠标移动显示控制栏
   videoContainer.value.addEventListener('mousemove', showControls)
@@ -543,6 +608,24 @@ onBeforeUnmount(() => {
   }
   if (player) {
     player.destroy()
+  }
+  
+  // 清理全屏事件监听器
+  if (fullscreenStateHandler) {
+    document.removeEventListener('fullscreenchange', fullscreenStateHandler)
+    document.removeEventListener('webkitfullscreenchange', fullscreenStateHandler)
+    document.removeEventListener('mozfullscreenchange', fullscreenStateHandler)
+    document.removeEventListener('MSFullscreenChange', fullscreenStateHandler)
+  }
+  
+  // 清理 iOS Safari 特殊事件监听器
+  if (videoElement.value) {
+    if (webkitBeginFullscreenHandler) {
+      videoElement.value.removeEventListener('webkitbeginfullscreen', webkitBeginFullscreenHandler)
+    }
+    if (webkitEndFullscreenHandler) {
+      videoElement.value.removeEventListener('webkitendfullscreen', webkitEndFullscreenHandler)
+    }
   }
 })
 

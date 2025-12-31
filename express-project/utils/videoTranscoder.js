@@ -60,49 +60,136 @@ async function analyzeVideo(videoPath) {
 }
 
 /**
- * 智能选择适合的分辨率
+ * 计算保持宽高比的缩放尺寸
+ * @param {number} sourceWidth - 原视频宽度
+ * @param {number} sourceHeight - 原视频高度
+ * @param {number} targetHeight - 目标高度
+ * @returns {Object} 缩放后的宽度和高度
+ */
+function calculateAspectRatioSize(sourceWidth, sourceHeight, targetHeight) {
+  // 输入验证
+  if (!sourceWidth || !sourceHeight || !targetHeight || 
+      sourceWidth <= 0 || sourceHeight <= 0 || targetHeight <= 0) {
+    throw new Error('Invalid dimensions: width, height, and targetHeight must be positive numbers');
+  }
+  
+  const aspectRatio = sourceWidth / sourceHeight;
+  const targetWidth = Math.round(targetHeight * aspectRatio);
+  
+  // 确保宽度是偶数（H.264编码要求）
+  const evenWidth = targetWidth % 2 === 0 ? targetWidth : targetWidth + 1;
+  const evenHeight = targetHeight % 2 === 0 ? targetHeight : targetHeight + 1;
+  
+  return { width: evenWidth, height: evenHeight };
+}
+
+/**
+ * 智能选择适合的分辨率（支持非标准分辨率和等比例缩放）
  * @param {number} videoWidth - 视频宽度
  * @param {number} videoHeight - 视频高度
  * @param {Array} configResolutions - 配置的分辨率列表
+ * @param {Object} options - 选项
+ * @param {boolean} options.includeOriginal - 是否包含原始分辨率
+ * @param {number} options.originalMaxBitrate - 原始视频最大码率
  * @returns {Array} 适合的分辨率列表
  */
-function selectResolutions(videoWidth, videoHeight, configResolutions) {
+function selectResolutions(videoWidth, videoHeight, configResolutions, options = {}) {
+  const { includeOriginal = true, originalMaxBitrate = config.videoTranscoding.dash.originalMaxBitrate } = options;
   const selectedResolutions = [];
+  
+  // 计算源视频的宽高比
+  const sourceAspectRatio = videoWidth / videoHeight;
+  console.log(`📐 原视频尺寸: ${videoWidth}x${videoHeight}, 宽高比: ${sourceAspectRatio.toFixed(3)}`);
 
-  // 按分辨率从高到低排序
-  const sortedResolutions = [...configResolutions].sort((a, b) => b.height - a.height);
-
-  for (const resolution of sortedResolutions) {
-    // 只选择小于等于原视频分辨率的版本
-    if (resolution.width <= videoWidth && resolution.height <= videoHeight) {
-      selectedResolutions.push(resolution);
-    } else {
-      console.log(`⏭️ 跳过分辨率 ${resolution.width}x${resolution.height} (超过原视频 ${videoWidth}x${videoHeight})`);
+  // 标准分辨率高度列表
+  const standardHeights = [2160, 1080, 720, 480, 360];
+  
+  // 为每个标准高度生成等比例缩放的分辨率
+  for (const targetHeight of standardHeights) {
+    // 只处理小于原视频高度的分辨率
+    if (targetHeight >= videoHeight) {
+      console.log(`⏭️ 跳过分辨率 ${targetHeight}p (大于或等于原视频高度 ${videoHeight})`);
+      continue;
     }
+    
+    // 计算保持宽高比的尺寸
+    const scaledSize = calculateAspectRatioSize(videoWidth, videoHeight, targetHeight);
+    
+    // 从配置中查找匹配的码率，如果没有则根据高度估算
+    let bitrate;
+    const matchedConfig = configResolutions.find(r => r.height === targetHeight);
+    
+    if (matchedConfig) {
+      bitrate = matchedConfig.bitrate;
+    } else {
+      // 根据分辨率估算码率（每像素0.1 bits，30fps）
+      const DEFAULT_FPS = 30;
+      const BIT_DEPTH = 0.1;
+      const COMPRESSION_RATIO = 1000;
+      bitrate = Math.floor(
+        (scaledSize.width * scaledSize.height * DEFAULT_FPS * BIT_DEPTH) / COMPRESSION_RATIO
+      );
+      // 限制在最小和最大码率之间
+      bitrate = Math.max(
+        config.videoTranscoding.dash.minBitrate,
+        Math.min(bitrate, config.videoTranscoding.dash.maxBitrate)
+      );
+    }
+    
+    selectedResolutions.push({
+      width: scaledSize.width,
+      height: scaledSize.height,
+      bitrate: bitrate,
+      label: `${targetHeight}p`
+    });
+    
+    console.log(`✅ 添加分辨率 ${targetHeight}p: ${scaledSize.width}x${scaledSize.height}@${bitrate}kbps (等比例缩放)`);
   }
 
-  // 如果没有合适的预设分辨率，使用原视频分辨率
-  if (selectedResolutions.length === 0) {
-    console.log('⚠️ 没有找到合适的预设分辨率，使用原视频分辨率');
+  // 添加原始分辨率（压缩但保持原始尺寸）
+  if (includeOriginal) {
+    // 确保原始分辨率的宽高是偶数
+    const evenWidth = videoWidth % 2 === 0 ? videoWidth : videoWidth + 1;
+    const evenHeight = videoHeight % 2 === 0 ? videoHeight : videoHeight + 1;
+    
+    selectedResolutions.unshift({
+      width: evenWidth,
+      height: evenHeight,
+      bitrate: originalMaxBitrate,
+      label: '原始',
+      isOriginal: true
+    });
+    
+    console.log(`✅ 添加原始分辨率: ${evenWidth}x${evenHeight}@${originalMaxBitrate}kbps (压缩)`);
+  }
+
+  // 如果没有找到任何合适的分辨率（视频太小），至少包含原始分辨率
+  if (selectedResolutions.length === 0 || (selectedResolutions.length === 1 && !selectedResolutions[0].isOriginal)) {
+    console.log('⚠️ 视频分辨率较低，仅使用原始分辨率');
+    
+    const evenWidth = videoWidth % 2 === 0 ? videoWidth : videoWidth + 1;
+    const evenHeight = videoHeight % 2 === 0 ? videoHeight : videoHeight + 1;
     
     // 计算基于像素数和帧率的比特率
-    // 公式: (width * height * fps * bitDepth) / compressionRatio
-    // 其中 bitDepth ≈ 0.1 bits/pixel, compressionRatio ≈ 1000
     const DEFAULT_FPS = 30;
     const BIT_DEPTH = 0.1;
     const COMPRESSION_RATIO = 1000;
     const calculatedBitrate = Math.floor(
-      (videoWidth * videoHeight * DEFAULT_FPS * BIT_DEPTH) / COMPRESSION_RATIO
+      (evenWidth * evenHeight * DEFAULT_FPS * BIT_DEPTH) / COMPRESSION_RATIO
     );
     
     selectedResolutions.push({
-      width: videoWidth,
-      height: videoHeight,
-      bitrate: Math.min(calculatedBitrate, config.videoTranscoding.dash.maxBitrate)
+      width: evenWidth,
+      height: evenHeight,
+      bitrate: Math.min(calculatedBitrate, originalMaxBitrate),
+      label: '原始',
+      isOriginal: true
     });
   }
 
-  console.log(`✅ 选择的分辨率:`, selectedResolutions.map(r => `${r.width}x${r.height}:${r.bitrate}kbps`).join(', '));
+  console.log(`✅ 最终选择的分辨率 (${selectedResolutions.length}个):`, 
+    selectedResolutions.map(r => `${r.label || r.height + 'p'} ${r.width}x${r.height}:${r.bitrate}kbps`).join(', '));
+  
   return selectedResolutions;
 }
 
@@ -316,6 +403,7 @@ async function checkFFmpegAvailable() {
 module.exports = {
   analyzeVideo,
   selectResolutions,
+  calculateAspectRatioSize,
   generateOutputPath,
   convertToDash,
   checkFFmpegAvailable
