@@ -95,12 +95,21 @@ class TranscodeQueueManager extends EventEmitter {
     if (this.activeJobs.has(taskId)) {
       const job = this.activeJobs.get(taskId);
       job.postId = postId;
+      this.emit('jobPostIdLinked', job);
       return true;
     }
     // 查找队列中的任务
     const queuedJob = this.queue.find(j => j.taskId === taskId);
     if (queuedJob) {
       queuedJob.postId = postId;
+      this.emit('jobPostIdLinked', queuedJob);
+      return true;
+    }
+    // 如果任务已完成，仍然允许补充postId并触发更新
+    const completedJob = this.completedJobs.find(j => j.taskId === taskId);
+    if (completedJob) {
+      completedJob.postId = postId;
+      this.emit('jobPostIdLinked', completedJob);
       return true;
     }
     return false;
