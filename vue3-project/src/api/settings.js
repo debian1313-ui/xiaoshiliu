@@ -51,14 +51,6 @@ export const settingsApi = {
   },
 
   /**
-   * 获取视频播放器公开设置（无需认证）
-   * @returns {Promise} 播放器设置
-   */
-  async getVideoPlayerSettings() {
-    return await request.get('/settings/video/player')
-  },
-
-  /**
    * 创建新设置
    * @param {Object} data - 设置数据 { key, value, group, description }
    * @returns {Promise} 创建结果

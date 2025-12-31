@@ -31,9 +31,9 @@
       @mouseenter="showControlsBar"
       @mouseleave="hideControlsBar"
     >
-      <!-- 播放/暂停按钮（中心）- 可通过showCenterPlayButton配置是否显示 -->
-      <div v-if="showCenterPlayButton && !isPlaying" class="center-controls" @click.stop="togglePlayPause">
-        <button class="center-play-btn">
+      <!-- 播放/暂停按钮（中心） -->
+      <div class="center-controls" @click.stop="togglePlayPause">
+        <button class="center-play-btn" v-if="!isPlaying">
           <SvgIcon name="play" width="48" height="48" />
         </button>
       </div>
@@ -142,11 +142,6 @@ const props = defineProps({
   showControls: {
     type: Boolean,
     default: true
-  },
-  // 是否显示中心播放按钮（默认不显示，遵循Shaka官方实践）
-  showCenterPlayButton: {
-    type: Boolean,
-    default: false
   }
 })
 

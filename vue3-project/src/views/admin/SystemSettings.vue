@@ -181,94 +181,6 @@
           </div>
         </div>
 
-        <!-- 播放器UI设置分组 -->
-        <div class="settings-group">
-          <div class="group-title">
-            <SvgIcon name="video" />
-            <span>播放器UI设置</span>
-          </div>
-
-          <!-- 显示中心播放按钮 -->
-          <div class="setting-item">
-            <div class="setting-info">
-              <div class="setting-label">显示中心播放按钮</div>
-              <div class="setting-description">
-                是否在视频播放器中心显示播放按钮（Shaka官方实践建议关闭）
-              </div>
-            </div>
-            <div class="setting-control">
-              <label class="toggle-switch">
-                <input 
-                  type="checkbox"
-                  v-model="settings.video_player_show_center_play_button"
-                  @change="handleSettingChange('video_player_show_center_play_button', settings.video_player_show_center_play_button)"
-                />
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <!-- 自动播放 -->
-          <div class="setting-item">
-            <div class="setting-info">
-              <div class="setting-label">自动播放</div>
-              <div class="setting-description">
-                视频加载后是否自动播放（部分浏览器可能限制）
-              </div>
-            </div>
-            <div class="setting-control">
-              <label class="toggle-switch">
-                <input 
-                  type="checkbox"
-                  v-model="settings.video_player_autoplay"
-                  @change="handleSettingChange('video_player_autoplay', settings.video_player_autoplay)"
-                />
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <!-- 循环播放 -->
-          <div class="setting-item">
-            <div class="setting-info">
-              <div class="setting-label">循环播放</div>
-              <div class="setting-description">
-                视频播放完成后是否自动重新播放
-              </div>
-            </div>
-            <div class="setting-control">
-              <label class="toggle-switch">
-                <input 
-                  type="checkbox"
-                  v-model="settings.video_player_loop"
-                  @change="handleSettingChange('video_player_loop', settings.video_player_loop)"
-                />
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <!-- 显示控制栏 -->
-          <div class="setting-item">
-            <div class="setting-info">
-              <div class="setting-label">显示控制栏</div>
-              <div class="setting-description">
-                是否显示视频播放器底部控制栏
-              </div>
-            </div>
-            <div class="setting-control">
-              <label class="toggle-switch">
-                <input 
-                  type="checkbox"
-                  v-model="settings.video_player_show_controls"
-                  @change="handleSettingChange('video_player_show_controls', settings.video_player_show_controls)"
-                />
-                <span class="slider"></span>
-              </label>
-            </div>
-          </div>
-        </div>
-
         <!-- 码率预览 -->
         <div class="bitrate-preview" v-if="settings.video_transcode_enabled">
           <div class="preview-title">质量等级预览</div>
@@ -346,12 +258,7 @@ const settings = reactive({
   video_transcode_format: 'dash',
   video_transcode_output_dir_mode: 'datetime',
   video_transcode_retain_original: true,
-  video_transcode_max_concurrent: 2,
-  // 播放器UI设置
-  video_player_show_center_play_button: false,
-  video_player_autoplay: false,
-  video_player_loop: false,
-  video_player_show_controls: true
+  video_transcode_max_concurrent: 2
 })
 
 const originalSettings = ref({})
@@ -456,12 +363,6 @@ async function loadSettings() {
       settings.video_transcode_retain_original = videoSettings.video_transcode_retain_original !== 'false'
       settings.video_transcode_max_concurrent = parseInt(videoSettings.video_transcode_max_concurrent) || 2
       
-      // 播放器UI设置
-      settings.video_player_show_center_play_button = videoSettings.video_player_show_center_play_button === 'true'
-      settings.video_player_autoplay = videoSettings.video_player_autoplay === 'true'
-      settings.video_player_loop = videoSettings.video_player_loop === 'true'
-      settings.video_player_show_controls = videoSettings.video_player_show_controls !== 'false'
-      
       ffmpegAvailable.value = result.data.ffmpegAvailable || false
       ffmpegConfig.value = result.data.ffmpegConfig || { ffmpegPath: '', ffprobePath: '' }
       queueStatus.value = result.data.queueStatus || null
@@ -517,12 +418,7 @@ async function saveAllSettings() {
       video_transcode_format: settings.video_transcode_format,
       video_transcode_output_dir_mode: settings.video_transcode_output_dir_mode,
       video_transcode_retain_original: String(settings.video_transcode_retain_original),
-      video_transcode_max_concurrent: String(settings.video_transcode_max_concurrent),
-      // 播放器UI设置
-      video_player_show_center_play_button: String(settings.video_player_show_center_play_button),
-      video_player_autoplay: String(settings.video_player_autoplay),
-      video_player_loop: String(settings.video_player_loop),
-      video_player_show_controls: String(settings.video_player_show_controls)
+      video_transcode_max_concurrent: String(settings.video_transcode_max_concurrent)
     }
     
     const result = await settingsApi.updateSettings(settingsToSave)
