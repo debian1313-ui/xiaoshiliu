@@ -158,7 +158,7 @@ function selectResolutions(videoWidth, videoHeight, configResolutions, options =
   }
 
   // 如果没有找到任何合适的分辨率（视频太小），至少包含原始分辨率
-  if (selectedResolutions.length === 0 || (selectedResolutions.length === 1 && selectedResolutions[0].isOriginal === false)) {
+  if (selectedResolutions.length === 0 || (selectedResolutions.length === 1 && !selectedResolutions[0].isOriginal)) {
     console.log('⚠️ 视频分辨率较低，仅使用原始分辨率');
     
     const evenWidth = videoWidth % 2 === 0 ? videoWidth : videoWidth + 1;
