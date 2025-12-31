@@ -96,10 +96,20 @@
 </template>
 
 <script setup>
+/**
+ * Shaka Video Player 组件
+ * 
+ * 本地化说明:
+ * - 使用动态 import() 加载 shaka-player，确保代码分割和按需加载
+ * - 不依赖 shaka-player 的 CSS，完全使用自定义样式
+ * - 所有 JS/CSS 资源在构建时会被打包到本地 bundle 中
+ * - 需要确保 shaka-player 已在 package.json 中声明并安装
+ */
 import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
-import shaka from 'shaka-player'
-import 'shaka-player/dist/controls.css'
 import SvgIcon from './SvgIcon.vue'
+
+// 动态导入 Shaka Player 以避免 SSR 问题和实现代码分割
+let shaka = null
 
 const props = defineProps({
   // 视频源 URL (支持 DASH manifest .mpd 或普通视频文件)
@@ -186,10 +196,24 @@ let controlsTimeout = null
 // 初始化播放器
 const initPlayer = async () => {
   try {
+    // 动态导入 Shaka Player
+    if (!shaka) {
+      try {
+        const shakaModule = await import('shaka-player')
+        shaka = shakaModule.default || shakaModule
+      } catch (importError) {
+        console.error('Failed to load Shaka Player:', importError)
+        error.value = 'Shaka Player 加载失败，请检查依赖是否正确安装'
+        isLoading.value = false
+        return
+      }
+    }
+
     // 检查浏览器支持
-    if (!shaka.Player.isBrowserSupported()) {
+    if (!shaka.Player || !shaka.Player.isBrowserSupported()) {
       error.value = '您的浏览器不支持视频播放'
       console.error('浏览器不支持 Shaka Player')
+      isLoading.value = false
       return
     }
 

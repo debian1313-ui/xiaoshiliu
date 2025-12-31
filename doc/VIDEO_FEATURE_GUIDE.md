@@ -126,6 +126,17 @@ DELETE_ORIGINAL_VIDEO=false
 
 ## 使用方法
 
+### 前提条件
+
+在使用视频播放器之前，需要确保安装依赖：
+
+```bash
+cd vue3-project
+npm install
+```
+
+这会安装 `shaka-player` 及其他必要的依赖。所有 JS 和 CSS 资源会在构建时被打包到本地 bundle 中，无需外部 CDN。
+
 ### 在组件中使用视频播放器
 
 ```vue
@@ -344,6 +355,33 @@ RUN mkdir -p /app/bin && \
 - 上传高分辨率视频（至少720p以上）以生成多个版本
 - 确保 `adaptiveBitrate` 设置为 `true`
 
+### 4. 播放器无法渲染或显示空白
+
+**问题：** 播放器组件不显示或显示空白区域
+
+**可能原因：**
+- shaka-player 依赖未安装
+- 构建时未正确打包
+- 浏览器不支持 ES modules
+
+**解决方法：**
+```bash
+# 1. 确保依赖已安装
+cd vue3-project
+npm install
+
+# 2. 重新构建
+npm run build
+
+# 3. 检查控制台错误
+# 打开浏览器开发者工具查看是否有 import 错误
+
+# 4. 验证 shaka-player 已安装
+npm list shaka-player
+```
+
+**注意：** 组件使用动态 import() 加载 Shaka Player，所有 JS/CSS 会在构建时打包到本地 bundle，无需外部 CDN。
+
 ### 4. 自适应码率不工作
 
 **问题：** 网络变化时视频画质不会自动切换
@@ -396,6 +434,15 @@ A: 可以。`ShakaVideoPlayer.vue` 组件的样式完全可自定义，您可以
 - [视频编码最佳实践](https://trac.ffmpeg.org/wiki/Encode/H.264)
 
 ## 更新日志
+
+### v1.4.3 (2025-12-31)
+
+**改进:**
+- ✅ 改进 Shaka Player 加载方式，使用动态 import()
+- ✅ 移除外部 CSS 依赖，完全本地化 JS/CSS
+- ✅ 添加 Shaka Player 加载失败的错误处理
+- ✅ 确保所有资源在构建时打包到 bundle
+- ✅ 改进组件渲染可靠性
 
 ### v1.4.2 (2025-12-31)
 

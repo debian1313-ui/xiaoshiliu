@@ -134,6 +134,11 @@ Error splitting the argument list: Option not found
 
 ```
 播放器组件 (ShakaVideoPlayer.vue)
+├─ 本地化实现
+│  ├─ 动态 import() 加载 shaka-player
+│  ├─ 代码分割和按需加载
+│  ├─ 不依赖外部 CDN
+│  └─ 所有资源打包到 bundle
 ├─ 视频加载
 │  ├─ 检测浏览器支持
 │  ├─ 加载 DASH manifest
