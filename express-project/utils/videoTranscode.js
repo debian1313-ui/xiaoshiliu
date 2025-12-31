@@ -419,8 +419,19 @@ const TRANSCODE_DEFAULTS = {
   DEFAULT_BITRATE: 2500000, // bps
   MIN_BITRATE_THRESHOLD: 0.8, // 源视频码率必须达到目标码率的80%
   ASPECT_RATIO_TOLERANCE: 0.01, // 宽高比允许的最大偏差
-  FALLBACK_BITRATE: 1000 // kbps，当没有合适分辨率时的回退码率
+  FALLBACK_BITRATE: 1000, // kbps，当没有合适分辨率时的回退码率
+  STANDARD_ASPECT_RATIO: 16 / 9 // 标准宽高比 (16:9)
 };
+
+/**
+ * 验证并净化正整数值（防止命令注入）
+ * @param {number} value - 待验证的值
+ * @param {number} minValue - 最小值（默认为1）
+ * @returns {number} 净化后的正整数
+ */
+function sanitizePositiveInteger(value, minValue = 1) {
+  return Math.max(minValue, Math.floor(Math.abs(value)));
+}
 
 /**
  * 解析DASH分辨率配置
@@ -459,8 +470,8 @@ function parseDashResolutions(dashResolutionsConfig) {
       const height = parseInt(dimensionStr.slice(0, -1), 10);
       if (isNaN(height)) continue;
       
-      // 使用16:9宽高比计算宽度
-      const width = Math.round(height * 16 / 9);
+      // 使用标准宽高比计算宽度
+      const width = Math.round(height * TRANSCODE_DEFAULTS.STANDARD_ASPECT_RATIO);
       resolutions.push({
         height,
         width,
@@ -689,12 +700,12 @@ async function transcodeToDashInternal(inputPath, outputDir, options = {}, onPro
     
     // 为每个质量等级创建输出流
     qualities.forEach((quality, index) => {
-      // 验证尺寸是正整数（防止命令注入）
-      const width = Math.max(1, Math.floor(Math.abs(quality.width)));
-      const height = Math.max(1, Math.floor(Math.abs(quality.height)));
-      const bitrate = Math.max(1, Math.floor(Math.abs(quality.bitrate)));
-      const maxrate = Math.max(1, Math.floor(Math.abs(quality.maxrate)));
-      const bufsize = Math.max(1, Math.floor(Math.abs(quality.bufsize)));
+      // 验证尺寸和码率是正整数（防止命令注入）
+      const width = sanitizePositiveInteger(quality.width);
+      const height = sanitizePositiveInteger(quality.height);
+      const bitrate = sanitizePositiveInteger(quality.bitrate);
+      const maxrate = sanitizePositiveInteger(quality.maxrate);
+      const bufsize = sanitizePositiveInteger(quality.bufsize);
       
       // 缩放滤镜 - 使用精确的宽度和高度
       filterComplex.push(`[0:v]scale=${width}:${height}[v${index}]`);
@@ -817,11 +828,11 @@ async function transcodeToDashInternal(inputPath, outputDir, options = {}, onPro
       const quality = qualities[middleIndex] || qualities[0];
       
       // 验证尺寸和码率是正整数（防止命令注入）
-      const width = Math.max(1, Math.floor(Math.abs(quality.width)));
-      const height = Math.max(1, Math.floor(Math.abs(quality.height)));
-      const bitrate = Math.max(1, Math.floor(Math.abs(quality.bitrate)));
-      const maxrate = Math.max(1, Math.floor(Math.abs(quality.maxrate)));
-      const bufsize = Math.max(1, Math.floor(Math.abs(quality.bufsize)));
+      const width = sanitizePositiveInteger(quality.width);
+      const height = sanitizePositiveInteger(quality.height);
+      const bitrate = sanitizePositiveInteger(quality.bitrate);
+      const maxrate = sanitizePositiveInteger(quality.maxrate);
+      const bufsize = sanitizePositiveInteger(quality.bufsize);
       
       await new Promise((resolve, reject) => {
         ffmpeg(inputPath)
