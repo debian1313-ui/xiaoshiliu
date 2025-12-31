@@ -395,12 +395,20 @@ function generateQualityLevels(videoInfo, minBitrate, maxBitrate) {
     { height: 1080, label: '1080p' }
   ];
 
-  // 只生成不超过源视频分辨率的质量等级
+  // 智能转码判断：只生成不超过源视频分辨率的质量等级
   const validPresets = qualityPresets.filter(q => q.height <= sourceHeight);
+  
+  // 记录智能判断日志
+  const skippedPresets = qualityPresets.filter(q => q.height > sourceHeight);
+  if (skippedPresets.length > 0) {
+    console.log(`📊 智能转码判断: 源视频分辨率为 ${sourceHeight}p，跳过更高分辨率编码: ${skippedPresets.map(p => p.label).join(', ')}`);
+  }
   
   if (validPresets.length === 0) {
     validPresets.push(qualityPresets[0]); // 至少保留360p
   }
+
+  console.log(`📊 将生成的质量等级: ${validPresets.map(p => p.label).join(', ')}`);
 
   const bitrateStep = (maxBitrate - minBitrate) / Math.max(validPresets.length - 1, 1);
 

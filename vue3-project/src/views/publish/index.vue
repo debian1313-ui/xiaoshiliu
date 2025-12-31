@@ -568,7 +568,9 @@ const handlePublish = async () => {
               url: uploadResult.data.url,
               coverUrl: uploadResult.data.coverUrl,
               name: uploadResult.data.originalname || videoData.name,
-              size: uploadResult.data.size || videoData.size
+              size: uploadResult.data.size || videoData.size,
+              // 传递转码信息
+              transcode: uploadResult.data.transcode || { status: 'none', taskId: null }
             }
 
           } else {
@@ -588,7 +590,9 @@ const handlePublish = async () => {
           url: videoData.url,
           coverUrl: videoData.coverUrl,
           name: videoData.name,
-          size: videoData.size
+          size: videoData.size,
+          // 传递转码信息（如果有）
+          transcode: videoData.transcode || { status: 'none', taskId: null }
         }
 
       } else {

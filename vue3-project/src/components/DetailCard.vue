@@ -24,9 +24,9 @@
           @mouseleave="showImageControls = false">
           <!-- 视频播放器（桌面端） -->
           <div v-if="props.item.type === 2" class="video-container">
-            <!-- 使用Shaka Player播放DASH流（当MPD可用时） -->
+            <!-- 使用Shaka Player播放所有视频（DASH/HLS/MP4） -->
             <ShakaPlayer
-              v-if="effectiveVideoUrl && effectiveVideoUrl.endsWith('.mpd')"
+              v-if="effectiveVideoUrl"
               ref="shakaPlayerRef"
               :src="effectiveVideoUrl"
               :poster="props.item.cover_url || (props.item.images && props.item.images[0])"
@@ -35,32 +35,6 @@
               class="shaka-video-player"
               @play="handleShakaPlay"
             />
-            <!-- 普通视频播放（原始视频或无MPD时） -->
-            <template v-else>
-              <div v-if="!isVideoLoaded" class="video-placeholder">
-                <img 
-                  v-if="props.item.cover_url || (props.item.images && props.item.images[0])" 
-                  :src="props.item.cover_url || props.item.images[0]" 
-                  :alt="props.item.title || '视频封面'"
-                  class="video-cover-placeholder"
-                />
-              </div>
-              <video 
-                v-show="isVideoLoaded"
-                ref="videoPlayer"
-                :src="effectiveVideoUrl" 
-                :poster="props.item.cover_url || (props.item.images && props.item.images[0])"
-                controls 
-                preload="metadata"
-                webkit-playsinline="true"
-                playsinline="true"
-                loop
-                class="video-player"
-                @loadedmetadata="handleVideoLoad"
-              >
-                您的浏览器不支持视频播放
-              </video>
-            </template>
             <!-- 转码状态提示 -->
             <div v-if="transcodeStatus === 'processing' || transcodeStatus === 'pending'" class="transcode-status-overlay">
               <div class="transcode-status-content">
@@ -122,44 +96,15 @@
           <div class="scrollable-content" ref="scrollableContent">
             <!-- 视频播放器（移动端） -->
             <div v-if="props.item.type === 2" class="mobile-video-container">
-              <!-- 使用Shaka Player播放DASH流（当MPD可用时） -->
+              <!-- 使用Shaka Player播放所有视频（DASH/HLS/MP4） -->
               <ShakaPlayer
-                v-if="effectiveVideoUrl && effectiveVideoUrl.endsWith('.mpd')"
+                v-if="effectiveVideoUrl"
                 ref="mobileShakaPlayerRef"
                 :src="effectiveVideoUrl"
                 :poster="props.item.cover_url || (props.item.images && props.item.images[0])"
                 :autoplay="false"
                 class="mobile-shaka-player"
               />
-              <!-- 普通视频播放（原始视频或无MPD时） -->
-              <template v-else>
-                <div v-if="!isVideoLoaded" class="video-placeholder">
-                  <img 
-                    v-if="props.item.cover_url || (props.item.images && props.item.images[0])" 
-                    :src="props.item.cover_url || props.item.images[0]" 
-                    :alt="props.item.title || '视频封面'"
-                    class="video-cover-placeholder"
-                  />
-                  <div v-else class="placeholder-content">
-                    <SvgIcon name="video" width="48" height="48" />
-                    <p>视频加载中...</p>
-                  </div>
-                </div>
-                <video 
-                  v-show="isVideoLoaded"
-                  ref="mobileVideoPlayer"
-                  :src="effectiveVideoUrl" 
-                  :poster="props.item.cover_url || (props.item.images && props.item.images[0])"
-                  controls 
-                  preload="metadata"
-                  webkit-playsinline="true"
-                  playsinline="true"
-                  class="mobile-video-player"
-                  @loadedmetadata="handleVideoLoad"
-                >
-                  您的浏览器不支持视频播放
-                </video>
-              </template>
               <!-- 转码状态提示 -->
               <div v-if="transcodeStatus === 'processing' || transcodeStatus === 'pending'" class="transcode-status-badge">
                 <span>{{ transcodeStatus === 'processing' ? '转码中' : '排队中' }}</span>

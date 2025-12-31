@@ -7,6 +7,7 @@ const NotificationHelper = require('../utils/notificationHelper');
 const { extractMentionedUsers, hasMentions } = require('../utils/mentionParser');
 const { batchCleanupFiles } = require('../utils/fileCleanup');
 const { sanitizeContent } = require('../utils/contentSecurity');
+const { transcodeQueue } = require('../utils/videoTranscode');
 
 // 获取笔记列表
 router.get('/', optionalAuth, async (req, res) => {
@@ -682,13 +683,27 @@ router.post('/', authenticateToken, async (req, res) => {
         }
       }
 
-      // 插入视频记录
+      // 获取转码信息
+      const transcodeStatus = video.transcode?.status || 'none';
+      const transcodeTaskId = video.transcode?.taskId || null;
+
+      // 插入视频记录（包含转码状态和任务ID）
       console.log('💾 插入视频记录到数据库...');
+      console.log('转码状态:', transcodeStatus, '任务ID:', transcodeTaskId);
       await pool.execute(
-        'INSERT INTO post_videos (post_id, video_url, cover_url) VALUES (?, ?, ?)',
-        [postId.toString(), video.url, coverUrl]
+        'INSERT INTO post_videos (post_id, video_url, cover_url, transcode_status, transcode_task_id) VALUES (?, ?, ?, ?, ?)',
+        [postId.toString(), video.url, coverUrl, transcodeStatus, transcodeTaskId]
       );
       console.log('✅ 视频记录插入成功');
+
+      // 如果有转码任务，将postId关联到转码队列任务
+      if (transcodeTaskId) {
+        const job = transcodeQueue.getJobStatus(transcodeTaskId);
+        if (job) {
+          job.postId = postId;
+          console.log(`✅ 已将postId ${postId} 关联到转码任务 ${transcodeTaskId}`);
+        }
+      }
     }
 
     // 处理标签
