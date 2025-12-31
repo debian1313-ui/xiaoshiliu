@@ -90,6 +90,36 @@ const config = {
     }
   },
 
+  // 视频转码配置
+  videoTranscoding: {
+    // 是否启用视频转码
+    enabled: process.env.VIDEO_TRANSCODING_ENABLED === 'true',
+    // FFmpeg可执行文件路径
+    ffmpegPath: process.env.FFMPEG_PATH || '/app/bin/ffmpeg',
+    ffprobePath: process.env.FFPROBE_PATH || '/app/bin/ffprobe',
+    // DASH转码输出目录格式
+    outputFormat: process.env.VIDEO_DASH_OUTPUT_FORMAT || '{date}/{userId}/{timestamp}',
+    // DASH配置
+    dash: {
+      // 分片时长（秒）
+      segmentDuration: parseInt(process.env.DASH_SEGMENT_DURATION) || 4,
+      // 最小码率 (kbps)
+      minBitrate: parseInt(process.env.DASH_MIN_BITRATE) || 500,
+      // 最大码率 (kbps)
+      maxBitrate: parseInt(process.env.DASH_MAX_BITRATE) || 5000,
+      // 支持的分辨率配置（解析环境变量）
+      resolutions: (process.env.DASH_RESOLUTIONS || '1920x1080:5000,1280x720:2500,854x480:1000,640x360:750')
+        .split(',')
+        .map(r => {
+          const [resolution, bitrate] = r.trim().split(':');
+          const [width, height] = resolution.split('x').map(n => parseInt(n));
+          return { width, height, bitrate: parseInt(bitrate) };
+        })
+    },
+    // 是否删除原始视频文件
+    deleteOriginal: process.env.DELETE_ORIGINAL_VIDEO === 'true'
+  },
+
   // API配置
   api: {
     baseUrl: process.env.API_BASE_URL || 'http://localhost:3001',
