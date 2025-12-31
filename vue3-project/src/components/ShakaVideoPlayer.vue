@@ -11,7 +11,7 @@
         class="video-element"
       ></video>
       
-      <!-- 始终可见的进度条指示器 (仅在非全屏时显示) -->
+      <!-- 始终可见的进度条指示器（非全屏时显示） -->
       <div v-if="!isFullscreen" class="persistent-progress" @click="seek">
         <div class="persistent-progress-bar" :style="{ width: playedPercent + '%' }"></div>
       </div>

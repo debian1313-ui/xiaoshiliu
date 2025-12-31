@@ -264,10 +264,13 @@ async function convertToDash(inputPath, userId, progressCallback) {
       command.videoCodec('libx264');
       
       // 添加线程数限制，避免资源占用过多
+      // maxThreads > 0 使用指定线程数，0表示不限制（使用所有可用线程）
       const maxThreads = config.videoTranscoding.maxThreads;
-      if (maxThreads && maxThreads > 0) {
+      if (maxThreads > 0) {
         command.outputOptions([`-threads ${maxThreads}`]);
-        console.log(`⚙️ 使用线程数: ${maxThreads}`);
+        console.log(`⚙️ 使用线程数限制: ${maxThreads}`);
+      } else {
+        console.log(`⚙️ 不限制线程数，使用所有可用线程`);
       }
       
       // 为每个分辨率添加输出流
