@@ -11,6 +11,11 @@
         class="video-element"
       ></video>
       
+      <!-- 始终可见的进度条指示器（非全屏时显示） -->
+      <div v-if="!isFullscreen" class="persistent-progress" @click="seek">
+        <div class="persistent-progress-bar" :style="{ width: playedPercent + '%' }"></div>
+      </div>
+      
       <!-- 自定义控制栏 -->
       <div v-if="showControls" class="custom-controls" :class="{ 'visible': controlsVisible || !isPlaying }">
         <!-- 播放/暂停按钮 -->
@@ -25,7 +30,7 @@
           </button>
 
           <!-- 进度条 -->
-          <div class="progress-container" @click="seek">
+          <div class="progress-container" @click="seek" @mouseenter="controlsVisible = true">
             <div class="progress-bar">
               <div class="progress-buffered" :style="{ width: bufferedPercent + '%' }"></div>
               <div class="progress-played" :style="{ width: playedPercent + '%' }"></div>
@@ -214,66 +219,64 @@ const initPlayer = async () => {
     // 检查是否是 DASH 视频
     const useDash = isDashVideo(props.src)
     
-    if (useDash) {
-      // 动态导入 Shaka Player for DASH videos
-      if (!shaka) {
-        try {
-          const shakaModule = await import('shaka-player')
-          shaka = shakaModule.default || shakaModule
-        } catch (importError) {
-          console.error('Failed to load Shaka Player:', importError)
-          console.warn('Falling back to native video player')
-          // 回退到原生播放器
-          useFallbackPlayer()
-          return
-        }
-      }
-
-      // 检查浏览器支持
-      if (!shaka.Player || !shaka.Player.isBrowserSupported()) {
-        console.error('浏览器不支持 Shaka Player')
+    // 始终使用 Shaka Player，即使是 MP4 文件
+    // 动态导入 Shaka Player
+    if (!shaka) {
+      try {
+        const shakaModule = await import('shaka-player')
+        shaka = shakaModule.default || shakaModule
+      } catch (importError) {
+        console.error('Failed to load Shaka Player:', importError)
         console.warn('Falling back to native video player')
+        // 回退到原生播放器
         useFallbackPlayer()
         return
       }
-
-      // 创建播放器实例
-      player = new shaka.Player()
-      
-      // 附加到视频元素
-      await player.attach(videoElement.value)
-
-      // 配置播放器
-      player.configure({
-        streaming: {
-          bufferingGoal: 30,
-          rebufferingGoal: 15,
-          bufferBehind: 30
-        },
-        abr: {
-          enabled: props.adaptiveBitrate
-        }
-      })
-
-      // 监听错误
-      player.addEventListener('error', onPlayerError)
-
-      // 加载视频源
-      await player.load(props.src)
-
-      // 加载完成
-      isLoading.value = false
-      emit('loaded')
-
-      // 获取可用画质
-      loadQualities()
-
-      // 设置初始音量
-      videoElement.value.volume = volumeLevel.value / 100
-    } else {
-      // 使用原生 HTML5 播放器播放普通视频
-      useFallbackPlayer()
     }
+
+    // 检查浏览器支持
+    if (!shaka.Player || !shaka.Player.isBrowserSupported()) {
+      console.error('浏览器不支持 Shaka Player')
+      console.warn('Falling back to native video player')
+      useFallbackPlayer()
+      return
+    }
+
+    // 创建播放器实例
+    player = new shaka.Player()
+    
+    // 附加到视频元素
+    await player.attach(videoElement.value)
+
+    // 配置播放器
+    player.configure({
+      streaming: {
+        bufferingGoal: 30,
+        rebufferingGoal: 15,
+        bufferBehind: 30
+      },
+      abr: {
+        enabled: props.adaptiveBitrate
+      }
+    })
+
+    // 监听错误
+    player.addEventListener('error', onPlayerError)
+
+    // 加载视频源
+    await player.load(props.src)
+
+    // 加载完成
+    isLoading.value = false
+    emit('loaded')
+
+    // 获取可用画质（仅对DASH视频有效）
+    if (useDash) {
+      loadQualities()
+    }
+
+    // 设置初始音量
+    videoElement.value.volume = volumeLevel.value / 100
 
     // 如果是自动播放，尝试播放
     if (props.autoplay) {
@@ -299,12 +302,8 @@ const useFallbackPlayer = () => {
   // 设置视频源
   videoElement.value.src = props.src
   
-  // 为原生播放器添加 controls 属性，确保控制栏显示
-  if (!props.showControls) {
-    videoElement.value.controls = false
-  } else {
-    videoElement.value.controls = true
-  }
+  // 使用自定义控制栏，不使用原生controls属性
+  videoElement.value.controls = false
   
   // 设置初始音量
   videoElement.value.volume = volumeLevel.value / 100
@@ -664,6 +663,30 @@ defineExpose({
   height: 100%;
   object-fit: contain;
   background: #000;
+}
+
+/* 始终可见的进度条指示器 */
+.persistent-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  z-index: 5;
+  transition: height 0.2s ease;
+}
+
+.persistent-progress:hover {
+  height: 5px;
+}
+
+.persistent-progress-bar {
+  height: 100%;
+  background: var(--primary-color);
+  box-shadow: 0 0 3px rgba(255, 36, 66, 0.6);
+  transition: width 0.1s linear;
 }
 
 /* 自定义控制栏 */
