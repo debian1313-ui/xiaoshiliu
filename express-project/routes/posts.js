@@ -698,10 +698,11 @@ router.post('/', authenticateToken, async (req, res) => {
 
       // 如果有转码任务，将postId关联到转码队列任务
       if (transcodeTaskId) {
-        const job = transcodeQueue.getJobStatus(transcodeTaskId);
-        if (job) {
-          job.postId = postId;
+        const associated = transcodeQueue.associatePostId(transcodeTaskId, postId);
+        if (associated) {
           console.log(`✅ 已将postId ${postId} 关联到转码任务 ${transcodeTaskId}`);
+        } else {
+          console.log(`⚠️ 转码任务 ${transcodeTaskId} 可能已完成或不存在`);
         }
       }
     }

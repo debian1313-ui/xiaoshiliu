@@ -85,6 +85,28 @@ class TranscodeQueueManager extends EventEmitter {
   }
 
   /**
+   * 关联postId到转码任务
+   * @param {string} taskId - 任务ID
+   * @param {number} postId - 帖子ID
+   * @returns {boolean} 是否成功关联
+   */
+  associatePostId(taskId, postId) {
+    // 查找活动任务
+    if (this.activeJobs.has(taskId)) {
+      const job = this.activeJobs.get(taskId);
+      job.postId = postId;
+      return true;
+    }
+    // 查找队列中的任务
+    const queuedJob = this.queue.find(j => j.taskId === taskId);
+    if (queuedJob) {
+      queuedJob.postId = postId;
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * 获取队列状态概览
    * @returns {Object} 队列状态
    */
