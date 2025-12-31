@@ -498,8 +498,13 @@ async function transcodeToDashInternal(inputPath, outputDir, options = {}, onPro
     const totalQualities = qualities.length;
     let completedQualities = 0;
     
+    // 计算宽高比以便计算宽度
+    const DEFAULT_ASPECT_RATIO = 16 / 9;
+    const aspectRatio = (videoInfo.width && videoInfo.height) ? videoInfo.width / videoInfo.height : DEFAULT_ASPECT_RATIO;
+    
     for (const quality of qualities) {
       const outputFile = path.join(finalOutputDir, `${baseName}_${quality.label}.mp4`);
+      const outputWidth = Math.round(quality.height * aspectRatio / 2) * 2; // 确保是偶数
       
       try {
         await new Promise((resolve, reject) => {
@@ -531,7 +536,9 @@ async function transcodeToDashInternal(inputPath, outputDir, options = {}, onPro
               transcodedFiles.push({
                 quality: quality.label,
                 path: outputFile,
-                bitrate: quality.bitrate
+                bitrate: quality.bitrate,
+                height: quality.height,
+                width: outputWidth
               });
               if (onProgress) onProgress(Math.round((completedQualities / totalQualities) * 100));
               resolve();
@@ -649,8 +656,12 @@ async function generateDashManifest(files, mpdPath, videoInfo) {
   let representations = '';
   files.forEach((file, index) => {
     const fileName = path.basename(file.path);
+    // 构建可选属性
+    const heightAttr = file.height ? ` height="${file.height}"` : '';
+    const widthAttr = file.width ? ` width="${file.width}"` : '';
+    // 不再硬编码codecs，让Shaka Player从文件中自动检测
     representations += `
-      <Representation id="${index}" mimeType="video/mp4" codecs="avc1.4d401f,mp4a.40.2" bandwidth="${file.bitrate * 1000}">
+      <Representation id="${index}" mimeType="video/mp4" bandwidth="${file.bitrate * 1000}"${heightAttr}${widthAttr}>
         <BaseURL>${fileName}</BaseURL>
       </Representation>`;
   });
@@ -658,7 +669,7 @@ async function generateDashManifest(files, mpdPath, videoInfo) {
   const mpd = `<?xml version="1.0" encoding="UTF-8"?>
 <MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="${durationStr}" minBufferTime="PT2S" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011">
   <Period>
-    <AdaptationSet mimeType="video/mp4" contentType="video">
+    <AdaptationSet mimeType="video/mp4" contentType="video" subsegmentAlignment="true" subsegmentStartsWithSAP="1">
       ${representations}
     </AdaptationSet>
   </Period>
