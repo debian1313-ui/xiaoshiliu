@@ -97,6 +97,8 @@ const config = {
     // FFmpeg可执行文件路径
     ffmpegPath: process.env.FFMPEG_PATH || '/app/bin/ffmpeg',
     ffprobePath: process.env.FFPROBE_PATH || '/app/bin/ffprobe',
+    // 转码最大线程数 (避免资源占用过多)
+    maxThreads: parseInt(process.env.VIDEO_TRANSCODING_MAX_THREADS) || 4,
     // DASH转码输出目录格式
     outputFormat: process.env.VIDEO_DASH_OUTPUT_FORMAT || '{date}/{userId}/{timestamp}',
     // DASH配置

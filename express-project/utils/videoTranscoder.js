@@ -260,8 +260,15 @@ async function convertToDash(inputPath, userId, progressCallback) {
     return new Promise((resolve, reject) => {
       const command = ffmpeg(inputPath);
 
-      // 设置视频编码器
+      // 设置视频编码器和线程数限制
       command.videoCodec('libx264');
+      
+      // 添加线程数限制，避免资源占用过多
+      const maxThreads = config.videoTranscoding.maxThreads;
+      if (maxThreads && maxThreads > 0) {
+        command.outputOptions([`-threads ${maxThreads}`]);
+        console.log(`⚙️ 使用线程数: ${maxThreads}`);
+      }
       
       // 为每个分辨率添加输出流
       selectedResolutions.forEach((resolution, index) => {
