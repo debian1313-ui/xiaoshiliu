@@ -8,8 +8,18 @@
         </button>
       </div>
       <div class="video-modal-body">
+        <!-- 使用Shaka Player播放DASH/HLS流 -->
+        <ShakaPlayer
+          v-if="videoUrl && isDashOrHls"
+          ref="shakaPlayerRef"
+          :src="videoUrl"
+          :poster="posterUrl"
+          :autoplay="false"
+          class="modal-video-player-container"
+        />
+        <!-- 普通视频播放 -->
         <video
-          v-if="videoUrl"
+          v-else-if="videoUrl"
           ref="videoPlayer"
           :src="videoUrl"
           :poster="posterUrl"
@@ -29,8 +39,9 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
 import SvgIcon from '@/components/SvgIcon.vue'
+import ShakaPlayer from '@/components/ShakaPlayer.vue'
 
 const props = defineProps({
   visible: {
@@ -50,6 +61,14 @@ const props = defineProps({
 const emit = defineEmits(['update:visible', 'close'])
 
 const videoPlayer = ref(null)
+const shakaPlayerRef = ref(null)
+
+// 检测是否为DASH或HLS流
+const isDashOrHls = computed(() => {
+  if (!props.videoUrl) return false
+  const url = props.videoUrl.toLowerCase()
+  return url.endsWith('.mpd') || url.endsWith('.m3u8') || url.includes('manifest')
+})
 
 const closeModal = () => {
   emit('update:visible', false)
@@ -65,6 +84,9 @@ watch(() => props.visible, async (newVisible) => {
     // 模态框关闭时，暂停视频
     if (videoPlayer.value) {
       videoPlayer.value.pause()
+    }
+    if (shakaPlayerRef.value) {
+      shakaPlayerRef.value.pause()
     }
   }
 })
@@ -166,6 +188,14 @@ watch(() => props.visible, (newVisible) => {
   max-height: 60vh;
   border-radius: 8px;
   background: #000;
+}
+
+.modal-video-player-container {
+  width: 100%;
+  max-width: 100%;
+  max-height: 60vh;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .video-placeholder {

@@ -246,6 +246,9 @@ async function initPlayer() {
 
     // 检查浏览器支持
     const shaka = window.shaka
+    if (!shaka) {
+      throw new Error('Shaka Player 加载失败')
+    }
     shaka.polyfill.installAll()
 
     if (!shaka.Player.isBrowserSupported()) {
