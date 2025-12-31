@@ -202,6 +202,7 @@ async function convertToDash(inputPath, userId, progressCallback) {
       }
 
       // DASH 输出配置
+      // 注意: 不需要 adaptation_sets 选项，FFmpeg 会自动根据映射的流创建 adaptation sets
       const dashOptions = [
         '-f dash',
         `-seg_duration ${config.videoTranscoding.dash.segmentDuration}`,
@@ -211,13 +212,6 @@ async function convertToDash(inputPath, userId, progressCallback) {
         '-media_seg_name chunk-stream$RepresentationID$-$Number%05d$.$ext$',
         '-single_file 0'
       ];
-
-      // 只在有音频时添加 adaptation_sets
-      if (videoInfo.hasAudio) {
-        dashOptions.push('-adaptation_sets id=0,streams=v id=1,streams=a');
-      } else {
-        dashOptions.push('-adaptation_sets id=0,streams=v');
-      }
 
       command
         .outputOptions(dashOptions)

@@ -317,12 +317,12 @@ RUN mkdir -p /app/bin && \
 ```
 ❌ 视频转码失败: ffmpeg exited with code 8: Unrecognized option 'adaptation_sets'
 ```
-**原因：** FFmpeg 版本过旧或 adaptation_sets 参数语法错误
+**原因：** FFmpeg DASH muxer 不支持 `adaptation_sets` 选项（该选项在某些版本中不存在或已被移除）
 
 **解决方法：**
-- 确保使用 FFmpeg 4.1+ 版本
-- 检查 adaptation_sets 选项没有多余的引号
-- 已在最新版本中修复（v1.4.1+）
+- FFmpeg 会自动根据映射的流创建 adaptation sets
+- 不需要手动指定 `adaptation_sets` 参数
+- 已在 v1.4.2+ 版本中移除此参数
 
 **错误2: 视频没有音频流导致转码失败**
 
@@ -396,6 +396,13 @@ A: 可以。`ShakaVideoPlayer.vue` 组件的样式完全可自定义，您可以
 - [视频编码最佳实践](https://trac.ffmpeg.org/wiki/Encode/H.264)
 
 ## 更新日志
+
+### v1.4.2 (2025-12-31)
+
+**关键修复:**
+- ✅ 移除 `adaptation_sets` FFmpeg 参数（该选项不被支持）
+- ✅ FFmpeg 自动创建 adaptation sets 基于映射的流
+- ✅ 修复所有 FFmpeg 版本的兼容性问题
 
 ### v1.4.1 (2025-12-31)
 
