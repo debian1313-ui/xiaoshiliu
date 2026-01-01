@@ -18,20 +18,30 @@ const emailCodeStore = new Map();
 // 存储OAuth2 state参数（用于防止CSRF攻击）
 const oauth2StateStore = new Map();
 
+// 汐社号生成配置
+const USER_ID_CONFIG = {
+  MIN_LENGTH: 8,
+  MAX_LENGTH: 10,
+  MAX_GENERATION_ATTEMPTS: 10,
+  DIGITS: '0123456789',
+  FIRST_DIGIT_MIN: 1,
+  FIRST_DIGIT_MAX: 9
+};
+
 // 生成随机8-10位汐社号
 const generateRandomUserId = async () => {
-  const length = 8 + Math.floor(Math.random() * 3); // 8, 9, 或 10位
-  const chars = '0123456789';
+  const lengthRange = USER_ID_CONFIG.MAX_LENGTH - USER_ID_CONFIG.MIN_LENGTH + 1;
+  const length = USER_ID_CONFIG.MIN_LENGTH + Math.floor(Math.random() * lengthRange);
   let userId;
   let isUnique = false;
   let attempts = 0;
-  const maxAttempts = 10;
 
-  while (!isUnique && attempts < maxAttempts) {
+  while (!isUnique && attempts < USER_ID_CONFIG.MAX_GENERATION_ATTEMPTS) {
     // 生成随机数字字符串，第一位不能是0
-    userId = (Math.floor(Math.random() * 9) + 1).toString(); // 第一位1-9
+    const firstDigit = Math.floor(Math.random() * USER_ID_CONFIG.FIRST_DIGIT_MAX) + USER_ID_CONFIG.FIRST_DIGIT_MIN;
+    userId = firstDigit.toString();
     for (let i = 1; i < length; i++) {
-      userId += chars.charAt(Math.floor(Math.random() * chars.length));
+      userId += USER_ID_CONFIG.DIGITS.charAt(Math.floor(Math.random() * USER_ID_CONFIG.DIGITS.length));
     }
 
     // 检查是否唯一

@@ -327,10 +327,27 @@ const userIdForm = reactive({
 const userIdError = ref('')
 const isChangingUserId = ref(false)
 
+// 汐社号验证规则常量
+const USER_ID_PATTERN = /^\d{8,10}$/
+
+// 验证汐社号格式
+const validateUserIdFormat = (userId) => {
+  if (!userId) {
+    return { valid: false, error: '请输入新的汐社号' }
+  }
+  if (!USER_ID_PATTERN.test(userId)) {
+    return { valid: false, error: '汐社号必须为8-10位数字' }
+  }
+  if (userId === props.userInfo.user_id) {
+    return { valid: false, error: '新汐社号与当前相同' }
+  }
+  return { valid: true, error: '' }
+}
+
 // 计算属性：汐社号格式是否有效（8-10位数字）
 const isUserIdValid = computed(() => {
   const trimmed = userIdForm.newUserId.trim()
-  return trimmed && /^\d{8,10}$/.test(trimmed) && trimmed !== props.userInfo.user_id
+  return validateUserIdFormat(trimmed).valid
 })
 
 // 处理汐社号输入
@@ -342,18 +359,9 @@ const handleUserIdInput = () => {
 const handleChangeUserId = async () => {
   const newUserId = userIdForm.newUserId.trim()
   
-  if (!newUserId) {
-    userIdError.value = '请输入新的汐社号'
-    return
-  }
-  
-  if (!/^\d{8,10}$/.test(newUserId)) {
-    userIdError.value = '汐社号必须为8-10位数字'
-    return
-  }
-  
-  if (newUserId === props.userInfo.user_id) {
-    userIdError.value = '新汐社号与当前相同'
+  const validation = validateUserIdFormat(newUserId)
+  if (!validation.valid) {
+    userIdError.value = validation.error
     return
   }
   
