@@ -18,6 +18,44 @@ const emailCodeStore = new Map();
 // 存储OAuth2 state参数（用于防止CSRF攻击）
 const oauth2StateStore = new Map();
 
+// 生成随机账号（6-10位数字）
+const generateXiseId = () => {
+  // 随机选择长度：6到10位
+  const length = Math.floor(Math.random() * 5) + 6;
+  let xiseId = '';
+  // 第一位不能是0
+  xiseId += Math.floor(Math.random() * 9) + 1;
+  // 剩余位数
+  for (let i = 1; i < length; i++) {
+    xiseId += Math.floor(Math.random() * 10);
+  }
+  return xiseId;
+};
+
+// 生成唯一的账号
+const generateUniqueXiseId = async () => {
+  let xiseId;
+  let isUnique = false;
+  let attempts = 0;
+  const maxAttempts = 100;
+
+  while (!isUnique && attempts < maxAttempts) {
+    xiseId = generateXiseId();
+    const [existingUser] = await pool.execute(
+      'SELECT id FROM users WHERE xise_id = ?',
+      [xiseId]
+    );
+    isUnique = existingUser.length === 0;
+    attempts++;
+  }
+
+  if (!isUnique) {
+    throw new Error('无法生成唯一的账号，请稍后重试');
+  }
+
+  return xiseId;
+};
+
 // 获取认证配置状态（包括邮件功能和OAuth2配置）
 router.get('/auth-config', (req, res) => {
   res.json({
@@ -122,6 +160,38 @@ router.get('/check-user-id', async (req, res) => {
     });
   } catch (error) {
     console.error('检查用户ID失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR });
+  }
+});
+
+// 检查账号是否已存在
+router.get('/check-xise-id', async (req, res) => {
+  try {
+    const { xise_id, current_user_id } = req.query; // 前端传过来的账号和当前用户的user_id
+    if (!xise_id) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '请输入账号' });
+    }
+    // 验证格式：6-10位纯数字
+    if (!/^\d{6,10}$/.test(xise_id)) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '账号必须为6-10位数字' });
+    }
+    // 查数据库是否已有该账号（排除当前用户）
+    let query = 'SELECT id, user_id FROM users WHERE xise_id = ?';
+    const params = [xise_id.toString()];
+    
+    const [existingUser] = await pool.execute(query, params);
+    
+    // 如果账号已存在，但是是当前用户自己的，则认为可用
+    const isOwner = existingUser.length > 0 && current_user_id && existingUser[0].user_id === current_user_id;
+    const isUnique = existingUser.length === 0 || isOwner;
+    
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: { isUnique },
+      message: isUnique ? '账号可用' : '账号已存在'
+    });
+  } catch (error) {
+    console.error('检查账号失败:', error);
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR });
   }
 });
@@ -564,12 +634,15 @@ router.post('/register', async (req, res) => {
     // 默认头像使用空字符串，前端会使用本地默认头像
     const defaultAvatar = '';
 
+    // 生成唯一的账号（6-10位随机数字）
+    const xiseId = await generateUniqueXiseId();
+
     // 插入新用户（密码使用SHA2哈希加密）
     // 邮件功能未启用时，email字段存储空字符串
     const userEmail = isEmailEnabled ? email : '';
     const [result] = await pool.execute(
-      'INSERT INTO users (user_id, nickname, password, email, avatar, bio, location) VALUES (?, ?, SHA2(?, 256), ?, ?, ?, ?)',
-      [user_id, nickname, password, userEmail, defaultAvatar, '', ipLocation]
+      'INSERT INTO users (user_id, nickname, password, email, avatar, bio, location, xise_id) VALUES (?, ?, SHA2(?, 256), ?, ?, ?, ?, ?)',
+      [user_id, nickname, password, userEmail, defaultAvatar, '', ipLocation, xiseId]
     );
 
     const userId = result.insertId;
@@ -586,11 +659,11 @@ router.post('/register', async (req, res) => {
 
     // 获取完整用户信息
     const [userRows] = await pool.execute(
-      'SELECT id, user_id, nickname, avatar, bio, location, follow_count, fans_count, like_count FROM users WHERE id = ?',
+      'SELECT id, user_id, xise_id, nickname, avatar, bio, location, follow_count, fans_count, like_count FROM users WHERE id = ?',
       [userId.toString()]
     );
 
-    console.log(`用户注册成功 - 用户ID: ${userId}, 汐社号: ${userRows[0].user_id}`);
+    console.log(`用户注册成功 - 用户ID: ${userId}, 汐社号: ${userRows[0].user_id}, 账号: ${userRows[0].xise_id}`);
 
     res.json({
       code: RESPONSE_CODES.SUCCESS,
@@ -620,7 +693,7 @@ router.post('/login', async (req, res) => {
 
     // 查找用户
     const [userRows] = await pool.execute(
-      'SELECT id, user_id, nickname, password, avatar, bio, location, follow_count, fans_count, like_count, is_active, gender, zodiac_sign, mbti, education, major, interests FROM users WHERE user_id = ?',
+      'SELECT id, user_id, xise_id, nickname, password, avatar, bio, location, follow_count, fans_count, like_count, is_active, gender, zodiac_sign, mbti, education, major, interests FROM users WHERE user_id = ?',
       [user_id.toString()]
     );
 
@@ -791,7 +864,7 @@ router.get('/me', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     const [userRows] = await pool.execute(
-      'SELECT id, user_id, nickname, avatar, bio, location, email, follow_count, fans_count, like_count, is_active, created_at, gender, zodiac_sign, mbti, education, major, interests,verified FROM users WHERE id = ?',
+      'SELECT id, user_id, xise_id, nickname, avatar, bio, location, email, follow_count, fans_count, like_count, is_active, created_at, gender, zodiac_sign, mbti, education, major, interests,verified FROM users WHERE id = ?',
       [userId.toString()]
     );
 
@@ -1141,7 +1214,7 @@ router.put('/admin/admins/:id/password', authenticateToken, async (req, res) => 
 // ========== OAuth2 登录相关 ==========
 
 // OAuth2用户信息查询字段（减少重复）
-const OAUTH2_USER_SELECT_FIELDS = 'id, user_id, nickname, avatar, bio, location, follow_count, fans_count, like_count, is_active, gender, zodiac_sign, mbti, education, major, interests';
+const OAUTH2_USER_SELECT_FIELDS = 'id, user_id, xise_id, nickname, avatar, bio, location, follow_count, fans_count, like_count, is_active, gender, zodiac_sign, mbti, education, major, interests';
 
 // 生成OAuth2 state参数
 const generateOAuth2State = () => {
@@ -1362,11 +1435,14 @@ router.get('/oauth2/callback', async (req, res) => {
         ipLocation = '未知';
       }
 
+      // 生成唯一的账号（6-10位随机数字）
+      const xiseId = await generateUniqueXiseId();
+
       // 创建新用户（不设置密码，通过OAuth2登录）
       const defaultNickname = oauth2Username || `用户${oauth2UserId}`;
       const [insertResult] = await pool.execute(
-        'INSERT INTO users (user_id, nickname, password, email, avatar, bio, location, oauth2_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [newUserId, defaultNickname, '', oauth2Email, '', '这个人很懒，还没有简介', ipLocation, oauth2UserId]
+        'INSERT INTO users (user_id, nickname, password, email, avatar, bio, location, oauth2_id, xise_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [newUserId, defaultNickname, '', oauth2Email, '', '这个人很懒，还没有简介', ipLocation, oauth2UserId, xiseId]
       );
 
       const newId = insertResult.insertId;
@@ -1378,7 +1454,7 @@ router.get('/oauth2/callback', async (req, res) => {
       );
       user = newUserRows[0];
 
-      console.log(`OAuth2新用户创建成功 - 用户ID: ${newId}, 汐社号: ${newUserId}, OAuth2_ID: ${oauth2UserId}`);
+      console.log(`OAuth2新用户创建成功 - 用户ID: ${newId}, 汐社号: ${newUserId}, 账号: ${xiseId}, OAuth2_ID: ${oauth2UserId}`);
     }
 
     // 生成本站JWT令牌

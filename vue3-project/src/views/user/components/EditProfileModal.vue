@@ -33,6 +33,17 @@
             <input v-model="form.nickname" type="text" placeholder="请输入昵称" maxlength="10" />
           </div>
 
+          <div class="form-group">
+            <label class="form-label">账号:</label>
+            <div class="xise-id-input-wrapper">
+              <input v-model="form.xise_id" type="text" placeholder="请输入账号（6-10位数字）" maxlength="10" 
+                @blur="checkXiseIdUniqueness" @input="handleXiseIdInput" />
+              <span v-if="xiseIdError" class="xise-id-error">{{ xiseIdError }}</span>
+              <span v-else-if="xiseIdChecking" class="xise-id-checking">检查中...</span>
+              <span v-else-if="xiseIdValid" class="xise-id-valid">✓ 可用</span>
+            </div>
+          </div>
+
 
           <div class="form-group">
             <label class="form-label">个人简介:</label>
@@ -314,6 +325,7 @@ onMounted(() => {
 const form = reactive({
   avatar: '',
   nickname: '',
+  xise_id: '',
   bio: '',
 
   gender: '',
@@ -322,6 +334,59 @@ const form = reactive({
   interests: [],
   avatarBlob: null // 存储裁剪后的图片blob
 })
+
+// 账号相关
+const xiseIdError = ref('')
+const xiseIdChecking = ref(false)
+const xiseIdValid = ref(false)
+
+// 处理账号输入
+const handleXiseIdInput = () => {
+  // 只允许输入数字
+  form.xise_id = form.xise_id.replace(/\D/g, '')
+  xiseIdError.value = ''
+  xiseIdValid.value = false
+}
+
+// 检查账号唯一性
+const checkXiseIdUniqueness = async () => {
+  if (!form.xise_id) {
+    xiseIdError.value = ''
+    xiseIdValid.value = false
+    return
+  }
+
+  // 验证格式：6-10位数字
+  if (!/^\d{6,10}$/.test(form.xise_id)) {
+    xiseIdError.value = '账号必须为6-10位数字'
+    xiseIdValid.value = false
+    return
+  }
+
+  // 如果是当前用户的账号，不需要检查
+  if (form.xise_id === props.userInfo.xise_id) {
+    xiseIdError.value = ''
+    xiseIdValid.value = true
+    return
+  }
+
+  xiseIdChecking.value = true
+  xiseIdError.value = ''
+  xiseIdValid.value = false
+
+  try {
+    const response = await authApi.checkXiseId(form.xise_id, props.userInfo.user_id)
+    if (response.success && response.data.isUnique) {
+      xiseIdValid.value = true
+    } else {
+      xiseIdError.value = '账号已存在'
+    }
+  } catch (error) {
+    xiseIdError.value = '检查失败，请重试'
+  } finally {
+    xiseIdChecking.value = false
+  }
+}
 
 // 兴趣爱好相关
 const newInterest = ref('')
@@ -426,6 +491,7 @@ watch(() => props.visible, (newValue) => {
     const isValidAvatar = props.userInfo.avatar && !props.userInfo.avatar.includes('/asset/imgs/avatar.png')
     form.avatar = isValidAvatar ? props.userInfo.avatar : defaultAvatar
     form.nickname = props.userInfo.nickname || ''
+    form.xise_id = props.userInfo.xise_id || ''
     form.bio = props.userInfo.bio || ''
 
     form.gender = props.userInfo.gender || ''
@@ -454,6 +520,9 @@ watch(() => props.visible, (newValue) => {
 
     avatarError.value = ''
     newInterest.value = ''
+    xiseIdError.value = ''
+    xiseIdValid.value = false
+    xiseIdChecking.value = false
   } else {
     // 解锁滚动
     unlock()
@@ -712,6 +781,18 @@ const handleClose = () => {
 const handleSave = async () => {
   if (!form.nickname.trim()) {
     console.error('请输入昵称')
+    return
+  }
+
+  // 验证账号格式（如果有输入的话）
+  if (form.xise_id && !/^\d{6,10}$/.test(form.xise_id)) {
+    $message.error('账号必须为6-10位数字')
+    return
+  }
+
+  // 如果账号有错误，不允许保存
+  if (xiseIdError.value) {
+    $message.error(xiseIdError.value)
     return
   }
 
@@ -1426,6 +1507,44 @@ const handleSave = async () => {
 
 .email-error {
   color: var(--primary-color);
+  font-size: 12px;
+}
+
+/* 账号输入相关样式 */
+.xise-id-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.xise-id-input-wrapper input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color-primary);
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: var(--bg-color-primary);
+  color: var(--text-color-primary);
+  box-sizing: border-box;
+}
+
+.xise-id-input-wrapper input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.xise-id-error {
+  color: var(--primary-color);
+  font-size: 12px;
+}
+
+.xise-id-checking {
+  color: var(--text-color-secondary);
+  font-size: 12px;
+}
+
+.xise-id-valid {
+  color: #52c41a;
   font-size: 12px;
 }
 </style>

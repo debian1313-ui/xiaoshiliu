@@ -280,6 +280,11 @@ export const authApi = {
   getOAuth2LoginUrl() {
     const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
     return `${baseUrl}/auth/oauth2/login`
+  },
+
+  // 检查账号是否已存在
+  checkXiseId(xise_id, current_user_id) {
+    return request.get('/auth/check-xise-id', { params: { xise_id, current_user_id } })
   }
 }
 

@@ -1056,16 +1056,17 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const userIdParam = req.params.id;
     const currentUserId = req.user.id;
-    const { nickname, avatar, bio, location, gender, zodiac_sign, mbti, education, major, interests } = req.body;
+    const { nickname, avatar, bio, location, gender, zodiac_sign, mbti, education, major, interests, xise_id } = req.body;
 
     console.log(`用户更新资料 - 目标用户ID: ${userIdParam}, 当前用户ID: ${currentUserId}`);
 
     // 始终通过汐社号查找对应的数字ID
-    const [userRows] = await pool.execute('SELECT id FROM users WHERE user_id = ?', [userIdParam]);
+    const [userRows] = await pool.execute('SELECT id, xise_id FROM users WHERE user_id = ?', [userIdParam]);
     if (userRows.length === 0) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '用户不存在' });
     }
     const targetUserId = userRows[0].id;
+    const currentXiseId = userRows[0].xise_id;
 
     // 检查是否是用户本人
     if (currentUserId !== targetUserId) {
@@ -1131,6 +1132,21 @@ router.put('/:id', authenticateToken, async (req, res) => {
       updateValues.push(processedInterests);
     }
 
+    // 处理账号(xise_id)更新
+    if (xise_id !== undefined && xise_id !== currentXiseId) {
+      // 验证格式：6-10位纯数字
+      if (!/^\d{6,10}$/.test(xise_id)) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '账号必须为6-10位数字' });
+      }
+      // 检查唯一性
+      const [existingUser] = await pool.execute('SELECT id FROM users WHERE xise_id = ? AND id != ?', [xise_id, targetUserId.toString()]);
+      if (existingUser.length > 0) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.CONFLICT, message: '账号已存在' });
+      }
+      updateFields.push('xise_id = ?');
+      updateValues.push(xise_id);
+    }
+
     updateValues.push(targetUserId);
 
     // 更新用户资料
@@ -1141,7 +1157,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     // 获取更新后的用户信息
     const [updatedUser] = await pool.execute(
-      'SELECT id, user_id, nickname, avatar, bio, location, email, gender, zodiac_sign, mbti, education, major, interests, follow_count, fans_count, like_count FROM users WHERE id = ?',
+      'SELECT id, user_id, xise_id, nickname, avatar, bio, location, email, gender, zodiac_sign, mbti, education, major, interests, follow_count, fans_count, like_count FROM users WHERE id = ?',
       [targetUserId.toString()]
     );
 
