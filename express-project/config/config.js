@@ -1,5 +1,5 @@
 /**
- * 小石榴校园图文社区 - 应用配置文件
+ * 汐社校园图文社区 - 应用配置文件
  * 集中管理所有配置项
  * 
  * @author ZTMYO
@@ -166,7 +166,7 @@ const config = {
     // 发件人配置
     from: {
       email: process.env.EMAIL_FROM || '',
-      name: process.env.EMAIL_FROM_NAME || '小石榴校园图文社区'
+      name: process.env.EMAIL_FROM_NAME || '汐社校园图文社区'
     }
   },
 

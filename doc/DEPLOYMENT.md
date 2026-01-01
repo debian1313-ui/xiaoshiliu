@@ -1,15 +1,15 @@
-# 小石榴图文社区部署指南
+# 汐社图文社区部署指南
 
 ## 项目简介
 
-小石榴图文社区是一个基于 Express + Vue3 的现代化图文社区平台，支持用户注册、发布图文内容、互动交流等功能。
+汐社图文社区是一个基于 Express + Vue3 的现代化图文社区平台，支持用户注册、发布图文内容、互动交流等功能。
 
 ## 系统要求
 
 - **Docker 部署**：Docker 20.10+ 和 Docker Compose 2.0+
 - **传统部署**：Node.js 18+、MySQL 5.7+、npm 或 yarn
 
-> 💡 **宝塔面板部署**：如果您使用宝塔面板，可以参考这个详细的图文教程：[使用宝塔搭建小石榴图文社区完整教程](https://www.sakuraidc.cc/forum-post/3116.html)
+> 💡 **宝塔面板部署**：如果您使用宝塔面板，可以参考这个详细的图文教程：[使用宝塔搭建汐社图文社区完整教程](https://www.sakuraidc.cc/forum-post/3116.html)
 
 ---
 
@@ -90,7 +90,7 @@ SMTP_PASSWORD=your_email_password
 # 发件人邮箱
 EMAIL_FROM=your_email@example.com
 # 发件人名称
-EMAIL_FROM_NAME=小石榴校园图文社区
+EMAIL_FROM_NAME=汐社校园图文社区
 
 # 前端构建配置
 VITE_API_BASE_URL=http://localhost:3001/api
@@ -249,7 +249,7 @@ SMTP_PASSWORD=your_email_password
 # 发件人邮箱
 EMAIL_FROM=your_email@example.com
 # 发件人名称
-EMAIL_FROM_NAME=小石榴校园图文社区
+EMAIL_FROM_NAME=汐社校园图文社区
 ```
 
 安装依赖并初始化数据库：
@@ -290,7 +290,7 @@ VITE_API_BASE_URL=http://localhost:3001/api
 VITE_USE_REAL_API=true
 
 # 应用标题
-VITE_APP_TITLE=小石榴图文社区
+VITE_APP_TITLE=汐社图文社区
 ```
 
 安装依赖：
@@ -389,7 +389,7 @@ XiaoShiLiu/
    SMTP_USER=your_email@example.com
    SMTP_PASSWORD=your_email_password
    EMAIL_FROM=your_email@example.com
-   EMAIL_FROM_NAME=小石榴校园图文社区
+   EMAIL_FROM_NAME=汐社校园图文社区
    ```
 
 2. **禁用邮件功能** (`EMAIL_ENABLED=false`，默认)

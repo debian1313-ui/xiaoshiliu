@@ -18,7 +18,7 @@ function Write-ColorOutput {
 }
 
 function Show-Help {
-    Write-ColorOutput "小石榴图文社区 Docker 部署脚本" "Cyan"
+    Write-ColorOutput "汐社图文社区 Docker 部署脚本" "Cyan"
     Write-ColorOutput "用法: .\deploy.ps1 [选项]" "Yellow"
     Write-ColorOutput "" 
     Write-ColorOutput "选项:" "Green"
@@ -81,7 +81,7 @@ function Seed-Data {
 }
 
 function Start-Services {
-    Write-ColorOutput "启动小石榴图文社区服务..." "Green"
+    Write-ColorOutput "启动汐社图文社区服务..." "Green"
 
     if ($Build) {
         Write-ColorOutput "重新构建镜像..." "Yellow"

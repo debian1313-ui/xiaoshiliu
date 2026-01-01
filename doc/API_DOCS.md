@@ -1,7 +1,7 @@
-# 小石榴图文社区 API 接口文档
+# 汐社图文社区 API 接口文档
 
 ## 项目信息
-- **项目名称**: 小石榴图文社区
+- **项目名称**: 汐社图文社区
 - **版本**: v1.3.0
 - **基础URL**: `http://localhost:3001`
 - **数据库**: xiaoshiliu (MySQL)
@@ -77,7 +77,7 @@ Authorization: Bearer <your_jwt_token>
     "user": {
       "id": 1,
       "user_id": "user_001",
-      "nickname": "小石榴",
+      "nickname": "汐社",
       "avatar": "https://example.com/avatar.jpg",
       "bio": "这是个人简介",
       "location": "北京",
@@ -98,7 +98,7 @@ Authorization: Bearer <your_jwt_token>
 **请求参数**:
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| user_id | string | 是 | 小石榴号 |
+| user_id | string | 是 | 汐社号 |
 | password | string | 是 | 密码 |
 
 **响应示例**:
@@ -110,7 +110,7 @@ Authorization: Bearer <your_jwt_token>
     "user": {
       "id": 1,
       "user_id": "xiaoshiliu123",
-      "nickname": "小石榴用户",
+      "nickname": "汐社用户",
       "avatar": "http://example.com/avatar.jpg",
       "bio": "这是我的个人简介",
       "location": "北京",
@@ -173,7 +173,7 @@ Authorization: Bearer <your_jwt_token>
   "data": {
     "id": 1,
     "user_id": "user_001",
-    "nickname": "小石榴",
+    "nickname": "汐社",
     "avatar": "https://example.com/avatar.jpg",
     "bio": "这是个人简介",
     "location": "北京",
@@ -348,7 +348,7 @@ Authorization: Bearer <your_jwt_token>
       {
         "id": 1,
         "user_id": "user_001",
-        "nickname": "小石榴",
+        "nickname": "汐社",
         "avatar": "https://example.com/avatar.jpg",
         "bio": "这是个人简介",
         "location": "北京",
@@ -385,7 +385,7 @@ Authorization: Bearer <your_jwt_token>
   "data": {
     "id": 1,
     "user_id": "user_001",
-    "nickname": "小石榴",
+    "nickname": "汐社",
     "avatar": "https://example.com/avatar.jpg",
     "bio": "这是个人简介",
     "location": "北京",
@@ -538,7 +538,7 @@ Authorization: Bearer <your_jwt_token>
 **请求参数**:
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| keyword | string | 是 | 搜索关键词（支持昵称和小石榴号搜索） |
+| keyword | string | 是 | 搜索关键词（支持昵称和汐社号搜索） |
 | page | int | 否 | 页码，默认1 |
 | limit | int | 否 | 每页数量，默认20 |
 
@@ -552,7 +552,7 @@ Authorization: Bearer <your_jwt_token>
       {
         "id": 1,
         "user_id": "user_001",
-        "nickname": "小石榴",
+        "nickname": "汐社",
         "avatar": "https://example.com/avatar.jpg",
         "bio": "这是个人简介",
         "location": "北京",
@@ -645,7 +645,7 @@ Authorization: Bearer <your_jwt_token>
         "user": {
           "id": 1,
           "user_id": "user_001",
-          "nickname": "小石榴",
+          "nickname": "汐社",
           "avatar": "https://example.com/avatar.jpg",
           "verified": 0
         }
@@ -1164,7 +1164,7 @@ Authorization: Bearer <your_jwt_token>
         "comment_count": 5,
         "collect_count": 3,
         "created_at": "2025-08-30T00:00:00.000Z",
-        "nickname": "小石榴",
+        "nickname": "汐社",
         "user_avatar": "https://example.com/avatar.jpg",
         "verified": 0,
         "images": [
@@ -1319,7 +1319,7 @@ Authorization: Bearer <your_jwt_token>
         "user": {
           "id": 1,
           "user_id": "user_001",
-          "nickname": "小石榴",
+          "nickname": "汐社",
           "avatar": "https://example.com/avatar.jpg",
           "verified": 0
         }
@@ -2302,7 +2302,7 @@ Authorization: Bearer <your_jwt_token>
 **请求参数**:
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| keyword | string | 否 | 搜索关键词（支持搜索小石榴号、昵称、标题、正文内容、标签名称） |
+| keyword | string | 否 | 搜索关键词（支持搜索汐社号、昵称、标题、正文内容、标签名称） |
 | tag | string | 否 | 标签搜索（精确匹配标签名称） |
 | type | string | 否 | 搜索类型：all（默认，所有类型）、posts（图文笔记）、videos（视频笔记）、users（用户） |
 | page | int | 否 | 页码，默认1 |
@@ -2701,7 +2701,7 @@ async function example() {
 |------|------|------|------|
 | page | int | 否 | 页码，默认1 |
 | limit | int | 否 | 每页数量，默认20 |
-| user_display_id | string | 否 | 小石榴号搜索 |
+| user_display_id | string | 否 | 汐社号搜索 |
 | nickname | string | 否 | 昵称搜索 |
 | status | int | 否 | 状态筛选（1=活跃，0=禁用） |
 | sortField | string | 否 | 排序字段（id, fans_count, like_count, created_at） |
@@ -2750,7 +2750,7 @@ async function example() {
 | page | int | 否 | 页码，默认1 |
 | limit | int | 否 | 每页数量，默认20 |
 | title | string | 否 | 标题搜索 |
-| user_display_id | string | 否 | 作者小石榴号筛选 |
+| user_display_id | string | 否 | 作者汐社号筛选 |
 | category_id | int | 否 | 分类ID筛选 |
 | sortField | string | 否 | 排序字段（id, view_count, like_count, collect_count, comment_count, created_at） |
 | sortOrder | string | 否 | 排序方向（ASC, DESC） |
@@ -2783,7 +2783,7 @@ async function example() {
 | page | int | 否 | 页码，默认1 |
 | limit | int | 否 | 每页数量，默认20 |
 | content | string | 否 | 内容搜索 |
-| user_display_id | string | 否 | 评论者小石榴号筛选 |
+| user_display_id | string | 否 | 评论者汐社号筛选 |
 | post_id | int | 否 | 笔记ID筛选 |
 | sortField | string | 否 | 排序字段（id, like_count, created_at） |
 | sortOrder | string | 否 | 排序方向（ASC, DESC） |
@@ -2891,7 +2891,7 @@ async function example() {
 | limit | int | 否 | 每页数量，默认20 |
 | type | int | 否 | 认证类型筛选（1-个人认证，2-企业认证） |
 | status | int | 否 | 审核状态筛选（0-待审核，1-已通过，2-已拒绝） |
-| user_display_id | string | 否 | 用户小石榴号搜索 |
+| user_display_id | string | 否 | 用户汐社号搜索 |
 | real_name | string | 否 | 真实姓名搜索 |
 | sortField | string | 否 | 排序字段（id, created_at, audit_time） |
 | sortOrder | string | 否 | 排序方向（ASC, DESC） |
@@ -3034,7 +3034,7 @@ async function example() {
 |------|------|------|------|
 | page | int | 否 | 页码，默认1 |
 | limit | int | 否 | 每页数量，默认20 |
-| user_display_id | string | 否 | 用户小石榴号筛选 |
+| user_display_id | string | 否 | 用户汐社号筛选 |
 | target_type | int | 否 | 目标类型（1=笔记，2=评论） |
 | sortField | string | 否 | 排序字段（id, user_id, created_at） |
 | sortOrder | string | 否 | 排序方向（ASC, DESC） |
@@ -3087,7 +3087,7 @@ async function example() {
 |------|------|------|------|
 | page | int | 否 | 页码，默认1 |
 | limit | int | 否 | 每页数量，默认20 |
-| user_display_id | string | 否 | 用户小石榴号筛选 |
+| user_display_id | string | 否 | 用户汐社号筛选 |
 | sortBy | string | 否 | 排序字段（id, user_id, created_at） |
 | sortOrder | string | 否 | 排序方向（ASC, DESC） |
 
@@ -3114,7 +3114,7 @@ async function example() {
 |------|------|------|------|
 | page | int | 否 | 页码，默认1 |
 | limit | int | 否 | 每页数量，默认20 |
-| user_display_id | string | 否 | 用户小石榴号筛选 |
+| user_display_id | string | 否 | 用户汐社号筛选 |
 | sortField | string | 否 | 排序字段（id, follower_id, following_id, created_at） |
 | sortOrder | string | 否 | 排序方向（ASC, DESC） |
 
@@ -3141,7 +3141,7 @@ async function example() {
 |------|------|------|------|
 | page | int | 否 | 页码，默认1 |
 | limit | int | 否 | 每页数量，默认20 |
-| user_display_id | string | 否 | 用户小石榴号筛选 |
+| user_display_id | string | 否 | 用户汐社号筛选 |
 | type | string | 否 | 通知类型筛选 |
 | is_read | int | 否 | 已读状态（0=未读，1=已读） |
 | sortField | string | 否 | 排序字段（id, created_at） |
@@ -3174,7 +3174,7 @@ async function example() {
 |------|------|------|------|
 | page | int | 否 | 页码，默认1 |
 | limit | int | 否 | 每页数量，默认20 |
-| user_display_id | string | 否 | 用户小石榴号筛选 |
+| user_display_id | string | 否 | 用户汐社号筛选 |
 | is_active | int | 否 | 活跃状态（0=非活跃，1=活跃） |
 | sortField | string | 否 | 排序字段（id, is_active, expires_at, created_at） |
 | sortOrder | string | 否 | 排序方向（ASC, DESC） |

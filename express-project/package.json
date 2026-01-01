@@ -1,7 +1,7 @@
 {
     "name": "express-project",
     "version": "1.0.0",
-    "description": "小石榴校园图文社区Express后端项目",
+    "description": "汐社校园图文社区Express后端项目",
     "author": "@ZTMYO",
     "main": "app.js",
     "scripts": {

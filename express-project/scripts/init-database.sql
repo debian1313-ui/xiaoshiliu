@@ -1,4 +1,4 @@
--- 小石榴图文社区数据库初始化脚本
+-- 汐社图文社区数据库初始化脚本
 -- 创建数据库（如果不存在）
 CREATE DATABASE IF NOT EXISTS `xiaoshiliu` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `xiaoshiliu`;
@@ -7,7 +7,7 @@ USE `xiaoshiliu`;
 CREATE TABLE IF NOT EXISTS `users` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '用户ID',
   `password` varchar(255) DEFAULT NULL COMMENT '密码',
-  `user_id` varchar(50) NOT NULL COMMENT '小石榴号',
+  `user_id` varchar(50) NOT NULL COMMENT '汐社号',
   `nickname` varchar(100) NOT NULL COMMENT '昵称',
   `email` varchar(100) DEFAULT NULL COMMENT '邮箱',
   `avatar` varchar(500) DEFAULT NULL COMMENT '头像URL',

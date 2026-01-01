@@ -1,5 +1,5 @@
 /**
- * 小石榴校园图文社区 - Vite配置文件
+ * 汐社校园图文社区 - Vite配置文件
  * 
  * @author ZTMYO
  * @github https://github.com/ZTMYO

@@ -1,5 +1,5 @@
 <p align="center">
-    <img alt="logo" src="../imgs/小石榴.png" width="100" />
+    <img alt="logo" src="../imgs/汐社.png" width="100" />
 </p>
 <h1 align="center" style="margin: 20px 30px 0px 30px; font-weight: bold;">XiaoShiLiu</h1>
 
@@ -244,7 +244,7 @@ SMTP_PASSWORD=your_email_password
 # 發件人郵箱
 EMAIL_FROM=your_email@example.com
 # 發件人名稱
-EMAIL_FROM_NAME=小石榴校園圖文社區
+EMAIL_FROM_NAME=汐社校園圖文社區
 ```
 
 ### 前端配置 (vue3-project/.env)
@@ -255,7 +255,7 @@ VITE_API_BASE_URL=http://localhost:3001/api
 
 # 應用配置
 VITE_USE_REAL_API=true
-VITE_APP_TITLE=小石榴圖文社區
+VITE_APP_TITLE=汐社圖文社區
 ```
 
 > 💡 **配置說明**：

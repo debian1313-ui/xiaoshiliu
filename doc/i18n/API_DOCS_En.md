@@ -550,7 +550,7 @@ General parameters for interfaces that support pagination:
   "message": "成功",
   "data": {
     "user_id": "user_001",
-    "nickname": "小石榴",
+    "nickname": "汐社",
     "total_posts": 10,
     "total_likes": 50,
     "total_comments": 30,

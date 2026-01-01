@@ -9,7 +9,7 @@
 1. **Docker 一鍵部署**（推薦）- 簡單快捷，適合生產環境
 2. **傳統部署** - 手動配置，適合開發環境
 
-> 💡 **寶塔面板部署**：如果您使用寶塔面板，可以參考這個詳細的圖文教程：[使用寶塔搭建小石榴圖文社區完整教程](https://www.sakuraidc.cc/forum-post/3116.html)
+> 💡 **寶塔面板部署**：如果您使用寶塔面板，可以參考這個詳細的圖文教程：[使用寶塔搭建汐社圖文社區完整教程](https://www.sakuraidc.cc/forum-post/3116.html)
 
 ---
 
@@ -110,7 +110,7 @@ SMTP_PASSWORD=your_email_password
 # 發件人郵箱
 EMAIL_FROM=your_email@example.com
 # 發件人名稱
-EMAIL_FROM_NAME=小石榴校園圖文社區
+EMAIL_FROM_NAME=汐社校園圖文社區
 
 # 前端構建配置
 VITE_API_BASE_URL=http://localhost:3001/api
@@ -271,7 +271,7 @@ SMTP_PASSWORD=your_email_password
 # 發件人郵箱
 EMAIL_FROM=your_email@example.com
 # 發件人名稱
-EMAIL_FROM_NAME=小石榴校園圖文社區
+EMAIL_FROM_NAME=汐社校園圖文社區
 ```
 
 #### 前端環境變數 (.env)
@@ -467,7 +467,7 @@ docker-compose exec backend ls -la /app/uploads
    SMTP_USER=your_email@example.com
    SMTP_PASSWORD=your_email_password
    EMAIL_FROM=your_email@example.com
-   EMAIL_FROM_NAME=小石榴校園圖文社區
+   EMAIL_FROM_NAME=汐社校園圖文社區
    ```
 
 2. **禁用郵件功能** (`EMAIL_ENABLED=false`，預設)

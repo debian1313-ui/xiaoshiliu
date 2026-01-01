@@ -8,7 +8,7 @@
             <div class="logo-icon">
               <img :src="logoUrl" alt="logo">
             </div>
-            <h2 class="logo-text">小石榴管理后台</h2>
+            <h2 class="logo-text">汐社管理后台</h2>
           </div>
         </div>
         <nav class="sidebar-nav">
@@ -146,7 +146,7 @@ const themeStore = useThemeStore()
 const { confirmState, handleConfirm, handleCancel, confirmLogout } = useConfirm()
 const { lock, unlock } = useScrollLock()
 
-const logoUrl = new URL('@/assets/imgs/小石榴.png', import.meta.url).href
+const logoUrl = new URL('@/assets/imgs/汐社.png', import.meta.url).href
 
 const indicatorPosition = computed(() => {
   const index = themeStore.themeOptions.findIndex(option => option.value === themeStore.currentTheme)

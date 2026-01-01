@@ -60,7 +60,7 @@ onMounted(() => {
 <template>
 
   <DropdownItem @click="handleMenuClick('about')">
-    关于小石榴
+    关于汐社
   </DropdownItem>
   <DropdownItem @click="handleMenuClick('keyboardShortcuts')">
     键盘快捷键

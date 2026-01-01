@@ -1153,7 +1153,7 @@ const openUserProfile = async (item, fieldKey) => {
   try {
     let userDisplayId = null
 
-    // 根据点击的字段获取对应的小石榴号
+    // 根据点击的字段获取对应的汐社号
     if (fieldKey) {
       userDisplayId = item[fieldKey]
     } else {
@@ -1171,7 +1171,7 @@ const openUserProfile = async (item, fieldKey) => {
       // 在新标签页中打开
       window.open(userProfileUrl, '_blank')
     } else {
-      console.error('无法获取用户的小石榴号，字段:', fieldKey, '数据:', item)
+      console.error('无法获取用户的汐社号，字段:', fieldKey, '数据:', item)
     }
   } catch (error) {
     console.error('获取用户信息失败:', error)

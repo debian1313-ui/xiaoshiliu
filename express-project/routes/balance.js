@@ -217,7 +217,7 @@ router.post('/exchange-in', authenticateToken, async (req, res) => {
       body: JSON.stringify({
         user_id: oauth2Id,
         amount: externalAmount,
-        reason: '小石榴社区石榴点兑入'
+        reason: '汐社社区石榴点兑入'
       })
     });
 
@@ -329,7 +329,7 @@ router.post('/exchange-out', authenticateToken, async (req, res) => {
       body: JSON.stringify({
         user_id: oauth2Id,
         amount: externalAmount,
-        reason: '小石榴社区石榴点兑出'
+        reason: '汐社社区石榴点兑出'
       })
     });
 

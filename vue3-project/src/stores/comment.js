@@ -56,7 +56,7 @@ export const useCommentStore = defineStore('comment', () => {
                 // 处理顶级评论数据格式
                 const parentComments = response.data.comments.map(comment => ({
                     id: comment.id,
-                    user_id: comment.user_display_id || comment.user_id, // 小石榴号（用于导航）
+                    user_id: comment.user_display_id || comment.user_id, // 汐社号（用于导航）
                     user_auto_id: comment.user_auto_id || comment.user_id, // 用户自增ID（用于权限判断）
                     username: comment.nickname || '匿名用户',
                     avatar: comment.user_avatar || new URL('@/assets/imgs/avatar.png', import.meta.url).href,
@@ -101,7 +101,7 @@ export const useCommentStore = defineStore('comment', () => {
 
                                 return {
                                     id: reply.id,
-                                    user_id: reply.user_display_id || reply.user_id, // 小石榴号（用于导航）
+                                    user_id: reply.user_display_id || reply.user_id, // 汐社号（用于导航）
                                     user_auto_id: reply.user_auto_id || reply.user_id, // 用户自增ID（用于权限判断）
                                     username: reply.nickname || '匿名用户',
                                     avatar: reply.user_avatar || new URL('@/assets/imgs/未加载.png', import.meta.url).href,

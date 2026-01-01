@@ -44,7 +44,7 @@ router.get('/', optionalAuth, async (req, res) => {
       let whereConditions = [];
       let queryParams = [];
 
-      // 关键词搜索条件 - 匹配小石榴号、昵称、标题、正文内容、标签名称中的任意一种
+      // 关键词搜索条件 - 匹配汐社号、昵称、标题、正文内容、标签名称中的任意一种
       if (keyword.trim()) {
         whereConditions.push('(p.title LIKE ? OR p.content LIKE ? OR u.nickname LIKE ? OR u.user_id LIKE ? OR EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON pt.tag_id = t.id WHERE pt.post_id = p.id AND t.name LIKE ?))');
         queryParams.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
@@ -155,7 +155,7 @@ router.get('/', optionalAuth, async (req, res) => {
       // 统计标签频率 - 始终基于keyword搜索结果，不受当前tag筛选影响
       let tagStats = [];
       if (keyword.trim()) {
-        // 构建仅基于keyword的搜索条件（包括标题、内容、用户名、小石榴号、标签名称），并确保只统计已激活的笔记
+        // 构建仅基于keyword的搜索条件（包括标题、内容、用户名、汐社号、标签名称），并确保只统计已激活的笔记
         const keywordWhereClause = 'WHERE p.is_draft = 0 AND (p.title LIKE ? OR p.content LIKE ? OR u.nickname LIKE ? OR u.user_id LIKE ? OR EXISTS (SELECT 1 FROM post_tags pt2 JOIN tags t2 ON pt2.tag_id = t2.id WHERE pt2.post_id = p.id AND t2.name LIKE ?))';
         const keywordParams = [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`];
 
