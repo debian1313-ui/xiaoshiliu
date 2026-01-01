@@ -29,7 +29,8 @@ export async function generateVideoThumbnail(videoFile, options = {}) {
     try {
       // 创建video元素
       const video = document.createElement('video')
-      video.crossOrigin = 'anonymous'
+      // 注意：不要设置 crossOrigin 属性，因为我们使用的是本地 blob URL
+      // 在移动设备上，设置 crossOrigin 会导致 blob URL 加载失败
       video.muted = true
       video.playsInline = true
       
