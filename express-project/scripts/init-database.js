@@ -106,6 +106,7 @@ class DatabaseInitializer {
         \`id\` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '用户ID',
         \`password\` varchar(255) DEFAULT NULL COMMENT '密码',
         \`user_id\` varchar(50) NOT NULL COMMENT '汐社号',
+        \`account\` varchar(50) DEFAULT NULL COMMENT '账号（用于登录）',
         \`nickname\` varchar(100) NOT NULL COMMENT '昵称',
         \`email\` varchar(100) DEFAULT NULL COMMENT '邮箱',
         \`avatar\` varchar(500) DEFAULT NULL COMMENT '头像URL',
@@ -128,8 +129,10 @@ class DatabaseInitializer {
         \`oauth2_id\` bigint(20) DEFAULT NULL COMMENT 'OAuth2用户中心的用户ID',
         PRIMARY KEY (\`id\`),
         UNIQUE KEY \`user_id\` (\`user_id\`),
+        UNIQUE KEY \`uk_account\` (\`account\`),
         UNIQUE KEY \`uk_oauth2_id\` (\`oauth2_id\`),
         KEY \`idx_user_id\` (\`user_id\`),
+        KEY \`idx_account\` (\`account\`),
         KEY \`idx_email\` (\`email\`),
         KEY \`idx_created_at\` (\`created_at\`),
         KEY \`idx_oauth2_id\` (\`oauth2_id\`)

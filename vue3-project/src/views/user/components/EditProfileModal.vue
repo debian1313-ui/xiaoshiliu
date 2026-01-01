@@ -33,6 +33,15 @@
             <input v-model="form.nickname" type="text" placeholder="请输入昵称" maxlength="10" />
           </div>
 
+          <div class="form-group">
+            <label class="form-label">汐社号:</label>
+            <div class="xishe-id-input">
+              <input v-model="form.user_id" type="text" placeholder="请输入汐社号（3-15位字母数字）" maxlength="15" 
+                @blur="checkXisheIdUnique" @input="clearXisheIdError" />
+              <span v-if="xisheIdError" class="xishe-id-error">{{ xisheIdError }}</span>
+              <span v-if="xisheIdSuccess" class="xishe-id-success">{{ xisheIdSuccess }}</span>
+            </div>
+          </div>
 
           <div class="form-group">
             <label class="form-label">个人简介:</label>
@@ -314,6 +323,7 @@ onMounted(() => {
 const form = reactive({
   avatar: '',
   nickname: '',
+  user_id: '', // 汐社号
   bio: '',
 
   gender: '',
@@ -322,6 +332,60 @@ const form = reactive({
   interests: [],
   avatarBlob: null // 存储裁剪后的图片blob
 })
+
+// 汐社号校验状态
+const xisheIdError = ref('')
+const xisheIdSuccess = ref('')
+const originalXisheId = ref('') // 保存原始汐社号，用于判断是否有变化
+
+// 清除汐社号错误
+const clearXisheIdError = () => {
+  xisheIdError.value = ''
+  xisheIdSuccess.value = ''
+}
+
+// 检查汐社号唯一性
+const checkXisheIdUnique = async () => {
+  xisheIdError.value = ''
+  xisheIdSuccess.value = ''
+  
+  const xisheId = form.user_id.trim()
+  
+  // 如果没有改变，不需要检查
+  if (xisheId === originalXisheId.value) {
+    return
+  }
+  
+  if (!xisheId) {
+    xisheIdError.value = '请输入汐社号'
+    return
+  }
+  
+  if (xisheId.length < 3 || xisheId.length > 15) {
+    xisheIdError.value = '汐社号长度必须在3-15位之间'
+    return
+  }
+  
+  if (!/^[a-zA-Z0-9]+$/.test(xisheId)) {
+    xisheIdError.value = '汐社号只能包含字母和数字'
+    return
+  }
+  
+  try {
+    const response = await fetch(`/api/auth/check-xishe-id?xishe_id=${encodeURIComponent(xisheId)}`)
+    const result = await response.json()
+    
+    if (result.code === 200) {
+      if (!result.data.isUnique) {
+        xisheIdError.value = '该汐社号已存在'
+      } else {
+        xisheIdSuccess.value = '汐社号可用'
+      }
+    }
+  } catch (error) {
+    console.error('检查汐社号失败:', error)
+  }
+}
 
 // 兴趣爱好相关
 const newInterest = ref('')
@@ -426,6 +490,8 @@ watch(() => props.visible, (newValue) => {
     const isValidAvatar = props.userInfo.avatar && !props.userInfo.avatar.includes('/asset/imgs/avatar.png')
     form.avatar = isValidAvatar ? props.userInfo.avatar : defaultAvatar
     form.nickname = props.userInfo.nickname || ''
+    form.user_id = props.userInfo.user_id || ''
+    originalXisheId.value = props.userInfo.user_id || '' // 保存原始汐社号
     form.bio = props.userInfo.bio || ''
 
     form.gender = props.userInfo.gender || ''
@@ -454,6 +520,8 @@ watch(() => props.visible, (newValue) => {
 
     avatarError.value = ''
     newInterest.value = ''
+    xisheIdError.value = ''
+    xisheIdSuccess.value = ''
   } else {
     // 解锁滚动
     unlock()
@@ -713,6 +781,28 @@ const handleSave = async () => {
   if (!form.nickname.trim()) {
     console.error('请输入昵称')
     return
+  }
+
+  // 验证汐社号
+  if (form.user_id.trim() !== originalXisheId.value) {
+    // 汐社号有变化，需要验证
+    const xisheId = form.user_id.trim()
+    if (!xisheId) {
+      xisheIdError.value = '请输入汐社号'
+      return
+    }
+    if (xisheId.length < 3 || xisheId.length > 15) {
+      xisheIdError.value = '汐社号长度必须在3-15位之间'
+      return
+    }
+    if (!/^[a-zA-Z0-9]+$/.test(xisheId)) {
+      xisheIdError.value = '汐社号只能包含字母和数字'
+      return
+    }
+    // 如果有错误，不允许保存
+    if (xisheIdError.value) {
+      return
+    }
   }
 
   // 对个人简介进行安全过滤
@@ -1426,6 +1516,40 @@ const handleSave = async () => {
 
 .email-error {
   color: var(--primary-color);
+  font-size: 12px;
+}
+
+/* 汐社号输入相关样式 */
+.xishe-id-input {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.xishe-id-input input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color-primary);
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: var(--bg-color-primary);
+  color: var(--text-color-primary);
+  box-sizing: border-box;
+  caret-color: var(--primary-color);
+}
+
+.xishe-id-input input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.xishe-id-error {
+  color: var(--primary-color);
+  font-size: 12px;
+}
+
+.xishe-id-success {
+  color: #52c41a;
   font-size: 12px;
 }
 </style>

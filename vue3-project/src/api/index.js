@@ -276,6 +276,11 @@ export const authApi = {
     return request.post('/auth/reset-password', data)
   },
 
+  // 检查汐社号是否可用
+  checkXisheId(xishe_id) {
+    return request.get('/auth/check-xishe-id', { params: { xishe_id } })
+  },
+
   // OAuth2登录 - 获取登录URL（前端重定向）
   getOAuth2LoginUrl() {
     const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'

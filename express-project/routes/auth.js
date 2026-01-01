@@ -102,17 +102,41 @@ router.get('/captcha', (req, res) => {
   }
 });
 
-// 检查用户ID是否已存在
+// 检查账号是否已存在
 router.get('/check-user-id', async (req, res) => {
   try {
-    const { user_id } = req.query; // 前端传过来的汐社号
+    const { user_id } = req.query; // 前端传过来的账号
     if (!user_id) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '请输入账号' });
+    }
+    // 查数据库是否已有该账号
+    const [existingUser] = await pool.execute(
+      'SELECT id FROM users WHERE account = ?',
+      [user_id.toString()]
+    );
+    // 存在返回false，不存在返回true（供前端判断是否可继续）
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: { isUnique: existingUser.length === 0 },
+      message: existingUser.length > 0 ? '账号已存在' : '账号可用'
+    });
+  } catch (error) {
+    console.error('检查账号失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR });
+  }
+});
+
+// 检查汐社号是否已存在
+router.get('/check-xishe-id', async (req, res) => {
+  try {
+    const { xishe_id } = req.query; // 前端传过来的汐社号
+    if (!xishe_id) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '请输入汐社号' });
     }
-    // 查数据库是否已有该ID
+    // 查数据库是否已有该汐社号
     const [existingUser] = await pool.execute(
       'SELECT id FROM users WHERE user_id = ?',
-      [user_id.toString()]
+      [xishe_id.toString()]
     );
     // 存在返回false，不存在返回true（供前端判断是否可继续）
     res.json({
@@ -121,7 +145,7 @@ router.get('/check-user-id', async (req, res) => {
       message: existingUser.length > 0 ? '汐社号已存在' : '汐社号可用'
     });
   } catch (error) {
-    console.error('检查用户ID失败:', error);
+    console.error('检查汐社号失败:', error);
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR });
   }
 });
@@ -461,6 +485,30 @@ router.delete('/unbind-email', authenticateToken, async (req, res) => {
   }
 });
 
+// 生成随机汐社号（6-10位字母数字）
+const generateXisheId = async () => {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const length = Math.floor(Math.random() * 5) + 6; // 6-10位
+  let xisheId = '';
+  
+  while (true) {
+    xisheId = '';
+    for (let i = 0; i < length; i++) {
+      xisheId += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    
+    // 检查是否已存在
+    const [existingUser] = await pool.execute(
+      'SELECT id FROM users WHERE user_id = ?',
+      [xisheId]
+    );
+    
+    if (existingUser.length === 0) {
+      return xisheId;
+    }
+  }
+};
+
 // 用户注册
 router.post('/register', async (req, res) => {
   try {
@@ -481,13 +529,13 @@ router.post('/register', async (req, res) => {
       }
     }
 
-    // 检查用户ID是否已存在
+    // 检查账号是否已存在
     const [existingUser] = await pool.execute(
       'SELECT id FROM users WHERE user_id = ?',
       [user_id.toString()]
     );
     if (existingUser.length > 0) {
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.CONFLICT, message: '用户ID已存在' });
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.CONFLICT, message: '账号已存在' });
     }
 
     // 验证验证码
@@ -536,11 +584,11 @@ router.post('/register', async (req, res) => {
     }
 
     if (user_id.length < 3 || user_id.length > 15) {
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '汐社号长度必须在3-15位之间' });
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '账号长度必须在3-15位之间' });
     }
 
     if (!/^[a-zA-Z0-9_]+$/.test(user_id)) {
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '汐社号只能包含字母、数字和下划线' });
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '账号只能包含字母、数字和下划线' });
     }
 
     if (nickname.length > 10) {
@@ -564,19 +612,23 @@ router.post('/register', async (req, res) => {
     // 默认头像使用空字符串，前端会使用本地默认头像
     const defaultAvatar = '';
 
+    // 生成随机汐社号（6-10位）
+    const xisheId = await generateXisheId();
+
     // 插入新用户（密码使用SHA2哈希加密）
+    // user_id字段存储随机生成的汐社号，account字段存储用户注册的账号用于登录
     // 邮件功能未启用时，email字段存储空字符串
     const userEmail = isEmailEnabled ? email : '';
     const [result] = await pool.execute(
-      'INSERT INTO users (user_id, nickname, password, email, avatar, bio, location) VALUES (?, ?, SHA2(?, 256), ?, ?, ?, ?)',
-      [user_id, nickname, password, userEmail, defaultAvatar, '', ipLocation]
+      'INSERT INTO users (user_id, account, nickname, password, email, avatar, bio, location) VALUES (?, ?, ?, SHA2(?, 256), ?, ?, ?, ?)',
+      [xisheId, user_id, nickname, password, userEmail, defaultAvatar, '', ipLocation]
     );
 
     const userId = result.insertId;
 
-    // 生成JWT令牌
-    const accessToken = generateAccessToken({ userId, user_id });
-    const refreshToken = generateRefreshToken({ userId, user_id });
+    // 生成JWT令牌（使用生成的汐社号）
+    const accessToken = generateAccessToken({ userId, user_id: xisheId });
+    const refreshToken = generateRefreshToken({ userId, user_id: xisheId });
 
     // 保存会话
     await pool.execute(
@@ -618,10 +670,10 @@ router.post('/login', async (req, res) => {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '缺少必要参数' });
     }
 
-    // 查找用户
+    // 查找用户（支持账号或汐社号登录）
     const [userRows] = await pool.execute(
-      'SELECT id, user_id, nickname, password, avatar, bio, location, follow_count, fans_count, like_count, is_active, gender, zodiac_sign, mbti, education, major, interests FROM users WHERE user_id = ?',
-      [user_id.toString()]
+      'SELECT id, user_id, account, nickname, password, avatar, bio, location, follow_count, fans_count, like_count, is_active, gender, zodiac_sign, mbti, education, major, interests FROM users WHERE account = ? OR user_id = ?',
+      [user_id.toString(), user_id.toString()]
     );
 
     if (userRows.length === 0) {

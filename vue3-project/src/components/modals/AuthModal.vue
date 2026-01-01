@@ -28,10 +28,10 @@
         <!-- 传统登录/注册表单（当未启用仅OAuth2登录时显示） -->
         <form v-if="!oauth2OnlyLogin" @submit.prevent="handleSubmit" class="auth-form" novalidate autocomplete="off">
           <div class="form-group">
-            <label for="user_id" class="form-label">汐社号</label>
+            <label for="user_id" class="form-label">账号</label>
             <input type="text" id="user_id" v-model="formData.user_id" class="form-input"
               :class="{ 'error': showErrors && errors.user_id }"
-              :placeholder="isLoginMode ? '请输入汐社号' : '请输入汐社号（3-15位字母数字下划线）'" maxlength="15"
+              :placeholder="isLoginMode ? '请输入账号' : '请输入账号（3-15位字母数字下划线）'" maxlength="15"
               autocomplete="off" @input="clearError('user_id')" />
             <span v-if="showErrors && errors.user_id" class="error-message">{{ errors.user_id }}</span>
           </div>
@@ -212,21 +212,21 @@ const validateUserId = async () => {
   errors.user_id = ''
 
   if (!formData.user_id.trim()) {
-    errors.user_id = '请输入汐社号'
+    errors.user_id = '请输入账号'
     return
   }
 
   if (formData.user_id.length < 3 || formData.user_id.length > 15) {
-    errors.user_id = '汐社号长度必须在3-15位之间'
+    errors.user_id = '账号长度必须在3-15位之间'
     return
   }
 
   if (!/^[a-zA-Z0-9_]+$/.test(formData.user_id)) {
-    errors.user_id = '汐社号只能包含字母、数字和下划线'
+    errors.user_id = '账号只能包含字母、数字和下划线'
     return
   }
 
-  // 注册模式下检查用户ID是否已存在
+  // 注册模式下检查账号是否已存在
   if (!isLoginMode.value) {
     try {
       const response = await fetch(`/api/auth/check-user-id?user_id=${encodeURIComponent(formData.user_id)}`)
@@ -234,14 +234,14 @@ const validateUserId = async () => {
 
       if (result.code === 200) {
         if (!result.data.isUnique) {
-          errors.user_id = '汐社号已存在'
+          errors.user_id = '账号已存在'
           return
         }
       } else {
-        console.error('检查用户ID失败:', result.message)
+        console.error('检查账号失败:', result.message)
       }
     } catch (error) {
-      console.error('检查用户ID失败:', error)
+      console.error('检查账号失败:', error)
       // 网络错误时不阻止用户继续，让后端最终验证
     }
   }
@@ -448,7 +448,7 @@ const handleSubmit = async () => {
     }
 
     if (isUserIdEmpty) {
-      unifiedMessage.value = '请输入汐社号'
+      unifiedMessage.value = '请输入账号'
       return
     }
 

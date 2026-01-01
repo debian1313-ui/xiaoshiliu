@@ -1056,16 +1056,17 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const userIdParam = req.params.id;
     const currentUserId = req.user.id;
-    const { nickname, avatar, bio, location, gender, zodiac_sign, mbti, education, major, interests } = req.body;
+    const { nickname, avatar, bio, location, gender, zodiac_sign, mbti, education, major, interests, user_id: newXisheId } = req.body;
 
     console.log(`用户更新资料 - 目标用户ID: ${userIdParam}, 当前用户ID: ${currentUserId}`);
 
     // 始终通过汐社号查找对应的数字ID
-    const [userRows] = await pool.execute('SELECT id FROM users WHERE user_id = ?', [userIdParam]);
+    const [userRows] = await pool.execute('SELECT id, user_id FROM users WHERE user_id = ?', [userIdParam]);
     if (userRows.length === 0) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '用户不存在' });
     }
     const targetUserId = userRows[0].id;
+    const currentXisheId = userRows[0].user_id;
 
     // 检查是否是用户本人
     if (currentUserId !== targetUserId) {
@@ -1083,6 +1084,33 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     updateFields.push('nickname = ?');
     updateValues.push(nickname.trim());
+
+    // 处理汐社号更新
+    if (newXisheId !== undefined && newXisheId.trim() !== currentXisheId) {
+      const trimmedXisheId = newXisheId.trim();
+      
+      // 验证汐社号格式
+      if (trimmedXisheId.length < 3 || trimmedXisheId.length > 15) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '汐社号长度必须在3-15位之间' });
+      }
+      
+      if (!/^[a-zA-Z0-9]+$/.test(trimmedXisheId)) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '汐社号只能包含字母和数字' });
+      }
+      
+      // 检查汐社号是否已存在
+      const [existingUser] = await pool.execute(
+        'SELECT id FROM users WHERE user_id = ? AND id != ?',
+        [trimmedXisheId, targetUserId.toString()]
+      );
+      
+      if (existingUser.length > 0) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.CONFLICT, message: '该汐社号已存在' });
+      }
+      
+      updateFields.push('user_id = ?');
+      updateValues.push(trimmedXisheId);
+    }
 
     if (avatar !== undefined) {
       updateFields.push('avatar = ?');
