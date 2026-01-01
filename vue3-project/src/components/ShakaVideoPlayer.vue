@@ -587,20 +587,22 @@ watch(() => props.src, (newSrc) => {
   isLoading.value = true
   error.value = null
   
-  if (player && isDashVideo(newSrc)) {
-    // 如果有 Shaka Player 实例且是 DASH 视频，使用它加载
+  if (player) {
+    // 如果有 Shaka Player 实例，使用它加载所有视频格式
     player.load(newSrc).then(() => {
       isLoading.value = false
-      loadQualities()
+      // 检查是否是 DASH 视频以加载画质选项
+      if (isDashVideo(newSrc)) {
+        loadQualities()
+      }
     }).catch((err) => {
       console.error('视频加载失败:', err)
       error.value = '视频加载失败'
       isLoading.value = false
     })
   } else {
-    // 否则使用原生播放器
-    videoElement.value.src = newSrc
-    isLoading.value = false
+    // 如果没有 Shaka Player 实例，重新初始化
+    initPlayer()
   }
 })
 

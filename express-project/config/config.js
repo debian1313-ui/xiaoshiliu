@@ -102,6 +102,11 @@ const config = {
       const threads = Number.parseInt(process.env.VIDEO_TRANSCODING_MAX_THREADS, 10);
       return (threads > 0) ? threads : 4;
     })(),
+    // 转码队列最大并发数 (避免过多任务同时运行)
+    maxConcurrentTasks: (() => {
+      const concurrent = Number.parseInt(process.env.VIDEO_TRANSCODING_MAX_CONCURRENT, 10);
+      return (concurrent > 0) ? concurrent : 2;
+    })(),
     // DASH转码输出目录格式
     outputFormat: process.env.VIDEO_DASH_OUTPUT_FORMAT || '{date}/{userId}/{timestamp}',
     // DASH配置

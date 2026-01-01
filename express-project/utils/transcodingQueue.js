@@ -8,12 +8,14 @@
 
 const { convertToDash } = require('./videoTranscoder');
 const { pool } = require('../config/config');
+const config = require('../config/config');
 
 class TranscodingQueue {
-  constructor(maxConcurrent = 2) {
+  constructor(maxConcurrent = null) {
     this.queue = []; // 待处理任务队列
     this.processing = new Map(); // 正在处理的任务 Map<taskId, task>
-    this.maxConcurrent = maxConcurrent; // 最大并发任务数
+    // 使用配置中的并发数，如果没有配置则使用传入的参数或默认值2
+    this.maxConcurrent = maxConcurrent ?? config.videoTranscoding.maxConcurrentTasks ?? 2;
     this.taskIdCounter = 0; // 任务ID计数器
   }
 
@@ -160,7 +162,7 @@ class TranscodingQueue {
   }
 }
 
-// 创建全局队列实例（并发数为2，避免过多占用系统资源）
-const transcodingQueue = new TranscodingQueue(2);
+// 创建全局队列实例（使用配置文件中的并发数）
+const transcodingQueue = new TranscodingQueue();
 
 module.exports = transcodingQueue;
