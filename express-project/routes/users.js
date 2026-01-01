@@ -5,6 +5,9 @@ const { pool } = require('../config/config');
 const { optionalAuth, authenticateToken } = require('../middleware/auth');
 const NotificationHelper = require('../utils/notificationHelper');
 
+// 账号(xise_id)格式验证正则表达式
+const XISE_ID_PATTERN = /^\d{6,10}$/;
+
 // 搜索用户（必须放在 /:id 之前）
 router.get('/search', optionalAuth, async (req, res) => {
   try {
@@ -1135,7 +1138,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     // 处理账号(xise_id)更新
     if (xise_id !== undefined && xise_id !== currentXiseId) {
       // 验证格式：6-10位纯数字
-      if (!/^\d{6,10}$/.test(xise_id)) {
+      if (!XISE_ID_PATTERN.test(xise_id)) {
         return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '账号必须为6-10位数字' });
       }
       // 检查唯一性

@@ -11,6 +11,9 @@ const svgCaptcha = require('svg-captcha');
 const path = require('path');
 const fs = require('fs');
 
+// 账号(xise_id)格式验证正则表达式
+const XISE_ID_PATTERN = /^\d{6,10}$/;
+
 // 存储验证码的临时对象
 const captchaStore = new Map();
 // 存储邮箱验证码的临时对象
@@ -172,12 +175,12 @@ router.get('/check-xise-id', async (req, res) => {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '请输入账号' });
     }
     // 验证格式：6-10位纯数字
-    if (!/^\d{6,10}$/.test(xise_id)) {
+    if (!XISE_ID_PATTERN.test(xise_id)) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '账号必须为6-10位数字' });
     }
     // 查数据库是否已有该账号（排除当前用户）
     let query = 'SELECT id, user_id FROM users WHERE xise_id = ?';
-    const params = [xise_id.toString()];
+    const params = [xise_id];
     
     const [existingUser] = await pool.execute(query, params);
     

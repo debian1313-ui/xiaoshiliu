@@ -339,6 +339,7 @@ const form = reactive({
 const xiseIdError = ref('')
 const xiseIdChecking = ref(false)
 const xiseIdValid = ref(false)
+const XISE_ID_PATTERN = /^\d{6,10}$/
 
 // 处理账号输入
 const handleXiseIdInput = () => {
@@ -357,7 +358,7 @@ const checkXiseIdUniqueness = async () => {
   }
 
   // 验证格式：6-10位数字
-  if (!/^\d{6,10}$/.test(form.xise_id)) {
+  if (!XISE_ID_PATTERN.test(form.xise_id)) {
     xiseIdError.value = '账号必须为6-10位数字'
     xiseIdValid.value = false
     return
@@ -785,7 +786,7 @@ const handleSave = async () => {
   }
 
   // 验证账号格式（如果有输入的话）
-  if (form.xise_id && !/^\d{6,10}$/.test(form.xise_id)) {
+  if (form.xise_id && !XISE_ID_PATTERN.test(form.xise_id)) {
     $message.error('账号必须为6-10位数字')
     return
   }
