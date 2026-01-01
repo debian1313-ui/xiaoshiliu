@@ -85,10 +85,24 @@
         </div>
       </div>
 
-      <!-- 右键菜单 (类似YouTube Stats for nerds) -->
+      <!-- 加载指示器 -->
+      <div v-if="isLoading" class="loading-indicator">
+        <div class="spinner"></div>
+        <span>加载中...</span>
+      </div>
+
+      <!-- 错误提示 -->
+      <div v-if="error" class="error-overlay">
+        <SvgIcon name="warning" width="48" height="48" />
+        <p>{{ error }}</p>
+      </div>
+    </div>
+    
+    <!-- 右键菜单 (使用 Teleport 确保不被父容器裁剪) -->
+    <Teleport to="body">
       <div 
         v-if="contextMenuVisible" 
-        class="context-menu"
+        class="shaka-context-menu"
         :style="{ left: contextMenuPosition.x + 'px', top: contextMenuPosition.y + 'px' }"
         @click.stop
       >
@@ -130,19 +144,7 @@
           <span class="context-menu-value">{{ lastTrackSwitch }}</span>
         </div>
       </div>
-
-      <!-- 加载指示器 -->
-      <div v-if="isLoading" class="loading-indicator">
-        <div class="spinner"></div>
-        <span>加载中...</span>
-      </div>
-
-      <!-- 错误提示 -->
-      <div v-if="error" class="error-overlay">
-        <SvgIcon name="warning" width="48" height="48" />
-        <p>{{ error }}</p>
-      </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
@@ -1001,67 +1003,6 @@ defineExpose({
   opacity: 1;
 }
 
-/* 右键菜单样式 */
-.context-menu {
-  position: fixed;
-  background: rgba(24, 24, 24, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  padding: 12px 0;
-  min-width: 240px;
-  max-height: 400px;
-  overflow-y: auto;
-  z-index: 99999;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(12px);
-  animation: fadeInScale 0.15s ease-out;
-}
-
-@keyframes fadeInScale {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.context-menu-header {
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 6px 16px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.context-menu-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 16px;
-  color: white;
-  font-size: 13px;
-}
-
-.context-menu-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.context-menu-label {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.context-menu-value {
-  color: #4ade80;
-  font-weight: 500;
-  font-family: monospace;
-}
-
 .controls-row {
   display: flex;
   align-items: center;
@@ -1388,5 +1329,69 @@ defineExpose({
   .controls-row {
     gap: 8px;
   }
+}
+</style>
+
+<!-- 非scoped样式用于Teleport到body的右键菜单 -->
+<style>
+/* 右键菜单样式 (Teleport到body，不能使用scoped) */
+.shaka-context-menu {
+  position: fixed;
+  background: rgba(24, 24, 24, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 12px 0;
+  min-width: 240px;
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 99999;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  animation: shakaContextMenuFadeIn 0.15s ease-out;
+}
+
+@keyframes shakaContextMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.shaka-context-menu .context-menu-header {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 16px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.shaka-context-menu .context-menu-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  color: white;
+  font-size: 13px;
+}
+
+.shaka-context-menu .context-menu-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.shaka-context-menu .context-menu-label {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.shaka-context-menu .context-menu-value {
+  color: #4ade80;
+  font-weight: 500;
+  font-family: monospace;
 }
 </style>
