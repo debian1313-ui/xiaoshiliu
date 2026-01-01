@@ -135,16 +135,16 @@ request.interceptors.response.use(
       }
     } else if (error.request) {
       // 请求已经成功发起，但没有收到响应
-      // 检查是否是超时错误
-      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-        console.error('请求超时，请检查网络连接后重试')
+      // 检查是否是超时错误 - ECONNABORTED 是 axios 超时时设置的错误码
+      if (error.code === 'ECONNABORTED' || error.message?.toLowerCase().includes('timeout')) {
+        console.error(ERROR_MESSAGES.TIMEOUT_ERROR)
         return {
           success: false,
           message: ERROR_MESSAGES.TIMEOUT_ERROR,
           data: null
         }
       }
-      console.error('网络连接失败，请检查网络设置')
+      console.error(ERROR_MESSAGES.NETWORK_ERROR)
       return {
         success: false,
         message: ERROR_MESSAGES.NETWORK_ERROR,
