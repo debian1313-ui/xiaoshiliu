@@ -11,11 +11,6 @@
         class="video-element"
       ></video>
       
-      <!-- 始终可见的进度条指示器（在所有模式下显示） -->
-      <div class="persistent-progress" @click="seek">
-        <div class="persistent-progress-bar" :style="{ width: playedPercent + '%' }"></div>
-      </div>
-      
       <!-- 自定义控制栏 -->
       <div v-if="showControls" class="custom-controls" :class="{ 'visible': controlsVisible || !isPlaying }">
         <!-- 播放/暂停按钮 -->
@@ -957,33 +952,17 @@ defineExpose({
   background: #000;
 }
 
-/* 始终可见的进度条指示器 - 提高高度以便更容易选择 */
-.persistent-progress {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 8px;  /* 增加默认高度到8px，确保在Windows PC上更容易选择 */
-  background: rgba(255, 255, 255, 0.3);  /* 增加背景透明度 */
-  cursor: pointer;
-  z-index: 15;  /* 提高z-index确保在控制栏上方 */
-  transition: height 0.2s ease;
-  /* 增加点击区域 */
-  padding-top: 10px;
-  margin-top: -10px;
-  box-sizing: content-box;
+/* 隐藏原生视频控制栏（特别是Windows Chrome的默认进度条） */
+.video-element::-webkit-media-controls {
+  display: none !important;
 }
 
-.persistent-progress:hover {
-  height: 12px;  /* hover时增加到12px */
+.video-element::-webkit-media-controls-enclosure {
+  display: none !important;
 }
 
-.persistent-progress-bar {
-  height: 100%;
-  background: var(--primary-color);
-  box-shadow: 0 0 6px rgba(255, 36, 66, 0.9);  /* 增强阴影效果，提高可见性 */
-  transition: width 0.1s linear;
-  border-radius: 0 2px 2px 0;
+.video-element::-webkit-media-controls-panel {
+  display: none !important;
 }
 
 /* 自定义控制栏 */
@@ -993,13 +972,18 @@ defineExpose({
   left: 0;
   right: 0;
   background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.6) 50%, transparent 100%);
-  padding: 30px 16px 20px;  /* 增加底部padding，为更高的进度条留出空间 */
+  padding: 30px 16px 16px;
   opacity: 0;
   transition: opacity 0.3s ease;
   z-index: 10;
 }
 
 .custom-controls.visible {
+  opacity: 1;
+}
+
+/* 鼠标悬停在视频容器上时显示控制栏 */
+.video-container:hover .custom-controls {
   opacity: 1;
 }
 
