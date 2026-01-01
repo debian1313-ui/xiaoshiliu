@@ -11,8 +11,8 @@
         class="video-element"
       ></video>
       
-      <!-- 始终可见的进度条指示器（非全屏时显示） -->
-      <div v-if="!isFullscreen" class="persistent-progress" @click="seek">
+      <!-- 始终可见的进度条指示器（在所有模式下显示） -->
+      <div class="persistent-progress" @click="seek">
         <div class="persistent-progress-bar" :style="{ width: playedPercent + '%' }"></div>
       </div>
       
@@ -216,10 +216,7 @@ const isDashVideo = (url) => {
 // 初始化播放器
 const initPlayer = async () => {
   try {
-    // 检查是否是 DASH 视频
-    const useDash = isDashVideo(props.src)
-    
-    // 始终使用 Shaka Player，即使是 MP4 文件
+    // 始终使用 Shaka Player 播放所有视频格式（DASH、MP4等）
     // 动态导入 Shaka Player
     if (!shaka) {
       try {
@@ -248,15 +245,26 @@ const initPlayer = async () => {
     // 附加到视频元素
     await player.attach(videoElement.value)
 
-    // 配置播放器
+    // 优化配置以提升DASH播放流畅度
     player.configure({
       streaming: {
-        bufferingGoal: 30,
-        rebufferingGoal: 15,
-        bufferBehind: 30
+        bufferingGoal: 30,           // 缓冲目标（秒）
+        rebufferingGoal: 10,          // 重新缓冲目标（秒）- 降低以更快恢复播放
+        bufferBehind: 30,             // 保留后面的缓冲（秒）
+        retryParameters: {
+          timeout: 30000,             // 请求超时（毫秒）
+          maxAttempts: 3,             // 最大重试次数
+          baseDelay: 1000,            // 基础延迟（毫秒）
+          backoffFactor: 2,           // 退避因子
+          fuzzFactor: 0.5             // 模糊因子
+        }
       },
       abr: {
-        enabled: props.adaptiveBitrate
+        enabled: props.adaptiveBitrate,
+        defaultBandwidthEstimate: 5000000,  // 默认带宽估计（5Mbps）
+        switchInterval: 8,                   // 切换间隔（秒）
+        bandwidthUpgradeTarget: 0.85,        // 带宽升级目标
+        bandwidthDowngradeTarget: 0.95       // 带宽降级目标
       }
     })
 
@@ -270,7 +278,8 @@ const initPlayer = async () => {
     isLoading.value = false
     emit('loaded')
 
-    // 获取可用画质（仅对DASH视频有效）
+    // 获取可用画质（对DASH视频有效）
+    const useDash = isDashVideo(props.src)
     if (useDash) {
       loadQualities()
     }
@@ -671,21 +680,21 @@ defineExpose({
   bottom: 0;
   left: 0;
   right: 0;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.2);
+  height: 4px;  /* 增加默认高度，从3px到4px，确保在Windows PC上更容易看到 */
+  background: rgba(255, 255, 255, 0.25);  /* 增加背景透明度，从0.2到0.25 */
   cursor: pointer;
   z-index: 5;
   transition: height 0.2s ease;
 }
 
 .persistent-progress:hover {
-  height: 5px;
+  height: 6px;  /* hover时增加到6px */
 }
 
 .persistent-progress-bar {
   height: 100%;
   background: var(--primary-color);
-  box-shadow: 0 0 3px rgba(255, 36, 66, 0.6);
+  box-shadow: 0 0 4px rgba(255, 36, 66, 0.8);  /* 增强阴影效果，提高可见性 */
   transition: width 0.1s linear;
 }
 
