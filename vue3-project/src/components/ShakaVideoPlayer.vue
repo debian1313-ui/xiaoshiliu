@@ -976,18 +976,15 @@ defineExpose({
   opacity: 0;
   transition: opacity 0.3s ease;
   z-index: 10;
-  pointer-events: none;
 }
 
 .custom-controls.visible {
   opacity: 1;
-  pointer-events: auto;
 }
 
 /* 鼠标悬停在视频容器上时显示控制栏 */
 .video-container:hover .custom-controls {
   opacity: 1;
-  pointer-events: auto;
 }
 
 .controls-row {
