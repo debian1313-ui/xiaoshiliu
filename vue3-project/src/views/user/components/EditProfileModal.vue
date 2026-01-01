@@ -33,6 +33,21 @@
             <input v-model="form.nickname" type="text" placeholder="请输入昵称" maxlength="10" />
           </div>
 
+          <!-- 汐社号编辑 -->
+          <div class="form-group">
+            <label class="form-label">汐社号:</label>
+            <div class="user-id-container">
+              <input v-model="userIdForm.newUserId" type="text" placeholder="请输入新的汐社号（8-10位数字）" 
+                maxlength="10" @input="handleUserIdInput" />
+              <button type="button" class="change-user-id-btn" 
+                :disabled="!isUserIdValid || isChangingUserId" @click="handleChangeUserId">
+                {{ isChangingUserId ? '修改中...' : '修改汐社号' }}
+              </button>
+            </div>
+            <span v-if="userIdError" class="user-id-error">{{ userIdError }}</span>
+            <span class="user-id-hint">当前汐社号：{{ props.userInfo.user_id }}</span>
+          </div>
+
 
           <div class="form-group">
             <label class="form-label">个人简介:</label>
@@ -164,7 +179,7 @@
 <script setup>
 import { ref, reactive, nextTick, watch, inject, computed, onMounted } from 'vue'
 import SvgIcon from '@/components/SvgIcon.vue'
-import { imageUploadApi, authApi } from '@/api/index.js'
+import { imageUploadApi, authApi, userApi } from '@/api/index.js'
 import Cropper from 'cropperjs'
 import 'cropperjs/dist/cropper.css'
 import EmojiPicker from '@/components/EmojiPicker.vue'
@@ -302,6 +317,67 @@ const confirmUnbindEmail = async () => {
     $message.error('解绑失败，请稍后重试')
   } finally {
     isUnbindingEmail.value = false
+  }
+}
+
+// 汐社号相关
+const userIdForm = reactive({
+  newUserId: ''
+})
+const userIdError = ref('')
+const isChangingUserId = ref(false)
+
+// 计算属性：汐社号格式是否有效（8-10位数字）
+const isUserIdValid = computed(() => {
+  const trimmed = userIdForm.newUserId.trim()
+  return trimmed && /^\d{8,10}$/.test(trimmed) && trimmed !== props.userInfo.user_id
+})
+
+// 处理汐社号输入
+const handleUserIdInput = () => {
+  userIdError.value = ''
+}
+
+// 修改汐社号
+const handleChangeUserId = async () => {
+  const newUserId = userIdForm.newUserId.trim()
+  
+  if (!newUserId) {
+    userIdError.value = '请输入新的汐社号'
+    return
+  }
+  
+  if (!/^\d{8,10}$/.test(newUserId)) {
+    userIdError.value = '汐社号必须为8-10位数字'
+    return
+  }
+  
+  if (newUserId === props.userInfo.user_id) {
+    userIdError.value = '新汐社号与当前相同'
+    return
+  }
+  
+  userIdError.value = ''
+  isChangingUserId.value = true
+  
+  try {
+    const result = await userApi.updateUserId(props.userInfo.user_id, newUserId)
+    
+    if (result.success) {
+      $message.success('汐社号修改成功')
+      // 清空表单
+      userIdForm.newUserId = ''
+      // 更新用户信息
+      userStore.updateUserInfo({ user_id: newUserId })
+      // 触发父组件刷新用户信息
+      emit('save', { user_id: newUserId })
+    } else {
+      userIdError.value = result.message || '修改汐社号失败'
+    }
+  } catch (error) {
+    userIdError.value = '修改失败，请稍后重试'
+  } finally {
+    isChangingUserId.value = false
   }
 }
 
@@ -1427,5 +1503,63 @@ const handleSave = async () => {
 .email-error {
   color: var(--primary-color);
   font-size: 12px;
+}
+
+/* 汐社号编辑样式 */
+.user-id-container {
+  display: flex;
+  gap: 8px;
+}
+
+.user-id-container input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color-primary);
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: var(--bg-color-primary);
+  color: var(--text-color-primary);
+  box-sizing: border-box;
+  caret-color: var(--primary-color);
+}
+
+.user-id-container input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.change-user-id-btn {
+  padding: 10px 16px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.change-user-id-btn:hover:not(:disabled) {
+  background-color: var(--primary-color-dark);
+}
+
+.change-user-id-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.user-id-error {
+  color: var(--primary-color);
+  font-size: 12px;
+  margin-top: 4px;
+  display: block;
+}
+
+.user-id-hint {
+  color: var(--text-color-secondary);
+  font-size: 12px;
+  margin-top: 4px;
+  display: block;
 }
 </style>

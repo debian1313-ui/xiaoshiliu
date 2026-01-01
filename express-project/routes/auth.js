@@ -18,6 +18,41 @@ const emailCodeStore = new Map();
 // 存储OAuth2 state参数（用于防止CSRF攻击）
 const oauth2StateStore = new Map();
 
+// 生成随机8-10位汐社号
+const generateRandomUserId = async () => {
+  const length = 8 + Math.floor(Math.random() * 3); // 8, 9, 或 10位
+  const chars = '0123456789';
+  let userId;
+  let isUnique = false;
+  let attempts = 0;
+  const maxAttempts = 10;
+
+  while (!isUnique && attempts < maxAttempts) {
+    // 生成随机数字字符串，第一位不能是0
+    userId = (Math.floor(Math.random() * 9) + 1).toString(); // 第一位1-9
+    for (let i = 1; i < length; i++) {
+      userId += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
+    // 检查是否唯一
+    const [existingUser] = await pool.execute(
+      'SELECT id FROM users WHERE user_id = ?',
+      [userId]
+    );
+
+    if (existingUser.length === 0) {
+      isUnique = true;
+    }
+    attempts++;
+  }
+
+  if (!isUnique) {
+    throw new Error('无法生成唯一的汐社号，请稍后重试');
+  }
+
+  return userId;
+};
+
 // 获取认证配置状态（包括邮件功能和OAuth2配置）
 router.get('/auth-config', (req, res) => {
   res.json({
@@ -464,30 +499,21 @@ router.delete('/unbind-email', authenticateToken, async (req, res) => {
 // 用户注册
 router.post('/register', async (req, res) => {
   try {
-    const { user_id, nickname, password, captchaId, captchaText, email, emailCode } = req.body;
+    const { nickname, password, captchaId, captchaText, email, emailCode } = req.body;
 
     // 根据邮件功能是否启用，决定必填参数
     const isEmailEnabled = emailConfig.enabled;
 
     if (isEmailEnabled) {
       // 邮件功能启用时，邮箱和邮箱验证码必填
-      if (!user_id || !nickname || !password || !captchaId || !captchaText || !email || !emailCode) {
+      if (!nickname || !password || !captchaId || !captchaText || !email || !emailCode) {
         return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '缺少必要参数' });
       }
     } else {
       // 邮件功能未启用时，邮箱和邮箱验证码可选
-      if (!user_id || !nickname || !password || !captchaId || !captchaText) {
+      if (!nickname || !password || !captchaId || !captchaText) {
         return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '缺少必要参数' });
       }
-    }
-
-    // 检查用户ID是否已存在
-    const [existingUser] = await pool.execute(
-      'SELECT id FROM users WHERE user_id = ?',
-      [user_id.toString()]
-    );
-    if (existingUser.length > 0) {
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.CONFLICT, message: '用户ID已存在' });
     }
 
     // 验证验证码
@@ -535,14 +561,6 @@ router.post('/register', async (req, res) => {
       emailCodeStore.delete(email);
     }
 
-    if (user_id.length < 3 || user_id.length > 15) {
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '汐社号长度必须在3-15位之间' });
-    }
-
-    if (!/^[a-zA-Z0-9_]+$/.test(user_id)) {
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '汐社号只能包含字母、数字和下划线' });
-    }
-
     if (nickname.length > 10) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '昵称长度必须少于10位' });
     }
@@ -550,6 +568,9 @@ router.post('/register', async (req, res) => {
     if (password.length < 6 || password.length > 20) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '密码长度必须在6-20位之间' });
     }
+
+    // 自动生成8-10位随机汐社号
+    const user_id = await generateRandomUserId();
 
     // 获取用户IP属地
     const userIP = getRealIP(req);

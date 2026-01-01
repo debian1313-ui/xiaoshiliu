@@ -1157,6 +1157,80 @@ router.put('/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// 更新汐社号
+router.put('/:id/user-id', authenticateToken, async (req, res) => {
+  try {
+    const userIdParam = req.params.id;
+    const currentUserId = req.user.id;
+    const { new_user_id } = req.body;
+
+    console.log(`用户更新汐社号 - 目标用户ID: ${userIdParam}, 当前用户ID: ${currentUserId}`);
+
+    // 验证必填字段
+    if (!new_user_id || !new_user_id.trim()) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '请输入新的汐社号' });
+    }
+
+    const trimmedNewUserId = new_user_id.trim();
+
+    // 验证汐社号格式：8-10位数字
+    if (!/^\d{8,10}$/.test(trimmedNewUserId)) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '汐社号必须为8-10位数字' });
+    }
+
+    // 始终通过汐社号查找对应的数字ID
+    const [userRows] = await pool.execute('SELECT id, user_id FROM users WHERE user_id = ?', [userIdParam]);
+    if (userRows.length === 0) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '用户不存在' });
+    }
+    const targetUserId = userRows[0].id;
+    const oldUserId = userRows[0].user_id;
+
+    // 检查是否是用户本人
+    if (currentUserId !== targetUserId) {
+      return res.status(HTTP_STATUS.FORBIDDEN).json({ code: RESPONSE_CODES.FORBIDDEN, message: '只能修改自己的汐社号' });
+    }
+
+    // 检查新汐社号是否与当前相同
+    if (trimmedNewUserId === oldUserId) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '新汐社号与当前相同' });
+    }
+
+    // 检查新汐社号是否已被其他用户使用
+    const [existingUser] = await pool.execute(
+      'SELECT id FROM users WHERE user_id = ? AND id != ?',
+      [trimmedNewUserId, targetUserId.toString()]
+    );
+    if (existingUser.length > 0) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.CONFLICT, message: '该汐社号已被使用' });
+    }
+
+    // 更新汐社号
+    await pool.execute(
+      'UPDATE users SET user_id = ? WHERE id = ?',
+      [trimmedNewUserId, targetUserId.toString()]
+    );
+
+    // 获取更新后的用户信息
+    const [updatedUser] = await pool.execute(
+      'SELECT id, user_id, nickname, avatar, bio, location, email, gender, zodiac_sign, mbti, education, major, interests, follow_count, fans_count, like_count FROM users WHERE id = ?',
+      [targetUserId.toString()]
+    );
+
+    console.log(`用户汐社号更新成功 - 用户ID: ${targetUserId}, 旧汐社号: ${oldUserId}, 新汐社号: ${trimmedNewUserId}`);
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      message: '汐社号更新成功',
+      success: true,
+      data: updatedUser[0]
+    });
+  } catch (error) {
+    console.error('更新汐社号失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR });
+  }
+});
+
 // 修改密码
 router.put('/:id/password', authenticateToken, async (req, res) => {
   try {

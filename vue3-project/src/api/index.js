@@ -17,6 +17,11 @@ export const userApi = {
     return request.put(`/users/${userId}`, data)
   },
 
+  // 更新汐社号
+  updateUserId(userId, newUserId) {
+    return request.put(`/users/${userId}/user-id`, { new_user_id: newUserId })
+  },
+
   // 关注用户
   followUser(userId) {
     return request.post(`/users/${userId}/follow`)

@@ -27,11 +27,11 @@
 
         <!-- 传统登录/注册表单（当未启用仅OAuth2登录时显示） -->
         <form v-if="!oauth2OnlyLogin" @submit.prevent="handleSubmit" class="auth-form" novalidate autocomplete="off">
-          <div class="form-group">
+          <div v-if="isLoginMode" class="form-group">
             <label for="user_id" class="form-label">汐社号</label>
             <input type="text" id="user_id" v-model="formData.user_id" class="form-input"
               :class="{ 'error': showErrors && errors.user_id }"
-              :placeholder="isLoginMode ? '请输入汐社号' : '请输入汐社号（3-15位字母数字下划线）'" maxlength="15"
+              placeholder="请输入汐社号" maxlength="15"
               autocomplete="off" @input="clearError('user_id')" />
             <span v-if="showErrors && errors.user_id" class="error-message">{{ errors.user_id }}</span>
           </div>
@@ -200,7 +200,8 @@ const isFormValid = computed(() => {
   if (isLoginMode.value) {
     return formData.user_id.trim() && formData.password.trim() && !errors.user_id && !errors.password
   } else {
-    const baseValid = formData.user_id.trim() && formData.nickname.trim() && formData.password.trim() && formData.confirmPassword.trim() && !errors.user_id && !errors.nickname && !errors.password && !errors.confirmPassword
+    // 注册模式不需要用户输入汐社号
+    const baseValid = formData.nickname.trim() && formData.password.trim() && formData.confirmPassword.trim() && !errors.nickname && !errors.password && !errors.confirmPassword
     if (emailEnabled.value) {
       return baseValid && formData.email.trim() && formData.emailCode.trim() && !errors.email && !errors.emailCode
     }
@@ -209,41 +210,16 @@ const isFormValid = computed(() => {
 })
 
 const validateUserId = async () => {
+  // 仅登录模式需要验证汐社号
+  if (!isLoginMode.value) {
+    return
+  }
+
   errors.user_id = ''
 
   if (!formData.user_id.trim()) {
     errors.user_id = '请输入汐社号'
     return
-  }
-
-  if (formData.user_id.length < 3 || formData.user_id.length > 15) {
-    errors.user_id = '汐社号长度必须在3-15位之间'
-    return
-  }
-
-  if (!/^[a-zA-Z0-9_]+$/.test(formData.user_id)) {
-    errors.user_id = '汐社号只能包含字母、数字和下划线'
-    return
-  }
-
-  // 注册模式下检查用户ID是否已存在
-  if (!isLoginMode.value) {
-    try {
-      const response = await fetch(`/api/auth/check-user-id?user_id=${encodeURIComponent(formData.user_id)}`)
-      const result = await response.json()
-
-      if (result.code === 200) {
-        if (!result.data.isUnique) {
-          errors.user_id = '汐社号已存在'
-          return
-        }
-      } else {
-        console.error('检查用户ID失败:', result.message)
-      }
-    } catch (error) {
-      console.error('检查用户ID失败:', error)
-      // 网络错误时不阻止用户继续，让后端最终验证
-    }
   }
 
   errors.user_id = ''
@@ -461,7 +437,6 @@ const handleSubmit = async () => {
     await performSubmit()
   } else {
     // 注册模式：先验证表单，通过后打开验证码模态框
-    await validateUserId()
     validatePassword()
     validateNickname()
     validateConfirmPassword()
@@ -493,7 +468,6 @@ const performSubmit = async () => {
       })
     } else {
       const registerData = {
-        user_id: formData.user_id,
         nickname: formData.nickname,
         password: formData.password,
         captchaId: captchaId.value,
