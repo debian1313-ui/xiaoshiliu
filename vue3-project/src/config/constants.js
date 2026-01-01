@@ -28,6 +28,7 @@ export const ERROR_MESSAGES = {
   NOT_FOUND: '资源不存在',
   INTERNAL_SERVER_ERROR: '服务器内部错误',
   NETWORK_ERROR: '网络连接失败，请检查网络设置',
+  TIMEOUT_ERROR: '请求超时，请检查网络连接后重试',
   REQUEST_CONFIG_ERROR: '请求配置错误',
   SESSION_EXPIRED: '会话已过期，已自动退出登录'
 }
