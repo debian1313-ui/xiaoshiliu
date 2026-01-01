@@ -85,21 +85,33 @@
         </div>
       </div>
 
-      <!-- 右键菜单 -->
+      <!-- 右键菜单 (类似YouTube Stats for nerds) -->
       <div 
         v-if="contextMenuVisible" 
         class="context-menu"
         :style="{ left: contextMenuPosition.x + 'px', top: contextMenuPosition.y + 'px' }"
         @click.stop
       >
-        <div class="context-menu-header">视频详细信息</div>
+        <div class="context-menu-header">视频统计信息</div>
+        <div class="context-menu-item">
+          <span class="context-menu-label">分辨率:</span>
+          <span class="context-menu-value">{{ currentResolution || '未知' }}</span>
+        </div>
         <div class="context-menu-item">
           <span class="context-menu-label">当前码率:</span>
           <span class="context-menu-value">{{ currentBitrateDisplay || '未知' }}</span>
         </div>
-        <div class="context-menu-item">
-          <span class="context-menu-label">分辨率:</span>
-          <span class="context-menu-value">{{ currentResolution || '未知' }}</span>
+        <div v-if="estimatedBandwidthDisplay" class="context-menu-item">
+          <span class="context-menu-label">网络带宽:</span>
+          <span class="context-menu-value">{{ estimatedBandwidthDisplay }}</span>
+        </div>
+        <div v-if="videoCodec" class="context-menu-item">
+          <span class="context-menu-label">视频编码:</span>
+          <span class="context-menu-value">{{ videoCodec }}</span>
+        </div>
+        <div v-if="audioCodec" class="context-menu-item">
+          <span class="context-menu-label">音频编码:</span>
+          <span class="context-menu-value">{{ audioCodec }}</span>
         </div>
         <div class="context-menu-item">
           <span class="context-menu-label">缓冲进度:</span>
@@ -108,6 +120,10 @@
         <div class="context-menu-item">
           <span class="context-menu-label">播放进度:</span>
           <span class="context-menu-value">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
+        </div>
+        <div v-if="decodedFrames > 0" class="context-menu-item">
+          <span class="context-menu-label">帧信息:</span>
+          <span class="context-menu-value">{{ decodedFrames }} 帧 / {{ droppedFrames }} 丢帧</span>
         </div>
         <div v-if="lastTrackSwitch" class="context-menu-item">
           <span class="context-menu-label">码率切换:</span>
@@ -220,11 +236,26 @@ const contextMenuPosition = ref({ x: 0, y: 0 })
 const currentBitrate = ref(0)
 const currentResolution = ref('')
 const lastTrackSwitch = ref('')  // 最近一次码率切换详情
+const videoCodec = ref('')       // 视频编码格式
+const audioCodec = ref('')       // 音频编码格式
+const droppedFrames = ref(0)     // 丢帧数
+const decodedFrames = ref(0)     // 已解码帧数
+const estimatedBandwidth = ref(0) // 估算带宽
 
 // 计算当前码率显示文本
 const currentBitrateDisplay = computed(() => {
   if (!currentBitrate.value) return ''
   const kbps = Math.round(currentBitrate.value / 1000)
+  if (kbps >= 1000) {
+    return `${(kbps / 1000).toFixed(1)} Mbps`
+  }
+  return `${kbps} kbps`
+})
+
+// 计算估算带宽显示文本
+const estimatedBandwidthDisplay = computed(() => {
+  if (!estimatedBandwidth.value) return ''
+  const kbps = Math.round(estimatedBandwidth.value / 1000)
   if (kbps >= 1000) {
     return `${(kbps / 1000).toFixed(1)} Mbps`
   }
@@ -610,6 +641,9 @@ const updateBitrateInfo = () => {
     const stats = player.getStats()
     if (stats) {
       currentBitrate.value = stats.streamBandwidth || 0
+      estimatedBandwidth.value = stats.estimatedBandwidth || 0
+      droppedFrames.value = stats.droppedFrames || 0
+      decodedFrames.value = stats.decodedFrames || 0
     }
     
     // 获取当前播放的轨道信息
@@ -620,6 +654,13 @@ const updateBitrateInfo = () => {
       // 如果没有从stats获取到码率，使用轨道的带宽
       if (!currentBitrate.value && activeTrack.bandwidth) {
         currentBitrate.value = activeTrack.bandwidth
+      }
+      // 获取视频编码信息
+      if (activeTrack.videoCodec) {
+        videoCodec.value = activeTrack.videoCodec
+      }
+      if (activeTrack.audioCodec) {
+        audioCodec.value = activeTrack.audioCodec
       }
     }
   } catch (err) {
@@ -687,9 +728,9 @@ const showContextMenu = (event) => {
   let x = event.clientX - containerRect.left
   let y = event.clientY - containerRect.top
   
-  // 限制菜单在容器内
-  const menuWidth = 220
-  const menuHeight = 180
+  // 限制菜单在容器内 (增加菜单高度估计以适应更多信息)
+  const menuWidth = 250
+  const menuHeight = 320
   
   if (x + menuWidth > containerRect.width) {
     x = containerRect.width - menuWidth - 10
@@ -698,7 +739,11 @@ const showContextMenu = (event) => {
     y = containerRect.height - menuHeight - 10
   }
   
-  contextMenuPosition.value = { x: Math.max(10, x), y: Math.max(10, y) }
+  // 确保菜单不会超出顶部
+  y = Math.max(10, y)
+  x = Math.max(10, x)
+  
+  contextMenuPosition.value = { x, y }
   contextMenuVisible.value = true
   
   // 点击其他地方关闭菜单
@@ -950,13 +995,15 @@ defineExpose({
 /* 右键菜单样式 */
 .context-menu {
   position: absolute;
-  background: rgba(24, 24, 24, 0.95);
+  background: rgba(24, 24, 24, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
   padding: 12px 0;
-  min-width: 200px;
-  z-index: 100;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  min-width: 240px;
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 9999;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(12px);
   animation: fadeInScale 0.15s ease-out;
 }
