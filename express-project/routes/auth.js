@@ -488,11 +488,12 @@ router.delete('/unbind-email', authenticateToken, async (req, res) => {
 // 生成随机汐社号（6-10位字母数字）
 const generateXisheId = async () => {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  const length = Math.floor(Math.random() * 5) + 6; // 6-10位
-  let xisheId = '';
+  const maxRetries = 100; // 最大重试次数
+  let retryCount = 0;
   
-  while (true) {
-    xisheId = '';
+  while (retryCount < maxRetries) {
+    const length = Math.floor(Math.random() * 5) + 6; // 6-10位
+    let xisheId = '';
     for (let i = 0; i < length; i++) {
       xisheId += chars.charAt(Math.floor(Math.random() * chars.length));
     }
@@ -506,7 +507,12 @@ const generateXisheId = async () => {
     if (existingUser.length === 0) {
       return xisheId;
     }
+    
+    retryCount++;
   }
+  
+  // 如果达到最大重试次数，抛出错误
+  throw new Error('无法生成唯一的汐社号，请稍后重试');
 };
 
 // 用户注册
@@ -531,7 +537,7 @@ router.post('/register', async (req, res) => {
 
     // 检查账号是否已存在
     const [existingUser] = await pool.execute(
-      'SELECT id FROM users WHERE user_id = ?',
+      'SELECT id FROM users WHERE account = ?',
       [user_id.toString()]
     );
     if (existingUser.length > 0) {

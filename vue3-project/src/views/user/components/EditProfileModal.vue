@@ -373,6 +373,12 @@ const checkXisheIdUnique = async () => {
   
   try {
     const response = await fetch(`/api/auth/check-xishe-id?xishe_id=${encodeURIComponent(xisheId)}`)
+    
+    if (!response.ok) {
+      console.error('检查汐社号失败: HTTP状态', response.status)
+      return
+    }
+    
     const result = await response.json()
     
     if (result.code === 200) {
@@ -797,10 +803,6 @@ const handleSave = async () => {
     }
     if (!/^[a-zA-Z0-9]+$/.test(xisheId)) {
       xisheIdError.value = '汐社号只能包含字母和数字'
-      return
-    }
-    // 如果有错误，不允许保存
-    if (xisheIdError.value) {
       return
     }
   }

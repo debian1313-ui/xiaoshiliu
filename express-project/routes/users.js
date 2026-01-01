@@ -1101,7 +1101,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       // 检查汐社号是否已存在
       const [existingUser] = await pool.execute(
         'SELECT id FROM users WHERE user_id = ? AND id != ?',
-        [trimmedXisheId, targetUserId.toString()]
+        [trimmedXisheId, targetUserId]
       );
       
       if (existingUser.length > 0) {
