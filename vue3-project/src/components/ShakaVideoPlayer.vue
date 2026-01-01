@@ -18,11 +18,6 @@
       
       <!-- 自定义控制栏 -->
       <div v-if="showControls" class="custom-controls" :class="{ 'visible': controlsVisible || !isPlaying }">
-        <!-- 当前码率显示 -->
-        <div v-if="currentBitrateDisplay" class="bitrate-indicator">
-          {{ currentBitrateDisplay }}
-        </div>
-        
         <!-- 播放/暂停按钮 -->
         <div class="controls-row">
           <button 
@@ -113,6 +108,10 @@
         <div class="context-menu-item">
           <span class="context-menu-label">播放进度:</span>
           <span class="context-menu-value">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
+        </div>
+        <div v-if="lastTrackSwitch" class="context-menu-item">
+          <span class="context-menu-label">码率切换:</span>
+          <span class="context-menu-value">{{ lastTrackSwitch }}</span>
         </div>
       </div>
 
@@ -220,6 +219,7 @@ const contextMenuPosition = ref({ x: 0, y: 0 })
 // 码率和分辨率状态
 const currentBitrate = ref(0)
 const currentResolution = ref('')
+const lastTrackSwitch = ref('')  // 最近一次码率切换详情
 
 // 计算当前码率显示文本
 const currentBitrateDisplay = computed(() => {
@@ -311,9 +311,9 @@ const initPlayer = async () => {
       abr: {
         enabled: props.adaptiveBitrate,
         defaultBandwidthEstimate: 500000,    // 默认带宽估计改为500kbps，优先尝试低码率
-        switchInterval: 5,                    // 切换间隔（秒）- 减少以更快响应网络变化
-        bandwidthUpgradeTarget: 0.90,         // 带宽升级目标 - 更保守，避免过快升级码率
-        bandwidthDowngradeTarget: 0.70,       // 带宽降级目标 - 更敏感，更快降级以保持流畅
+        switchInterval: 1,                    // 切换间隔（秒）- 大幅减少以更快响应，适合短视频
+        bandwidthUpgradeTarget: 0.85,         // 带宽升级目标 - 更激进，更快升级码率
+        bandwidthDowngradeTarget: 0.50,       // 带宽降级目标 - 更敏感，更快降级以保持流畅
         restrictions: {
           minBandwidth: 0,                    // 最小带宽限制
           maxBandwidth: Infinity              // 最大带宽限制
@@ -569,7 +569,27 @@ const onPlayerError = (event) => {
 }
 
 // 码率变化事件处理
-const onAdaptation = () => {
+const onAdaptation = (event) => {
+  // 记录码率切换详情
+  const oldTrack = event?.oldTrack
+  const newTrack = event?.newTrack
+  
+  if (newTrack) {
+    const newBandwidth = newTrack.bandwidth || 0
+    const newKbps = Math.round(newBandwidth / 1000)
+    const newRes = newTrack.width && newTrack.height ? `${newTrack.width}x${newTrack.height}` : ''
+    
+    if (oldTrack && oldTrack.bandwidth) {
+      const oldKbps = Math.round(oldTrack.bandwidth / 1000)
+      const direction = newKbps > oldKbps ? '↑' : '↓'
+      lastTrackSwitch.value = `${oldKbps}k ${direction} ${newKbps}k`
+    } else {
+      lastTrackSwitch.value = `→ ${newKbps}k ${newRes}`
+    }
+    
+    console.log('码率切换:', lastTrackSwitch.value, newRes)
+  }
+  
   updateBitrateInfo()
 }
 
@@ -916,21 +936,6 @@ defineExpose({
 
 .custom-controls.visible {
   opacity: 1;
-}
-
-/* 码率指示器 */
-.bitrate-indicator {
-  position: absolute;
-  top: 8px;
-  right: 12px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #4ade80;
-  font-size: 11px;
-  font-weight: 500;
-  padding: 3px 8px;
-  border-radius: 4px;
-  backdrop-filter: blur(4px);
-  font-family: monospace;
 }
 
 /* 右键菜单样式 */
