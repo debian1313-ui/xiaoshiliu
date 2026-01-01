@@ -87,6 +87,9 @@ class DatabaseInitializer {
       // 创建石榴点变动记录表
       await this.createPointsLogTable(connection);
 
+      // 创建系统设置表
+      await this.createSystemSettingsTable(connection);
+
       console.log('所有数据表创建完成!');
 
     } catch (error) {
@@ -104,8 +107,9 @@ class DatabaseInitializer {
     const sql = `
       CREATE TABLE IF NOT EXISTS \`users\` (
         \`id\` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '用户ID',
+        \`xise_id\` varchar(10) DEFAULT NULL,
         \`password\` varchar(255) DEFAULT NULL COMMENT '密码',
-        \`user_id\` varchar(50) NOT NULL COMMENT '汐社号',
+        \`user_id\` varchar(50) NOT NULL COMMENT '小石榴号',
         \`nickname\` varchar(100) NOT NULL COMMENT '昵称',
         \`email\` varchar(100) DEFAULT NULL COMMENT '邮箱',
         \`avatar\` varchar(500) DEFAULT NULL COMMENT '头像URL',
@@ -222,8 +226,12 @@ class DatabaseInitializer {
         \`post_id\` bigint(20) NOT NULL COMMENT '笔记ID',
         \`cover_url\` varchar(500) DEFAULT NULL COMMENT '视频封面URL',
         \`video_url\` varchar(500) NOT NULL COMMENT '视频URL',
+        \`mpd_path\` varchar(500) DEFAULT NULL COMMENT 'DASH MPD文件路径',
+        \`transcode_status\` enum('pending','processing','completed','failed','none') DEFAULT 'none' COMMENT '转码状态',
+        \`transcode_task_id\` varchar(100) DEFAULT NULL COMMENT '转码任务ID',
         PRIMARY KEY (\`id\`),
         KEY \`idx_post_id\` (\`post_id\`),
+        KEY \`idx_transcode_status\` (\`transcode_status\`),
         CONSTRAINT \`post_videos_ibfk_1\` FOREIGN KEY (\`post_id\`) REFERENCES \`posts\` (\`id\`) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='笔记视频表';
     `;
@@ -462,6 +470,25 @@ class DatabaseInitializer {
     `;
     await connection.execute(sql);
     console.log('✓ points_log 表创建成功');
+  }
+
+  async createSystemSettingsTable(connection) {
+    const sql = `
+      CREATE TABLE IF NOT EXISTS \`system_settings\` (
+        \`id\` int(11) NOT NULL AUTO_INCREMENT COMMENT '设置ID',
+        \`setting_key\` varchar(100) NOT NULL COMMENT '设置键名',
+        \`setting_value\` text NOT NULL COMMENT '设置值（JSON格式）',
+        \`setting_group\` varchar(50) NOT NULL DEFAULT 'general' COMMENT '设置分组',
+        \`description\` varchar(255) DEFAULT NULL COMMENT '设置描述',
+        \`created_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+        \`updated_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+        PRIMARY KEY (\`id\`),
+        UNIQUE KEY \`uk_setting_key\` (\`setting_key\`),
+        KEY \`idx_setting_group\` (\`setting_group\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统设置表';
+    `;
+    await connection.execute(sql);
+    console.log('✓ system_settings 表创建成功');
   }
 
   async insertDefaultAdmin() {
