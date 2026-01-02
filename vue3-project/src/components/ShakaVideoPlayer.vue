@@ -774,17 +774,27 @@ const selectDefaultBitrateTrack = () => {
     
     console.log(`📹 原始视频最高质量: ${maxOriginalHeight}p, 最高码率: ${Math.round(maxOriginalBandwidth / 1000)}k`)
     
+    // 默认目标高度常量
+    const DEFAULT_TARGET_HEIGHT = 720
+    
     // 确定目标分辨率
     // 如果ABR已禁用且设置了VITE_VIDEO_MAX_RESOLUTION_HEIGHT，使用该配置作为固定分辨率
     // 否则优先720p，但不超过原始最高分辨率
     let targetHeight
-    if (!props.adaptiveBitrate && maxResolutionHeight > 0) {
-      // ABR禁用模式：使用VITE_VIDEO_MAX_RESOLUTION_HEIGHT作为固定分辨率
-      targetHeight = Math.min(maxResolutionHeight, maxOriginalHeight)
-      console.log(`🔒 ABR已禁用，使用固定分辨率: ${targetHeight}p（配置值: ${maxResolutionHeight}p）`)
+    if (!props.adaptiveBitrate) {
+      // ABR禁用模式
+      if (maxResolutionHeight > 0) {
+        // 使用VITE_VIDEO_MAX_RESOLUTION_HEIGHT作为固定分辨率
+        targetHeight = Math.min(maxResolutionHeight, maxOriginalHeight)
+        console.log(`🔒 ABR已禁用，使用固定分辨率: ${targetHeight}p（配置值: ${maxResolutionHeight}p）`)
+      } else {
+        // 未设置最大分辨率限制，使用默认720p
+        targetHeight = Math.min(DEFAULT_TARGET_HEIGHT, maxOriginalHeight)
+        console.log(`🔒 ABR已禁用，使用默认固定分辨率: ${targetHeight}p`)
+      }
     } else {
       // ABR启用模式：优先720p作为默认起始分辨率
-      targetHeight = Math.min(720, maxOriginalHeight)
+      targetHeight = Math.min(DEFAULT_TARGET_HEIGHT, maxOriginalHeight)
     }
     
     // 优先查找目标分辨率的轨道
@@ -819,13 +829,13 @@ const selectDefaultBitrateTrack = () => {
       
       const resolution = `${defaultTrack.width}x${defaultTrack.height}`
       const bitrate = Math.round(defaultTrack.bandwidth / 1000)
-      const note = defaultTrack.height < targetHeight ? `（原始最高${maxOriginalHeight}p）` : ''
+      const note = defaultTrack.height < maxOriginalHeight ? `（原始最高${maxOriginalHeight}p）` : ''
       console.log(`✅ 已选择默认轨道: ${defaultTrack.height}p (${resolution}) 码率: ${bitrate}k ${note}`)
       
       // 如果ABR已启用，延迟重新启用ABR
       if (props.adaptiveBitrate) {
-        const abrMessage = targetHeight === 720 && maxOriginalHeight >= 720
-          ? '🎯 ABR已启用: 优先保持720p，仅在严重卡顿时降级'
+        const abrMessage = targetHeight === DEFAULT_TARGET_HEIGHT && maxOriginalHeight >= DEFAULT_TARGET_HEIGHT
+          ? `🎯 ABR已启用: 优先保持${DEFAULT_TARGET_HEIGHT}p，仅在严重卡顿时降级`
           : `🎯 ABR已启用: 优先保持${targetHeight}p（原始最高${maxOriginalHeight}p），仅在严重卡顿时降级`
         
         // 延迟重新启用ABR，确保默认轨道有足够时间证明其稳定性
