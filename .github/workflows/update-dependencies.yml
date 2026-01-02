@@ -1,0 +1,141 @@
+name: Update Dependencies to Latest
+
+on:
+  schedule:
+    # Run every Monday at 08:00 UTC
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Update target'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - frontend
+          - backend
+
+jobs:
+  update-dependencies:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: |
+            vue3-project/package-lock.json
+            express-project/package-lock.json
+
+      - name: Install npm-check-updates
+        run: npm install -g npm-check-updates
+
+      - name: Update Frontend Dependencies
+        if: |
+          github.event.inputs.target == 'frontend' ||
+          github.event.inputs.target == 'all' ||
+          github.event_name == 'schedule'
+        working-directory: vue3-project
+        run: |
+          echo "Checking for frontend dependency updates..."
+          ncu -u
+          npm install
+          git add package.json package-lock.json
+
+      - name: Update Backend Dependencies
+        if: |
+          github.event.inputs.target == 'backend' ||
+          github.event.inputs.target == 'all' ||
+          github.event_name == 'schedule'
+        working-directory: express-project
+        run: |
+          echo "Checking for backend dependency updates..."
+          ncu -u
+          npm install
+          git add package.json package-lock.json
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --staged --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate change summary
+        if: steps.check_changes.outputs.has_changes == 'true'
+        id: summary
+        run: |
+          echo "## 📦 Dependency Updates" > /tmp/pr_body.md
+          echo "" >> /tmp/pr_body.md
+          echo "Updates all dependencies to latest stable versions." \
+            >> /tmp/pr_body.md
+          echo "" >> /tmp/pr_body.md
+
+          if [ -f vue3-project/package.json ]; then
+            echo "### Frontend (vue3-project)" >> /tmp/pr_body.md
+            echo '```' >> /tmp/pr_body.md
+            cd vue3-project
+            git diff --staged package.json | \
+              grep "^\+\|^\-" | grep -v "^\+\+\+\|^\-\-\-" || echo "No changes"
+            cd ..
+            echo '```' >> /tmp/pr_body.md
+            echo "" >> /tmp/pr_body.md
+          fi
+
+          if [ -f express-project/package.json ]; then
+            echo "### Backend (express-project)" >> /tmp/pr_body.md
+            echo '```' >> /tmp/pr_body.md
+            cd express-project
+            git diff --staged package.json | \
+              grep "^\+\|^\-" | grep -v "^\+\+\+\|^\-\-\-" || echo "No changes"
+            cd ..
+            echo '```' >> /tmp/pr_body.md
+            echo "" >> /tmp/pr_body.md
+          fi
+
+          echo "" >> /tmp/pr_body.md
+          echo "### ⚠️ Testing Required" >> /tmp/pr_body.md
+          echo "Review changes and ensure tests pass." >> /tmp/pr_body.md
+          echo "" >> /tmp/pr_body.md
+          echo "### 🔄 How to test" >> /tmp/pr_body.md
+          echo "1. Pull this branch" >> /tmp/pr_body.md
+          echo "2. Run npm ci in vue3-project and express-project" \
+            >> /tmp/pr_body.md
+          echo "3. Run npm run build to verify builds" >> /tmp/pr_body.md
+          echo "4. Test the application thoroughly" >> /tmp/pr_body.md
+
+      - name: Create Pull Request
+        if: steps.check_changes.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: >
+            chore(deps): update all dependencies to latest stable versions
+          branch: deps/auto-update-${{ github.run_number }}
+          delete-branch: true
+          title: >
+            🔄 chore(deps): Update all dependencies to latest stable versions
+          body-path: /tmp/pr_body.md
+          labels: |
+            dependencies
+            auto-update
+          reviewers: debian1313-ui
+          draft: false
+
+      - name: No updates needed
+        if: steps.check_changes.outputs.has_changes == 'false'
+        run: |
+          echo "✅ All dependencies are already up to date!"
