@@ -2765,6 +2765,8 @@ function handleAvatarError(event) {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  z-index: 1;
 }
 
 .image-section img {
@@ -2967,6 +2969,8 @@ function handleAvatarError(event) {
   display: flex;
   flex-direction: column;
   background: var(--bg-color-primary);
+  position: relative;
+  z-index: 0;
 }
 
 .author-wrapper {
