@@ -144,14 +144,14 @@ jobs:
 
       - name: Upload artifact (Linux/macOS)
         if: matrix.os != 'windows-latest'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: xiaoshiliu-${{ matrix.platform }}
           path: release/xiaoshiliu-${{ matrix.platform }}.tar.gz
 
       - name: Upload artifact (Windows)
         if: matrix.os == 'windows-latest'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: xiaoshiliu-${{ matrix.platform }}
           path: release/xiaoshiliu-${{ matrix.platform }}.zip
