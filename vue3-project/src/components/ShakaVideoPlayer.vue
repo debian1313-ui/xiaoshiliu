@@ -331,7 +331,6 @@ const initPlayer = async () => {
     const switchInterval = parseInt(import.meta.env.VITE_VIDEO_SWITCH_INTERVAL) || 1
     const bandwidthUpgradeTarget = parseFloat(import.meta.env.VITE_VIDEO_BANDWIDTH_UPGRADE_TARGET) || 0.85
     const bandwidthDowngradeTarget = parseFloat(import.meta.env.VITE_VIDEO_BANDWIDTH_DOWNGRADE_TARGET) || 0.50
-    const maxResolutionHeight = parseInt(import.meta.env.VITE_VIDEO_MAX_RESOLUTION_HEIGHT) || 0
     const debugConfig = import.meta.env.VITE_VIDEO_DEBUG_CONFIG === 'true'
     
     const playerConfig = {
@@ -353,12 +352,8 @@ const initPlayer = async () => {
         switchInterval,                                 // 切换间隔（秒）
         bandwidthUpgradeTarget,                         // 带宽升级目标
         bandwidthDowngradeTarget,                       // 带宽降级目标
-        restrictions: {
-          minBandwidth: 0,                              // 最小带宽限制
-          maxBandwidth: Infinity,                       // 最大带宽限制
-          // 最大分辨率高度限制（仅在ABR自动模式下生效，手动选择不受限制）
-          maxHeight: maxResolutionHeight || Infinity
-        }
+        // 使用统一的 restrictions 创建函数
+        restrictions: createRestrictions(maxResolutionHeight)
       }
     }
     
@@ -513,24 +508,29 @@ const toggleQualityMenu = () => {
   showQualityMenu.value = !showQualityMenu.value
 }
 
+// 获取最大分辨率配置
+const maxResolutionHeight = parseInt(import.meta.env.VITE_VIDEO_MAX_RESOLUTION_HEIGHT) || 0
+
+// 创建 restrictions 配置对象
+const createRestrictions = (maxHeight) => ({
+  minBandwidth: 0,
+  maxBandwidth: Infinity,
+  maxHeight: maxHeight || Infinity,
+  minHeight: 0,
+  maxWidth: Infinity,
+  minWidth: 0
+})
+
 // 选择画质
 const selectQuality = (quality) => {
   if (!player) return
 
   if (quality.id === -1) {
     // 自动模式 - 应用最大分辨率限制
-    const maxResolutionHeight = parseInt(import.meta.env.VITE_VIDEO_MAX_RESOLUTION_HEIGHT) || 0
     player.configure({ 
       abr: { 
         enabled: true,
-        restrictions: {
-          minBandwidth: 0,
-          maxBandwidth: Infinity,
-          maxHeight: maxResolutionHeight || Infinity,
-          minHeight: 0,
-          maxWidth: Infinity,
-          minWidth: 0
-        }
+        restrictions: createRestrictions(maxResolutionHeight)
       } 
     })
   } else {
@@ -538,14 +538,7 @@ const selectQuality = (quality) => {
     player.configure({ 
       abr: { 
         enabled: false,
-        restrictions: {
-          minBandwidth: 0,
-          maxBandwidth: Infinity,
-          maxHeight: Infinity,
-          minHeight: 0,
-          maxWidth: Infinity,
-          minWidth: 0
-        }
+        restrictions: createRestrictions(Infinity)
       } 
     })
     const tracks = player.getVariantTracks()
