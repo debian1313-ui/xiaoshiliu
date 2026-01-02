@@ -112,6 +112,7 @@
 | [项目结构](./doc/PROJECT_STRUCTURE.md) | 项目目录结构架构说明 |
 | [数据库设计](./doc/DATABASE_DESIGN.md) | 数据库表结构设计文档 |
 | [API接口文档](./doc/API_DOCS.md) | 后端API接口说明和示例 |
+| [依赖更新自动化](./doc/DEPENDENCY_UPDATES.md) | 自动化依赖更新配置和使用说明 |
 
 ## 项目亮点
 
