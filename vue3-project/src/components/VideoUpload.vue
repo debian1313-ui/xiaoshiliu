@@ -130,7 +130,8 @@ const actualMaxSize = computed(() => {
 
 // 计算实际使用的图片最大大小
 const actualImageMaxSize = computed(() => {
-  return serverImageMaxSize.value !== null ? serverImageMaxSize.value : 5 * 1024 * 1024
+  // 默认使用10MB作为fallback，等待服务器配置加载
+  return serverImageMaxSize.value !== null ? serverImageMaxSize.value : 10 * 1024 * 1024
 })
 
 // 格式化显示的文件大小（MB）
