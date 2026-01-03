@@ -465,7 +465,7 @@ router.post('/chunk', authenticateToken, chunkUpload.single('file'), async (req,
 // 合并分片
 router.post('/chunk/merge', authenticateToken, async (req, res) => {
   try {
-    const { identifier, totalChunks, filename } = req.body;
+    const { identifier, totalChunks, filename, fileType } = req.body;
     
     if (!identifier || !totalChunks || !filename) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
@@ -474,10 +474,26 @@ router.post('/chunk/merge', authenticateToken, async (req, res) => {
       });
     }
     
-    console.log(`🔄 开始合并分片 - 用户ID: ${req.user.id}, 文件名: ${filename}, 总分片数: ${totalChunks}`);
+    // 自动检测文件类型（如果未提供）
+    const ext = path.extname(filename).toLowerCase();
+    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+    const videoExts = ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm'];
     
-    // 合并分片
-    const mergeResult = await mergeChunks(identifier, parseInt(totalChunks), filename);
+    let detectedFileType = fileType;
+    if (!detectedFileType) {
+      if (imageExts.includes(ext)) {
+        detectedFileType = 'image';
+      } else if (videoExts.includes(ext)) {
+        detectedFileType = 'video';
+      } else {
+        detectedFileType = 'video'; // 默认为视频
+      }
+    }
+    
+    console.log(`🔄 开始合并分片 - 用户ID: ${req.user.id}, 文件名: ${filename}, 类型: ${detectedFileType}, 总分片数: ${totalChunks}`);
+    
+    // 合并分片（传入文件类型）
+    const mergeResult = await mergeChunks(identifier, parseInt(totalChunks), filename, detectedFileType);
     
     if (!mergeResult.success) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
@@ -488,54 +504,77 @@ router.post('/chunk/merge', authenticateToken, async (req, res) => {
     
     const filePath = mergeResult.filePath;
     
-    // 使用 ffprobe 验证视频文件有效性
-    console.log(`🔍 使用 ffprobe 验证视频文件: ${filePath}`);
-    const validationResult = await validateVideoMedia(filePath);
+    // 根据文件类型进行不同的处理
+    if (detectedFileType === 'video') {
+      // 使用 ffprobe 验证视频文件有效性
+      console.log(`🔍 使用 ffprobe 验证视频文件: ${filePath}`);
+      const validationResult = await validateVideoMedia(filePath);
+      
+      if (!validationResult.valid) {
+        console.error(`❌ 视频验证失败: ${validationResult.message}`);
+        // 删除无效的视频文件
+        await deleteInvalidVideo(filePath);
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({
+          code: RESPONSE_CODES.VALIDATION_ERROR,
+          message: validationResult.message || '视频文件无效，已删除'
+        });
+      }
+      
+      // 生成视频访问URL
+      const basename = path.basename(filePath);
+      const videoUrl = `${config.upload.video.local.baseUrl}/${config.upload.video.local.uploadDir}/${basename}`;
+      
+      let coverUrl = null;
     
-    if (!validationResult.valid) {
-      console.error(`❌ 视频验证失败: ${validationResult.message}`);
-      // 删除无效的视频文件
-      await deleteInvalidVideo(filePath);
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({
-        code: RESPONSE_CODES.VALIDATION_ERROR,
-        message: validationResult.message || '视频文件无效，已删除'
+      // 如果启用了视频转码，且是本地存储策略，则添加到转码队列
+      if (config.videoTranscoding.enabled && config.upload.video.strategy === 'local') {
+        try {
+          console.log('🎬 将视频添加到转码队列...');
+          
+          const taskId = transcodingQueue.addTask(
+            filePath,
+            req.user.id,
+            videoUrl
+          );
+          
+          console.log(`✅ 视频已加入转码队列 [任务ID: ${taskId}]`);
+        } catch (error) {
+          console.error('❌ 添加到转码队列失败:', error.message);
+          // 转码失败不影响视频上传
+        }
+      }
+      
+      console.log(`✅ 分片合并完成 - 用户ID: ${req.user.id}, 文件名: ${filename}, URL: ${videoUrl}`);
+      
+      res.json({
+        code: RESPONSE_CODES.SUCCESS,
+        message: '视频上传成功',
+        data: {
+          originalname: filename,
+          url: videoUrl,
+          filePath: filePath,
+          coverUrl: coverUrl,
+          transcoding: config.videoTranscoding.enabled && config.upload.video.strategy === 'local',
+          videoInfo: validationResult.info
+        }
+      });
+    } else if (detectedFileType === 'image') {
+      // 图片文件处理
+      const basename = path.basename(filePath);
+      const imageUrl = `${config.upload.image.local.baseUrl}/${config.upload.image.local.uploadDir}/${basename}`;
+      
+      console.log(`✅ 分片合并完成 - 用户ID: ${req.user.id}, 文件名: ${filename}, URL: ${imageUrl}`);
+      
+      res.json({
+        code: RESPONSE_CODES.SUCCESS,
+        message: '图片上传成功',
+        data: {
+          originalname: filename,
+          url: imageUrl,
+          filePath: filePath
+        }
       });
     }
-    
-    // 生成视频访问URL
-    const ext = path.extname(filename);
-    const basename = path.basename(filePath);
-    const videoUrl = `${config.upload.video.local.baseUrl}/${config.upload.video.local.uploadDir}/${basename}`;
-    
-    let coverUrl = null;
-    
-    // 如果启用了视频转码，且是本地存储策略，则添加到转码队列
-    if (config.videoTranscoding.enabled && config.upload.video.strategy === 'local') {
-      try {
-        console.log('🎬 将视频添加到转码队列...');
-        
-        const taskId = transcodingQueue.addTask(
-          filePath,
-          req.user.id,
-          videoUrl
-        );
-        
-        console.log(`✅ 视频已加入转码队列 [任务ID: ${taskId}]`);
-      } catch (error) {
-        console.error('❌ 添加到转码队列失败:', error.message);
-        // 转码失败不影响视频上传
-      }
-    }
-    
-    console.log(`✅ 分片合并完成 - 用户ID: ${req.user.id}, 文件名: ${filename}, URL: ${videoUrl}`);
-    
-    res.json({
-      code: RESPONSE_CODES.SUCCESS,
-      message: '视频上传成功',
-      data: {
-        originalname: filename,
-        url: videoUrl,
-        filePath: filePath,
         coverUrl: coverUrl,
         transcoding: config.videoTranscoding.enabled && config.upload.video.strategy === 'local',
         videoInfo: validationResult.info

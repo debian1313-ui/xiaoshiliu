@@ -156,13 +156,14 @@ export const videoApi = {
    * @returns {Promise<{success: boolean, data?: Object, message?: string}>}
    */
   async mergeChunks(params) {
-    const { identifier, totalChunks, filename } = params
+    const { identifier, totalChunks, filename, fileType } = params
 
     try {
       const response = await request.post('/upload/chunk/merge', {
         identifier,
         totalChunks,
-        filename
+        filename,
+        fileType: fileType || 'video' // 默认为视频
       }, {
         timeout: 300000 // 5分钟超时
       })
@@ -187,10 +188,11 @@ export const videoApi = {
    * @param {Object} options - 选项
    * @param {Function} options.onProgress - 进度回调 (0-100)
    * @param {Function} options.onChunkProgress - 分片进度回调
+   * @param {Function} options.onSpeedUpdate - 速度回调
    * @returns {Promise<{success: boolean, data?: Object, message?: string}>}
    */
   async uploadVideoChunked(file, options = {}) {
-    const { onProgress, onChunkProgress } = options
+    const { onProgress, onChunkProgress, onSpeedUpdate } = options
 
     try {
       // 获取服务器分片配置
@@ -208,6 +210,10 @@ export const videoApi = {
       console.log(`📦 文件大小: ${this.formatFileSize(file.size)}, 分片数: ${totalChunks}`)
 
       let uploadedChunks = 0
+      let uploadedBytes = 0
+      const startTime = Date.now()
+      let lastUpdateTime = startTime
+      let lastUploadedBytes = 0
 
       // 逐个上传分片
       for (let i = 1; i <= totalChunks; i++) {
@@ -224,14 +230,28 @@ export const videoApi = {
         if (verifyResult.exists && verifyResult.valid) {
           console.log(`⏭️ 分片 ${i}/${totalChunks} 已存在，跳过`)
           uploadedChunks++
-          const progress = Math.round((uploadedChunks / totalChunks) * 100)
+          uploadedBytes += chunk.size
+          
+          // 计算进度和速度
+          const progress = Math.round((uploadedBytes / file.size) * 100)
+          const currentTime = Date.now()
+          const timeDiff = (currentTime - lastUpdateTime) / 1000 // 秒
+          const bytesDiff = uploadedBytes - lastUploadedBytes
+          const speed = timeDiff > 0 ? bytesDiff / timeDiff : 0
+          
           onProgress?.(progress)
+          onSpeedUpdate?.(speed)
           onChunkProgress?.({ current: i, total: totalChunks, skipped: true })
+          
+          lastUpdateTime = currentTime
+          lastUploadedBytes = uploadedBytes
           continue
         }
 
         // 上传分片
         console.log(`📤 上传分片 ${i}/${totalChunks}...`)
+        const chunkStartTime = Date.now()
+        
         const uploadResult = await this.uploadChunk(chunk, {
           identifier,
           chunkNumber: i,
@@ -248,9 +268,20 @@ export const videoApi = {
         }
 
         uploadedChunks++
-        const progress = Math.round((uploadedChunks / totalChunks) * 100)
+        uploadedBytes += chunk.size
+        
+        // 计算进度和速度
+        const currentTime = Date.now()
+        const chunkTime = (currentTime - chunkStartTime) / 1000 // 秒
+        const chunkSpeed = chunkTime > 0 ? chunk.size / chunkTime : 0
+        const progress = Math.round((uploadedBytes / file.size) * 100)
+        
         onProgress?.(progress)
+        onSpeedUpdate?.(chunkSpeed)
         onChunkProgress?.({ current: i, total: totalChunks, skipped: false })
+        
+        lastUpdateTime = currentTime
+        lastUploadedBytes = uploadedBytes
         
         console.log(`✅ 分片 ${i}/${totalChunks} 上传成功`)
       }
@@ -260,7 +291,8 @@ export const videoApi = {
       const mergeResult = await this.mergeChunks({
         identifier,
         totalChunks,
-        filename: file.name
+        filename: file.name,
+        fileType: 'video'
       })
 
       if (!mergeResult.success) {

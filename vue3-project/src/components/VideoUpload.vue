@@ -58,6 +58,7 @@
         </div>
         <p class="progress-text">{{ Math.floor(uploadProgress) }}%</p>
         <p v-if="uploadStatus" class="progress-status">{{ uploadStatus }}</p>
+        <p v-if="uploadSpeed > 0" class="speed-info">{{ formatSpeed(uploadSpeed) }}</p>
         <p v-if="chunkInfo.total > 0" class="chunk-info">分片 {{ chunkInfo.current }}/{{ chunkInfo.total }}</p>
       </div>
     </div>
@@ -110,6 +111,7 @@ const customCover = ref(null) // 自定义封面图片URL
 const customCoverFile = ref(null) // 自定义封面图片文件
 const isUploading = ref(false)
 const uploadProgress = ref(0)
+const uploadSpeed = ref(0) // 上传速度（字节/秒）
 const chunkInfo = ref({ current: 0, total: 0 }) // 分片信息
 const uploadStatus = ref('') // 上传状态文字
 const isDragOver = ref(false)
@@ -379,6 +381,7 @@ const startUpload = async () => {
 
   isUploading.value = true
   uploadProgress.value = 0
+  uploadSpeed.value = 0
   chunkInfo.value = { current: 0, total: 0 }
   uploadStatus.value = '准备上传...'
 
@@ -409,6 +412,9 @@ const startUpload = async () => {
             } else {
               uploadStatus.value = '合并中...'
             }
+          },
+          onSpeedUpdate: (speed) => {
+            uploadSpeed.value = speed
           },
           onChunkProgress: (info) => {
             chunkInfo.value = { current: info.current, total: info.total }
@@ -515,6 +521,15 @@ const formatFileSize = (bytes) => {
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+// 格式化上传速度
+const formatSpeed = (bytesPerSecond) => {
+  if (bytesPerSecond === 0) return '0 B/s'
+  const k = 1024
+  const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+  const i = Math.floor(Math.log(bytesPerSecond) / Math.log(k))
+  return parseFloat((bytesPerSecond / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 // 显示消息提示
@@ -777,6 +792,13 @@ defineExpose({
   font-size: 11px;
   color: var(--text-color-tertiary);
   margin: 4px 0 0 0;
+}
+
+.speed-info {
+  font-size: 11px;
+  color: var(--success-color);
+  margin: 2px 0 0 0;
+  font-weight: 500;
 }
 
 .chunk-info {

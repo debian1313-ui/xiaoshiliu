@@ -1,3 +1,10 @@
+import SparkMD5 from 'spark-md5'
+
+// 默认分片大小 3MB
+const DEFAULT_CHUNK_SIZE = 3 * 1024 * 1024
+// 图片分片上传阈值 3MB
+const IMAGE_CHUNK_THRESHOLD = 3 * 1024 * 1024
+
 // 压缩图片函数
 const compressImage = (file, maxSizeMB = 0.8, quality = 0.4) => {
   return new Promise((resolve) => {
@@ -44,6 +51,318 @@ const compressImage = (file, maxSizeMB = 0.8, quality = 0.4) => {
   })
 }
 
+/**
+ * 计算文件MD5（用于生成唯一标识符）
+ * @param {File} file - 文件
+ * @returns {Promise<string>} MD5值
+ */
+async function calculateFileMD5(file) {
+  return new Promise((resolve, reject) => {
+    const spark = new SparkMD5.ArrayBuffer()
+    const reader = new FileReader()
+    const chunkSize = 2 * 1024 * 1024 // 2MB chunks for MD5 calculation
+    let currentChunk = 0
+    const chunks = Math.ceil(file.size / chunkSize)
+
+    reader.onload = (e) => {
+      spark.append(e.target.result)
+      currentChunk++
+
+      if (currentChunk < chunks) {
+        loadNext()
+      } else {
+        resolve(spark.end())
+      }
+    }
+
+    reader.onerror = () => {
+      reject(new Error('文件读取失败'))
+    }
+
+    function loadNext() {
+      const start = currentChunk * chunkSize
+      const end = Math.min(start + chunkSize, file.size)
+      reader.readAsArrayBuffer(file.slice(start, end))
+    }
+
+    loadNext()
+  })
+}
+
+/**
+ * 计算分片MD5
+ * @param {Blob} chunk - 分片数据
+ * @returns {Promise<string>} MD5值
+ */
+async function calculateChunkMD5(chunk) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const spark = new SparkMD5.ArrayBuffer()
+      spark.append(e.target.result)
+      resolve(spark.end())
+    }
+    reader.onerror = () => reject(new Error('分片读取失败'))
+    reader.readAsArrayBuffer(chunk)
+  })
+}
+
+/**
+ * 验证分片是否已存在
+ * @param {string} identifier - 文件标识符
+ * @param {number} chunkNumber - 分片编号
+ * @param {string} md5 - 分片MD5
+ * @returns {Promise<{exists: boolean, valid: boolean}>}
+ */
+async function verifyChunk(identifier, chunkNumber, md5) {
+  try {
+    const response = await fetch(`/api/upload/chunk/verify?identifier=${identifier}&chunkNumber=${chunkNumber}&md5=${md5}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    })
+    const result = await response.json()
+    if (result.code === 200) {
+      return result.data
+    }
+    return { exists: false, valid: false }
+  } catch (error) {
+    console.warn('分片验证失败:', error)
+    return { exists: false, valid: false }
+  }
+}
+
+/**
+ * 上传单个分片
+ * @param {Blob} chunk - 分片数据
+ * @param {Object} params - 分片参数
+ * @returns {Promise<{success: boolean, data?: Object, message?: string}>}
+ */
+async function uploadChunk(chunk, params) {
+  const { identifier, chunkNumber, totalChunks, filename } = params
+  
+  const formData = new FormData()
+  formData.append('file', chunk, `chunk_${chunkNumber}`)
+  formData.append('identifier', identifier)
+  formData.append('chunkNumber', chunkNumber.toString())
+  formData.append('totalChunks', totalChunks.toString())
+  formData.append('filename', filename)
+
+  try {
+    const response = await fetch('/api/upload/chunk', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    })
+    
+    const result = await response.json()
+    return {
+      success: result.code === 200,
+      data: result.data,
+      message: result.message
+    }
+  } catch (error) {
+    console.error(`分片 ${chunkNumber} 上传失败:`, error)
+    return {
+      success: false,
+      message: error.message || '分片上传失败'
+    }
+  }
+}
+
+/**
+ * 合并分片
+ * @param {Object} params - 合并参数
+ * @returns {Promise<{success: boolean, data?: Object, message?: string}>}
+ */
+async function mergeChunks(params) {
+  const { identifier, totalChunks, filename, fileType } = params
+
+  try {
+    const response = await fetch('/api/upload/chunk/merge', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({
+        identifier,
+        totalChunks,
+        filename,
+        fileType: fileType || 'image' // 默认为图片
+      })
+    })
+    
+    const result = await response.json()
+    return {
+      success: result.code === 200,
+      data: result.data,
+      message: result.message
+    }
+  } catch (error) {
+    console.error('分片合并失败:', error)
+    return {
+      success: false,
+      message: error.message || '分片合并失败'
+    }
+  }
+}
+
+/**
+ * 格式化文件大小
+ * @param {number} bytes - 字节数
+ * @returns {string} 格式化后的文件大小
+ */
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+/**
+ * 格式化上传速度
+ * @param {number} bytesPerSecond - 每秒字节数
+ * @returns {string} 格式化后的速度
+ */
+function formatSpeed(bytesPerSecond) {
+  if (bytesPerSecond === 0) return '0 B/s'
+  const k = 1024
+  const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+  const i = Math.floor(Math.log(bytesPerSecond) / Math.log(k))
+  return parseFloat((bytesPerSecond / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+/**
+ * 分片上传图片文件
+ * @param {File} file - 图片文件
+ * @param {Object} options - 选项
+ * @returns {Promise<{success: boolean, data?: Object, message?: string}>}
+ */
+async function uploadImageChunked(file, options = {}) {
+  const { onProgress, onSpeedUpdate, watermark, watermarkOpacity } = options
+
+  try {
+    // 计算文件唯一标识符
+    console.log('📊 计算文件MD5...')
+    const fileMD5 = await calculateFileMD5(file)
+    const identifier = `${fileMD5}_${file.size}`
+    console.log(`📝 文件标识符: ${identifier}`)
+
+    // 计算分片数量
+    const chunkSize = DEFAULT_CHUNK_SIZE
+    const totalChunks = Math.ceil(file.size / chunkSize)
+    console.log(`📦 文件大小: ${formatFileSize(file.size)}, 分片数: ${totalChunks}`)
+
+    let uploadedChunks = 0
+    let uploadedBytes = 0
+    const startTime = Date.now()
+    let lastUpdateTime = startTime
+    let lastUploadedBytes = 0
+
+    // 逐个上传分片
+    for (let i = 1; i <= totalChunks; i++) {
+      const start = (i - 1) * chunkSize
+      const end = Math.min(start + chunkSize, file.size)
+      const chunk = file.slice(start, end)
+
+      // 计算分片MD5用于验证
+      const chunkMD5 = await calculateChunkMD5(chunk)
+
+      // 检查分片是否已存在（断点续传）
+      const verifyResult = await verifyChunk(identifier, i, chunkMD5)
+      
+      if (verifyResult.exists && verifyResult.valid) {
+        console.log(`⏭️ 分片 ${i}/${totalChunks} 已存在，跳过`)
+        uploadedChunks++
+        uploadedBytes += chunk.size
+        
+        // 计算进度和速度
+        const progress = Math.round((uploadedBytes / file.size) * 100)
+        const currentTime = Date.now()
+        const timeDiff = (currentTime - lastUpdateTime) / 1000 // 秒
+        const bytesDiff = uploadedBytes - lastUploadedBytes
+        const speed = timeDiff > 0 ? bytesDiff / timeDiff : 0
+        
+        onProgress?.(progress)
+        onSpeedUpdate?.(speed)
+        
+        lastUpdateTime = currentTime
+        lastUploadedBytes = uploadedBytes
+        continue
+      }
+
+      // 上传分片
+      console.log(`📤 上传分片 ${i}/${totalChunks}...`)
+      const chunkStartTime = Date.now()
+      
+      const uploadResult = await uploadChunk(chunk, {
+        identifier,
+        chunkNumber: i,
+        totalChunks,
+        filename: file.name
+      })
+
+      if (!uploadResult.success) {
+        console.error(`❌ 分片 ${i} 上传失败:`, uploadResult.message)
+        return {
+          success: false,
+          message: `分片 ${i} 上传失败: ${uploadResult.message}`
+        }
+      }
+
+      uploadedChunks++
+      uploadedBytes += chunk.size
+      
+      // 计算进度和速度
+      const currentTime = Date.now()
+      const chunkTime = (currentTime - chunkStartTime) / 1000 // 秒
+      const chunkSpeed = chunkTime > 0 ? chunk.size / chunkTime : 0
+      const progress = Math.round((uploadedBytes / file.size) * 100)
+      
+      onProgress?.(progress)
+      onSpeedUpdate?.(chunkSpeed)
+      
+      lastUpdateTime = currentTime
+      lastUploadedBytes = uploadedBytes
+      
+      console.log(`✅ 分片 ${i}/${totalChunks} 上传成功`)
+    }
+
+    // 合并分片
+    console.log('🔄 开始合并分片...')
+    const mergeResult = await mergeChunks({
+      identifier,
+      totalChunks,
+      filename: file.name,
+      fileType: 'image'
+    })
+
+    if (!mergeResult.success) {
+      console.error('❌ 分片合并失败:', mergeResult.message)
+      return {
+        success: false,
+        message: mergeResult.message || '分片合并失败'
+      }
+    }
+
+    console.log('✅ 图片上传完成:', mergeResult.data)
+    return {
+      success: true,
+      data: mergeResult.data
+    }
+  } catch (error) {
+    console.error('❌ 分片上传失败:', error)
+    return {
+      success: false,
+      message: error.message || '图片上传失败'
+    }
+  }
+}
+
 export async function uploadImage(file, options = {}) {
   try {
     if (!file) throw new Error('请选择要上传的文件')
@@ -53,6 +372,29 @@ export async function uploadImage(file, options = {}) {
     // 压缩图片
     const compressedFile = await compressImage(file)
 
+    // 如果压缩后的文件大小超过3MB，使用分片上传
+    if (compressedFile.size > IMAGE_CHUNK_THRESHOLD) {
+      console.log(`📦 文件大小 ${formatFileSize(compressedFile.size)} 超过阈值，使用分片上传`)
+      
+      const result = await uploadImageChunked(compressedFile, {
+        onProgress: options.onProgress,
+        onSpeedUpdate: options.onSpeedUpdate,
+        watermark: options.watermark,
+        watermarkOpacity: options.watermarkOpacity
+      })
+      
+      if (result.success) {
+        return {
+          success: true,
+          data: { url: result.data.url, originalName: compressedFile.name, size: compressedFile.size },
+          message: '上传成功'
+        }
+      } else {
+        throw new Error(result.message || '分片上传失败')
+      }
+    }
+
+    // 否则使用普通上传
     const formData = new FormData()
     const filename = options.filename || (compressedFile instanceof File ? compressedFile.name : 'image.png')
     formData.append('file', compressedFile, filename)
@@ -110,7 +452,7 @@ export async function uploadImage(file, options = {}) {
 
 export async function uploadImages(files, options = {}) {
   try {
-    const { maxCount = 9, onProgress, onSingleComplete, watermark, watermarkOpacity } = options
+    const { maxCount = 9, onProgress, onSingleComplete, onSpeedUpdate, watermark, watermarkOpacity } = options
     const fileArray = Array.from(files)
 
     if (fileArray.length === 0) throw new Error('请选择要上传的文件')
@@ -129,8 +471,14 @@ export async function uploadImages(files, options = {}) {
           percent: Math.round(((i + 1) / fileArray.length) * 100)
         })
 
-        // 传递水印选项（包括透明度）
-        const result = await uploadImage(file, { watermark, watermarkOpacity })
+        // 传递水印选项（包括透明度）和速度回调
+        const result = await uploadImage(file, { 
+          watermark, 
+          watermarkOpacity,
+          onSpeedUpdate: (speed) => {
+            onSpeedUpdate?.({ fileIndex: i, speed, fileName: file.name })
+          }
+        })
 
         if (result.success) {
           results.push(result.data)
@@ -242,6 +590,14 @@ export function formatFileSize(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
+export function formatSpeed(bytesPerSecond) {
+  if (bytesPerSecond === 0) return '0 B/s'
+  const k = 1024
+  const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+  const i = Math.floor(Math.log(bytesPerSecond) / Math.log(k))
+  return parseFloat((bytesPerSecond / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
 export function createImagePreview(file) {
   return new Promise((resolve, reject) => {
     if (!file || !file.type.startsWith('image/')) {
@@ -262,5 +618,6 @@ export default {
   uploadCroppedImage,
   validateImageFile,
   formatFileSize,
+  formatSpeed,
   createImagePreview
 }

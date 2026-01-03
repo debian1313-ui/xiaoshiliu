@@ -36,6 +36,10 @@
           <p>{{ isUploading ? '上传中...' : '添加图片' }}</p>
           <p class="upload-hint">{{ imageList.length }}/{{ maxImages }}</p>
           <p v-if="!isUploading" class="drag-hint">或拖拽图片到此处</p>
+          <div v-if="isUploading && uploadProgress.total > 0" class="upload-progress-info">
+            <p class="progress-detail">{{ uploadProgress.current }}/{{ uploadProgress.total }}</p>
+            <p v-if="uploadProgress.speed > 0" class="speed-detail">{{ formatSpeed(uploadProgress.speed) }}</p>
+          </div>
         </div>
       </div>
     </div>
@@ -114,6 +118,7 @@ const imageList = ref([])
 const error = ref('')
 const isDragOver = ref(false)
 const isUploading = ref(false)
+const uploadProgress = ref({ current: 0, total: 0, speed: 0 }) // 上传进度信息
 
 // 水印选项（默认关闭，用户勾选后才添加水印）
 const enableWatermark = ref(false)
@@ -559,6 +564,7 @@ const uploadAllImages = async () => {
   }
 
   isUploading.value = true
+  uploadProgress.value = { current: 0, total: files.length, speed: 0 }
   error.value = ''
 
   try {
@@ -567,7 +573,14 @@ const uploadAllImages = async () => {
 
     const result = await uploadApi.uploadImages(files, { 
       watermark: enableWatermark.value,
-      watermarkOpacity: watermarkOpacity.value 
+      watermarkOpacity: watermarkOpacity.value,
+      onProgress: (progress) => {
+        uploadProgress.value.current = progress.current
+        uploadProgress.value.total = progress.total
+      },
+      onSpeedUpdate: (speedInfo) => {
+        uploadProgress.value.speed = speedInfo.speed
+      }
     })
 
     if (result.success && result.data && result.data.uploaded && result.data.uploaded.length > 0) {
@@ -602,12 +615,22 @@ const uploadAllImages = async () => {
     throw err
   } finally {
     isUploading.value = false
+    uploadProgress.value = { current: 0, total: 0, speed: 0 }
   }
 }
 
 // 获取图片数量
 const getImageCount = () => {
   return imageList.value.length
+}
+
+// 格式化上传速度
+const formatSpeed = (bytesPerSecond) => {
+  if (bytesPerSecond === 0) return '0 B/s'
+  const k = 1024
+  const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+  const i = Math.floor(Math.log(bytesPerSecond) / Math.log(k))
+  return parseFloat((bytesPerSecond / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 // 重置组件
@@ -861,6 +884,24 @@ defineExpose({
 .upload-icon.uploading {
   animation: spin 1s linear infinite;
   color: var(--primary-color);
+}
+
+.upload-progress-info {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-color-secondary);
+}
+
+.progress-detail {
+  margin: 2px 0;
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+.speed-detail {
+  margin: 2px 0;
+  color: var(--success-color);
+  font-weight: 500;
 }
 
 .image-item {

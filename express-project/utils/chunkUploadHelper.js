@@ -160,9 +160,10 @@ async function checkUploadComplete(identifier, totalChunks) {
  * @param {string} identifier - 文件唯一标识符
  * @param {number} totalChunks - 总分片数
  * @param {string} filename - 原始文件名
+ * @param {string} fileType - 文件类型 ('image' 或 'video')
  * @returns {Promise<{success: boolean, filePath?: string, message?: string}>}
  */
-async function mergeChunks(identifier, totalChunks, filename) {
+async function mergeChunks(identifier, totalChunks, filename, fileType = 'video') {
   try {
     const chunkDir = getChunkDir(identifier);
     
@@ -175,8 +176,14 @@ async function mergeChunks(identifier, totalChunks, filename) {
       };
     }
     
-    // 生成输出文件路径
-    const uploadDir = path.join(process.cwd(), config.upload.video.local.uploadDir);
+    // 根据文件类型选择上传目录
+    let uploadDir;
+    if (fileType === 'image') {
+      uploadDir = path.join(process.cwd(), config.upload.image.local.uploadDir);
+    } else {
+      uploadDir = path.join(process.cwd(), config.upload.video.local.uploadDir);
+    }
+    
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
