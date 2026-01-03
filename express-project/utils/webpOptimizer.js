@@ -229,7 +229,7 @@ class WebPOptimizer {
    * @param {number} fontSize - 字体大小
    * @param {string} color - 颜色 (hex格式)
    * @param {number} opacity - 透明度 (0-100)
-   * @param {string|null} fontPath - 自定义字体路径
+   * @param {string|null} fontPath - 自定义字体路径（已弃用，改用系统字体）
    * @returns {Buffer} SVG缓冲区
    */
   createTextWatermarkSvg(text, fontSize, color, opacity, fontPath = null) {
@@ -248,68 +248,36 @@ class WebPOptimizer {
     const width = Math.ceil(chineseChars * fontSize + otherChars * charWidth) + 20;
     const height = fontSize + 10;
     
-    // 构建字体相关的CSS
-    let fontFaceRule = '';
-    // 使用通用的衬线字体作为fallback，这些在大多数系统上都有中文支持
-    let fontFamily = '"Noto Sans CJK SC", "Source Han Sans CN", "WenQuanYi Zen Hei", "WenQuanYi Micro Hei", "Droid Sans Fallback", "Microsoft YaHei", "PingFang SC", "SimHei", "Heiti SC", sans-serif';
+    // 使用系统安装的中文字体
+    // 注意：Sharp使用librsvg渲染SVG，librsvg依赖fontconfig发现系统字体
+    // base64嵌入字体不被librsvg支持，必须使用系统已安装的字体
+    // Dockerfile中已安装 font-noto-cjk，提供 "Noto Sans CJK" 字体
+    const fontFamily = '"Noto Sans CJK SC", "Noto Sans CJK", sans-serif';
     
-    // 如果提供了自定义字体路径，将字体嵌入为base64
-    // 注意：librsvg对自定义字体的支持有限，可能需要安装系统字体
-    if (fontPath && fs.existsSync(fontPath)) {
-      try {
-        // 读取字体文件并转换为base64
-        const fontData = fs.readFileSync(fontPath);
-        const fontBase64 = fontData.toString('base64');
-        
-        // 根据字体文件扩展名确定MIME类型和格式
-        const ext = path.extname(fontPath).toLowerCase();
-        let mimeType = 'font/ttf';
-        let formatHint = 'truetype';
-        if (ext === '.otf') {
-          mimeType = 'font/otf';
-          formatHint = 'opentype';
-        } else if (ext === '.woff') {
-          mimeType = 'font/woff';
-          formatHint = 'woff';
-        } else if (ext === '.woff2') {
-          mimeType = 'font/woff2';
-          formatHint = 'woff2';
-        }
-        
-        // 使用多种方式声明字体，增加兼容性
-        fontFaceRule = `
-          @font-face {
-            font-family: 'CustomWatermarkFont';
-            src: url('data:${mimeType};base64,${fontBase64}') format('${formatHint}');
-            font-weight: normal;
-            font-style: normal;
-          }`;
-        fontFamily = '"CustomWatermarkFont", "Noto Sans CJK SC", "Source Han Sans CN", "WenQuanYi Zen Hei", "SimHei", sans-serif';
-        console.log(`WebP Optimizer: 使用自定义字体(base64嵌入) - ${fontPath}, 大小: ${Math.round(fontData.length/1024)}KB`);
-      } catch (fontError) {
-        console.error(`WebP Optimizer: 读取字体文件失败: ${fontError.message}`);
-      }
+    if (fontPath) {
+      console.log(`WebP Optimizer: 忽略自定义字体路径 ${fontPath}，改用系统安装的 Noto Sans CJK 字体（librsvg不支持base64字体嵌入）`);
     } else {
-      console.log(`WebP Optimizer: 使用系统默认中文字体`);
+      console.log(`WebP Optimizer: 使用系统安装的 Noto Sans CJK 字体`);
     }
     
     // 创建SVG - 使用dominant-baseline和text-anchor来更好地定位文字
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-      <defs>
-        <style type="text/css">
-          ${fontFaceRule}
-          .watermark-text {
-            font-family: ${fontFamily};
-            font-size: ${fontSize}px;
-            fill: rgba(${r}, ${g}, ${b}, ${a});
-            font-weight: normal;
-          }
-        </style>
-      </defs>
-      <text x="10" y="${fontSize}" class="watermark-text">${this.escapeXml(text)}</text>
-    </svg>`;
+    // XML声明使用UTF-8编码确保中文字符正确处理
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+  <defs>
+    <style type="text/css">
+      .watermark-text {
+        font-family: ${fontFamily};
+        font-size: ${fontSize}px;
+        fill: rgba(${r}, ${g}, ${b}, ${a});
+        font-weight: normal;
+      }
+    </style>
+  </defs>
+  <text x="10" y="${fontSize}" class="watermark-text">${this.escapeXml(text)}</text>
+</svg>`;
     
-    return Buffer.from(svg);
+    return Buffer.from(svg, 'utf8');
   }
 
   /**
@@ -621,9 +589,9 @@ class WebPOptimizer {
     
     // 用户可以通过 context.applyWatermark 控制是否添加水印
     // 如果未指定（undefined），则使用后端配置的默认值
-    // 如果指定了 false，则不添加水印
-    // 如果指定了 true，则添加水印（前提是后端已启用）
-    const userWantsWatermark = context.applyWatermark !== false; // 默认为 true
+    // 如果指定了 false 或 'false'，则不添加水印
+    // 如果指定了 true 或 'true'，则添加水印（前提是后端已启用）
+    const userWantsWatermark = context.applyWatermark !== false && context.applyWatermark !== 'false'; // 默认为 true
     const shouldApplyWatermark = userWantsWatermark && (this.options.enableWatermark || this.options.enableUsernameWatermark);
     const shouldResize = this.options.maxWidth || this.options.maxHeight;
     
@@ -786,14 +754,7 @@ if (webpOptimizer.options.enableWatermark) {
   console.log(`  - 类型: ${webpOptimizer.options.watermarkType}`);
   if (webpOptimizer.options.watermarkType === 'text') {
     console.log(`  - 文字: ${webpOptimizer.options.watermarkText || '(未配置)'}`);
-    const fontPath = webpOptimizer.options.watermarkFontPath;
-    if (fontPath) {
-      const fontExists = fs.existsSync(fontPath);
-      console.log(`  - 字体: ${fontPath}`);
-      console.log(`  - 字体存在: ${fontExists ? '是' : '否 ⚠️ 请检查路径!'}`);
-    } else {
-      console.log(`  - 字体: 使用系统默认字体`);
-    }
+    console.log(`  - 字体: Noto Sans CJK (系统字体，支持中文)`);
   } else if (webpOptimizer.options.watermarkType === 'image') {
     const imgPath = webpOptimizer.options.watermarkImage;
     const imgExists = imgPath && fs.existsSync(imgPath);
@@ -807,14 +768,7 @@ console.log(`用户名水印: ${webpOptimizer.options.enableUsernameWatermark ? 
 if (webpOptimizer.options.enableUsernameWatermark) {
   console.log(`  - 文字: ${webpOptimizer.options.usernameWatermarkText}`);
   console.log(`  - 位置: ${webpOptimizer.options.usernameWatermarkPosition}`);
-  const fontPath = webpOptimizer.options.usernameWatermarkFontPath;
-  if (fontPath) {
-    const fontExists = fs.existsSync(fontPath);
-    console.log(`  - 字体: ${fontPath}`);
-    console.log(`  - 字体存在: ${fontExists ? '是' : '否 ⚠️ 请检查路径!'}`);
-  } else {
-    console.log(`  - 字体: 使用系统默认字体`);
-  }
+  console.log(`  - 字体: Noto Sans CJK (系统字体，支持中文)`);
 }
 console.log('==========================================');
 
