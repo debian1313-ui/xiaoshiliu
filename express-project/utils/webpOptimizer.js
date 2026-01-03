@@ -380,21 +380,35 @@ class WebPOptimizer {
       const opacity = this.options.watermarkOpacity / 100;
       console.log(`WebP Optimizer: 水印缩放 - 目标尺寸: ${newWidth}x${newHeight}, 透明度: ${opacity * 100}%`);
       
-      // 获取水印Buffer - 简单调整大小，保持原有透明度
+      // 获取水印Buffer - 先调整大小
+      const resizedWatermark = watermark.resize(newWidth, newHeight).ensureAlpha();
+      
       let watermarkBuffer;
       if (opacity < 1) {
-        // 需要调整透明度时，使用 linear 方法
-        watermarkBuffer = await watermark
-          .resize(newWidth, newHeight)
-          .ensureAlpha()
-          .linear(opacity, 0)  // 使用 linear 调整整体透明度
-          .toBuffer();
+        // 需要调整透明度时，提取并修改alpha通道
+        // 使用 raw 格式获取像素数据，手动调整alpha通道
+        const { data, info } = await resizedWatermark
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+        
+        // 修改每个像素的alpha通道
+        for (let i = 3; i < data.length; i += 4) {
+          data[i] = Math.round(data[i] * opacity);
+        }
+        
+        // 重新创建图片
+        watermarkBuffer = await sharp(data, {
+          raw: {
+            width: info.width,
+            height: info.height,
+            channels: 4
+          }
+        }).png().toBuffer();
+        
+        console.log(`WebP Optimizer: 已应用水印透明度调整`);
       } else {
         // 不需要调整透明度时，直接使用原图
-        watermarkBuffer = await watermark
-          .resize(newWidth, newHeight)
-          .ensureAlpha()
-          .toBuffer();
+        watermarkBuffer = await resizedWatermark.toBuffer();
       }
       
       // 计算位置
@@ -548,14 +562,23 @@ class WebPOptimizer {
         if (this.options.enableWatermark) {
           if (this.options.watermarkType === 'text') {
             image = await this.applyTextWatermark(image, metadata, context);
+            // 获取buffer并重新创建Sharp实例，确保composite操作被应用
+            const buffer = await image.toBuffer();
+            image = sharp(buffer);
           } else if (this.options.watermarkType === 'image') {
             image = await this.applyImageWatermark(image, metadata);
+            // 获取buffer并重新创建Sharp实例，确保composite操作被应用
+            const buffer = await image.toBuffer();
+            image = sharp(buffer);
           }
         }
         
         // 应用用户名水印
         if (this.options.enableUsernameWatermark) {
           image = await this.applyUsernameWatermark(image, metadata, context);
+          // 获取buffer并重新创建Sharp实例，确保composite操作被应用
+          const buffer = await image.toBuffer();
+          image = sharp(buffer);
         }
       }
       
