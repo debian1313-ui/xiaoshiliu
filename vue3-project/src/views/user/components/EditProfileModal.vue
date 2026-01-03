@@ -498,7 +498,7 @@ const handleDrop = (event) => {
 
 const validateFile = (file) => {
   const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-  const maxSize = 5 * 1024 * 1024
+  const maxSize = 100 * 1024 * 1024
 
   if (!validTypes.includes(file.type)) {
     const errorMsg = '不填有效的图片格式 (JPEG, PNG, GIF, WebP)'
@@ -509,9 +509,9 @@ const validateFile = (file) => {
 
   if (file.size > maxSize) {
     const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1)
-    const errorMsg = `图片大小为 ${fileSizeMB}MB，超过 5MB 限制，不填更小的图片`
+    const errorMsg = `图片大小为 ${fileSizeMB}MB，超过 100MB 限制，不填更小的图片`
 
-    avatarError.value = '图片大小不能超过 5MB'
+    avatarError.value = '图片大小不能超过 100MB'
     $message.error(errorMsg)
     return false
   }

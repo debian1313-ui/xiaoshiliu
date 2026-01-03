@@ -4,7 +4,7 @@ const { HTTP_STATUS, RESPONSE_CODES } = require('../constants');
 const multer = require('multer');
 const path = require('path');
 const { authenticateToken } = require('../middleware/auth');
-const { uploadFile, uploadVideo } = require('../utils/uploadHelper');
+const { uploadFile, uploadVideo, uploadImage } = require('../utils/uploadHelper');
 const transcodingQueue = require('../utils/transcodingQueue');
 const config = require('../config/config');
 const { pool } = require('../config/config');
@@ -13,6 +13,7 @@ const {
   verifyChunk, 
   checkUploadComplete, 
   mergeChunks,
+  mergeImageChunks,
   startCleanupScheduler
 } = require('../utils/chunkUploadHelper');
 const { validateVideoMedia, deleteInvalidVideo } = require('../utils/videoTranscoder');
@@ -48,7 +49,7 @@ const upload = multer({
   storage: storage,
   fileFilter: imageFileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB 限制
+    fileSize: 100 * 1024 * 1024 // 100MB 限制
   }
 });
 
@@ -371,7 +372,9 @@ router.get('/chunk/config', authenticateToken, (req, res) => {
     message: '获取分片配置成功',
     data: {
       chunkSize: config.upload.video.chunk.chunkSize,
-      maxFileSize: config.upload.video.maxSizeBytes // 使用配置中的视频大小限制
+      maxFileSize: config.upload.video.maxSizeBytes, // 使用配置中的视频大小限制
+      imageMaxSize: 100 * 1024 * 1024, // 图片最大100MB
+      imageChunkThreshold: 3 * 1024 * 1024 // 图片超过3MB使用分片上传
     }
   });
 });
@@ -552,11 +555,101 @@ router.post('/chunk/merge', authenticateToken, async (req, res) => {
 
 // 注意：使用云端图床后，文件删除由图床服务商管理
 
+// 合并图片分片
+router.post('/chunk/merge/image', authenticateToken, async (req, res) => {
+  try {
+    const { identifier, totalChunks, filename, watermark, watermarkOpacity } = req.body;
+    
+    if (!identifier || !totalChunks || !filename) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        code: RESPONSE_CODES.VALIDATION_ERROR,
+        message: '缺少必要参数'
+      });
+    }
+    
+    console.log(`🔄 开始合并图片分片 - 用户ID: ${req.user.id}, 文件名: ${filename}, 总分片数: ${totalChunks}`);
+    
+    // 合并分片得到Buffer
+    const mergeResult = await mergeImageChunks(identifier, parseInt(totalChunks), filename);
+    
+    if (!mergeResult.success) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        code: RESPONSE_CODES.VALIDATION_ERROR,
+        message: mergeResult.message || '图片分片合并失败'
+      });
+    }
+    
+    // 解析水印选项
+    const applyWatermark = parseWatermarkFlag(watermark);
+    let customOpacity = null;
+    if (watermarkOpacity !== undefined) {
+      const opacity = parseInt(watermarkOpacity, 10);
+      if (!isNaN(opacity) && opacity >= 10 && opacity <= 100) {
+        customOpacity = opacity;
+      }
+    }
+    
+    // 准备用户上下文（用于水印）
+    const userId = req.user?.xise_id || req.user?.user_id || 'guest';
+    const nickname = req.user?.nickname || '';
+    const context = {
+      username: nickname ? `${nickname} @${userId}` : userId,
+      userId: req.user?.id,
+      applyWatermark: applyWatermark,
+      customOpacity: customOpacity
+    };
+    
+    // 根据文件扩展名确定MIME类型
+    const ext = path.extname(filename).toLowerCase();
+    const mimeTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp'
+    };
+    const mimetype = mimeTypes[ext] || 'image/jpeg';
+    
+    // 使用统一上传函数处理图片（根据配置选择策略）
+    const uploadResult = await uploadImage(
+      mergeResult.buffer,
+      filename,
+      mimetype,
+      context
+    );
+    
+    if (uploadResult.success) {
+      console.log(`✅ 图片分片上传成功 - 用户ID: ${req.user.id}, 文件名: ${filename}`);
+      
+      res.json({
+        code: RESPONSE_CODES.SUCCESS,
+        message: '图片上传成功',
+        data: {
+          originalname: filename,
+          size: mergeResult.buffer.length,
+          url: uploadResult.url
+        }
+      });
+    } else {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({
+        code: RESPONSE_CODES.VALIDATION_ERROR,
+        message: uploadResult.message || '图片上传失败'
+      });
+    }
+  } catch (error) {
+    console.error('图片分片合并失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      code: RESPONSE_CODES.ERROR,
+      message: '图片分片合并失败'
+    });
+  }
+});
+
 // 错误处理中间件
 router.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '文件大小超过限制（5MB）' });
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '文件大小超过限制（100MB）' });
     }
     if (error.code === 'LIMIT_FILE_COUNT') {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '文件数量超过限制（9个）' });

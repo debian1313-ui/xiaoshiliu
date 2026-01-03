@@ -1190,7 +1190,7 @@ const handleAvatarDrop = (event, fieldKey) => {
 const showAvatarCropDialog = async (file, fieldKey) => {
   // 验证文件
   const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-  const maxSize = 5 * 1024 * 1024
+  const maxSize = 100 * 1024 * 1024
 
   if (!validTypes.includes(file.type)) {
     avatarErrors.value[fieldKey] = '请选择有效的图片格式 (JPEG, PNG, GIF, WebP)'
@@ -1199,7 +1199,7 @@ const showAvatarCropDialog = async (file, fieldKey) => {
 
   if (file.size > maxSize) {
     const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1)
-    avatarErrors.value[fieldKey] = `图片大小为 ${fileSizeMB}MB，超过 5MB 限制，请选择更小的图片`
+    avatarErrors.value[fieldKey] = `图片大小为 ${fileSizeMB}MB，超过 100MB 限制，请选择更小的图片`
     return
   }
 

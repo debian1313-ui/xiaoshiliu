@@ -341,6 +341,48 @@ function stopCleanupScheduler() {
   }
 }
 
+/**
+ * 合并图片分片文件
+ * @param {string} identifier - 文件唯一标识符
+ * @param {number} totalChunks - 总分片数
+ * @param {string} filename - 原始文件名
+ * @returns {Promise<{success: boolean, buffer?: Buffer, message?: string}>}
+ */
+async function mergeImageChunks(identifier, totalChunks, filename) {
+  try {
+    const chunkDir = getChunkDir(identifier);
+    
+    // 确保所有分片都存在
+    const { complete, missingChunks } = await checkUploadComplete(identifier, totalChunks);
+    if (!complete) {
+      return { 
+        success: false, 
+        message: `分片不完整，缺少: ${missingChunks.join(', ')}` 
+      };
+    }
+    
+    // 合并所有分片到内存
+    const buffers = [];
+    for (let i = 1; i <= totalChunks; i++) {
+      const chunkPath = getChunkPath(identifier, i);
+      const chunkBuffer = fs.readFileSync(chunkPath);
+      buffers.push(chunkBuffer);
+    }
+    
+    const mergedBuffer = Buffer.concat(buffers);
+    
+    // 清理分片目录
+    await cleanupChunkDir(identifier);
+    
+    console.log(`✅ 图片分片合并完成: ${filename}, 大小: ${mergedBuffer.length} bytes`);
+    
+    return { success: true, buffer: mergedBuffer };
+  } catch (error) {
+    console.error(`❌ 合并图片分片失败 [${identifier}]:`, error.message);
+    return { success: false, message: error.message };
+  }
+}
+
 module.exports = {
   ensureChunkDir,
   getChunkDir,
@@ -349,6 +391,7 @@ module.exports = {
   verifyChunk,
   checkUploadComplete,
   mergeChunks,
+  mergeImageChunks,
   cleanupChunkDir,
   cleanupExpiredChunks,
   startCleanupScheduler,

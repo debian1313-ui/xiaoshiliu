@@ -72,7 +72,7 @@
     <div class="upload-tips">
       <p>• 最多上传{{ maxImages }}张图片</p>
       <p>• 支持 JPG、PNG 格式</p>
-      <p>• 单张图片不超过5MB</p>
+      <p>• 单张图片不超过100MB</p>
       <p class="drag-tip">• <span class="desktop-tip">拖拽图片可调整顺序</span><span class="mobile-tip">长按图片可拖拽排序</span></p>
     </div>
 
@@ -237,10 +237,10 @@ const addFiles = async (files) => {
 
   // 验证所有文件
   for (const file of fileArray) {
-    // 先检查文件大小
-    if (file.size > 5 * 1024 * 1024) {
+    // 先检查文件大小（100MB限制）
+    if (file.size > 100 * 1024 * 1024) {
       const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1)
-      const errorMsg = `图片大小为 ${fileSizeMB}MB，超过 5MB 限制，请选择更小的图片`
+      const errorMsg = `图片大小为 ${fileSizeMB}MB，超过 100MB 限制，请选择更小的图片`
 
       // 显示Toast提示
       showMessage(errorMsg, 'error')
