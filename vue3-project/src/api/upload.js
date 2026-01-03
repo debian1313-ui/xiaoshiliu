@@ -4,6 +4,31 @@ import SparkMD5 from 'spark-md5'
 const DEFAULT_CHUNK_SIZE = 3 * 1024 * 1024
 // 图片分片上传阈值 3MB
 const IMAGE_CHUNK_THRESHOLD = 3 * 1024 * 1024
+// 默认图片最大大小 5MB (will be overridden by server config)
+let IMAGE_MAX_SIZE = 5 * 1024 * 1024
+
+/**
+ * 获取服务器图片配置
+ * @returns {Promise<{imageMaxFileSize: number}>}
+ */
+async function getImageConfig() {
+  try {
+    const response = await fetch('/api/upload/chunk/config', {
+      headers: {
+        'Authorization': `******'token')}`
+      }
+    })
+    const result = await response.json()
+    if (result.code === 200 && result.data && result.data.imageMaxFileSize) {
+      IMAGE_MAX_SIZE = result.data.imageMaxFileSize
+      return { imageMaxFileSize: result.data.imageMaxFileSize }
+    }
+    return { imageMaxFileSize: IMAGE_MAX_SIZE }
+  } catch (error) {
+    console.warn('获取图片配置失败，使用默认配置:', error)
+    return { imageMaxFileSize: IMAGE_MAX_SIZE }
+  }
+}
 
 // 压缩图片函数
 const compressImage = (file, maxSizeMB = 0.8, quality = 0.4) => {
@@ -367,7 +392,14 @@ export async function uploadImage(file, options = {}) {
   try {
     if (!file) throw new Error('请选择要上传的文件')
     if (file instanceof File && !file.type.startsWith('image/')) throw new Error('请选择图片文件')
-    if (file.size > 5 * 1024 * 1024) throw new Error('图片大小不能超过5MB')
+    
+    // 获取服务器配置的图片最大大小
+    await getImageConfig()
+    
+    if (file.size > IMAGE_MAX_SIZE) {
+      const maxSizeMB = Math.round(IMAGE_MAX_SIZE / (1024 * 1024))
+      throw new Error(`图片大小不能超过${maxSizeMB}MB`)
+    }
 
     // 压缩图片
     const compressedFile = await compressImage(file)
@@ -566,7 +598,7 @@ export async function uploadCroppedImage(blob, options = {}) {
 
 export function validateImageFile(file, options = {}) {
   const {
-    maxSize = 5 * 1024 * 1024,
+    maxSize = IMAGE_MAX_SIZE,
     allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
   } = options
 

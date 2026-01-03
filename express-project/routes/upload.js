@@ -375,7 +375,8 @@ router.get('/chunk/config', authenticateToken, (req, res) => {
     message: '获取分片配置成功',
     data: {
       chunkSize: config.upload.video.chunk.chunkSize,
-      maxFileSize: config.upload.video.maxSizeBytes // 使用配置中的视频大小限制
+      maxFileSize: config.upload.video.maxSizeBytes, // 使用配置中的视频大小限制
+      imageMaxFileSize: config.upload.image.maxSizeBytes // 图片最大上传大小
     }
   });
 });
@@ -392,7 +393,7 @@ router.get('/chunk/verify', authenticateToken, async (req, res) => {
       });
     }
     
-    const result = await verifyChunk(identifier, parseInt(chunkNumber), md5);
+    const result = await verifyChunk(identifier, parseInt(chunkNumber), md5, req.user.id);
     
     res.json({
       code: RESPONSE_CODES.SUCCESS,
@@ -434,7 +435,8 @@ router.post('/chunk', authenticateToken, chunkUpload.single('file'), async (req,
     const saveResult = await saveChunk(
       req.file.buffer,
       identifier,
-      parseInt(chunkNumber)
+      parseInt(chunkNumber),
+      req.user.id
     );
     
     if (!saveResult.success) {
@@ -445,7 +447,7 @@ router.post('/chunk', authenticateToken, chunkUpload.single('file'), async (req,
     }
     
     // 检查是否所有分片都已上传
-    const checkResult = await checkUploadComplete(identifier, parseInt(totalChunks));
+    const checkResult = await checkUploadComplete(identifier, parseInt(totalChunks), req.user.id);
     
     res.json({
       code: RESPONSE_CODES.SUCCESS,
@@ -496,8 +498,8 @@ router.post('/chunk/merge', authenticateToken, async (req, res) => {
     
     console.log(`🔄 开始合并分片 - 用户ID: ${req.user.id}, 文件名: ${filename}, 类型: ${detectedFileType}, 总分片数: ${totalChunks}`);
     
-    // 合并分片（传入文件类型）
-    const mergeResult = await mergeChunks(identifier, parseInt(totalChunks), filename, detectedFileType);
+    // 合并分片（传入文件类型和用户ID）
+    const mergeResult = await mergeChunks(identifier, parseInt(totalChunks), filename, detectedFileType, req.user.id);
     
     if (!mergeResult.success) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({

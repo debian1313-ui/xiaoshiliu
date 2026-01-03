@@ -26,21 +26,25 @@ function ensureChunkDir() {
 /**
  * 获取分片目录路径
  * @param {string} identifier - 文件唯一标识符
+ * @param {string|number} userId - 用户ID（可选，用于多用户隔离）
  * @returns {string} 分片目录路径
  */
-function getChunkDir(identifier) {
+function getChunkDir(identifier, userId = null) {
   const chunkDir = ensureChunkDir();
-  return path.join(chunkDir, identifier);
+  // 如果提供了userId，在identifier前加上userId前缀以隔离用户数据
+  const dirName = userId ? `user_${userId}_${identifier}` : identifier;
+  return path.join(chunkDir, dirName);
 }
 
 /**
  * 获取分片文件路径
  * @param {string} identifier - 文件唯一标识符
  * @param {number} chunkNumber - 分片编号
+ * @param {string|number} userId - 用户ID（可选）
  * @returns {string} 分片文件路径
  */
-function getChunkPath(identifier, chunkNumber) {
-  const chunkDir = getChunkDir(identifier);
+function getChunkPath(identifier, chunkNumber, userId = null) {
+  const chunkDir = getChunkDir(identifier, userId);
   return path.join(chunkDir, `chunk_${chunkNumber}`);
 }
 
@@ -49,11 +53,12 @@ function getChunkPath(identifier, chunkNumber) {
  * @param {Buffer} chunkBuffer - 分片数据
  * @param {string} identifier - 文件唯一标识符
  * @param {number} chunkNumber - 分片编号
+ * @param {string|number} userId - 用户ID（可选，用于多用户隔离）
  * @returns {Promise<{success: boolean, message?: string}>}
  */
-async function saveChunk(chunkBuffer, identifier, chunkNumber) {
+async function saveChunk(chunkBuffer, identifier, chunkNumber, userId = null) {
   try {
-    const chunkDir = getChunkDir(identifier);
+    const chunkDir = getChunkDir(identifier, userId);
     
     // 确保分片目录存在
     if (!fs.existsSync(chunkDir)) {
@@ -62,7 +67,7 @@ async function saveChunk(chunkBuffer, identifier, chunkNumber) {
     
     // 保存分片元数据（用于追踪上传时间）
     const metaPath = path.join(chunkDir, 'meta.json');
-    let meta = { createdAt: Date.now(), chunks: {} };
+    let meta = { createdAt: Date.now(), userId: userId, chunks: {} };
     
     if (fs.existsSync(metaPath)) {
       try {
@@ -73,7 +78,7 @@ async function saveChunk(chunkBuffer, identifier, chunkNumber) {
     }
     
     // 保存分片
-    const chunkPath = getChunkPath(identifier, chunkNumber);
+    const chunkPath = getChunkPath(identifier, chunkNumber, userId);
     fs.writeFileSync(chunkPath, chunkBuffer);
     
     // 更新元数据
@@ -95,11 +100,12 @@ async function saveChunk(chunkBuffer, identifier, chunkNumber) {
  * @param {string} identifier - 文件唯一标识符
  * @param {number} chunkNumber - 分片编号
  * @param {string} [expectedMd5] - 期望的MD5值（可选）
+ * @param {string|number} userId - 用户ID（可选）
  * @returns {Promise<{exists: boolean, valid: boolean}>}
  */
-async function verifyChunk(identifier, chunkNumber, expectedMd5) {
+async function verifyChunk(identifier, chunkNumber, expectedMd5, userId = null) {
   try {
-    const chunkPath = getChunkPath(identifier, chunkNumber);
+    const chunkPath = getChunkPath(identifier, chunkNumber, userId);
     
     if (!fs.existsSync(chunkPath)) {
       return { exists: false, valid: false };
@@ -128,15 +134,16 @@ async function verifyChunk(identifier, chunkNumber, expectedMd5) {
  * 检查所有分片是否已上传完成
  * @param {string} identifier - 文件唯一标识符
  * @param {number} totalChunks - 总分片数
+ * @param {string|number} userId - 用户ID（可选）
  * @returns {Promise<{complete: boolean, uploadedChunks: number[], missingChunks: number[]}>}
  */
-async function checkUploadComplete(identifier, totalChunks) {
+async function checkUploadComplete(identifier, totalChunks, userId = null) {
   try {
     const uploadedChunks = [];
     const missingChunks = [];
     
     for (let i = 1; i <= totalChunks; i++) {
-      const chunkPath = getChunkPath(identifier, i);
+      const chunkPath = getChunkPath(identifier, i, userId);
       if (fs.existsSync(chunkPath)) {
         uploadedChunks.push(i);
       } else {
@@ -161,14 +168,15 @@ async function checkUploadComplete(identifier, totalChunks) {
  * @param {number} totalChunks - 总分片数
  * @param {string} filename - 原始文件名
  * @param {string} fileType - 文件类型 ('image' 或 'video')
+ * @param {string|number} userId - 用户ID（可选）
  * @returns {Promise<{success: boolean, filePath?: string, message?: string}>}
  */
-async function mergeChunks(identifier, totalChunks, filename, fileType = 'video') {
+async function mergeChunks(identifier, totalChunks, filename, fileType = 'video', userId = null) {
   try {
-    const chunkDir = getChunkDir(identifier);
+    const chunkDir = getChunkDir(identifier, userId);
     
     // 确保所有分片都存在
-    const { complete, missingChunks } = await checkUploadComplete(identifier, totalChunks);
+    const { complete, missingChunks } = await checkUploadComplete(identifier, totalChunks, userId);
     if (!complete) {
       return { 
         success: false, 
@@ -198,7 +206,7 @@ async function mergeChunks(identifier, totalChunks, filename, fileType = 'video'
     
     // 按顺序合并分片
     for (let i = 1; i <= totalChunks; i++) {
-      const chunkPath = getChunkPath(identifier, i);
+      const chunkPath = getChunkPath(identifier, i, userId);
       const chunkBuffer = fs.readFileSync(chunkPath);
       writeStream.write(chunkBuffer);
     }
@@ -211,7 +219,7 @@ async function mergeChunks(identifier, totalChunks, filename, fileType = 'video'
     });
     
     // 清理分片目录
-    await cleanupChunkDir(identifier);
+    await cleanupChunkDir(identifier, userId);
     
     console.log(`✅ 分片合并完成: ${outputPath}`);
     
@@ -225,11 +233,12 @@ async function mergeChunks(identifier, totalChunks, filename, fileType = 'video'
 /**
  * 清理指定的分片目录
  * @param {string} identifier - 文件唯一标识符
+ * @param {string|number} userId - 用户ID（可选）
  * @returns {Promise<boolean>}
  */
-async function cleanupChunkDir(identifier) {
+async function cleanupChunkDir(identifier, userId = null) {
   try {
-    const chunkDir = getChunkDir(identifier);
+    const chunkDir = getChunkDir(identifier, userId);
     
     if (fs.existsSync(chunkDir)) {
       // 使用 fs.rmSync 递归删除目录（Node.js 14.14.0+）
