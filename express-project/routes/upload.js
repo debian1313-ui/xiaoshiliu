@@ -488,7 +488,9 @@ router.post('/chunk/merge', authenticateToken, async (req, res) => {
       } else if (VIDEO_EXTENSIONS.has(ext)) {
         detectedFileType = 'video';
       } else {
-        detectedFileType = 'video'; // 默认为视频
+        // 未知文件类型，记录警告并默认为视频类型
+        console.warn(`⚠️ 未知文件扩展名: ${ext}, 文件名: ${filename}, 默认作为视频处理`);
+        detectedFileType = 'video';
       }
     }
     

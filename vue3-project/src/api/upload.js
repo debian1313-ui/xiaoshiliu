@@ -191,7 +191,7 @@ async function mergeChunks(params) {
         identifier,
         totalChunks,
         filename,
-        fileType: fileType || 'image' // 默认为图片
+        fileType: fileType || 'video' // 默认为视频，与后端保持一致
       })
     })
     
@@ -606,5 +606,6 @@ export default {
   validateImageFile,
   formatFileSize, // Keep for backward compatibility
   createImagePreview
-  // formatSpeed is exported as named export above
+  // Note: formatSpeed is intentionally only exported as a named export
+  // to encourage using the more explicit import { formatSpeed } syntax
 }
