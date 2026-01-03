@@ -90,6 +90,15 @@ router.post('/single', authenticateToken, upload.single('file'), async (req, res
     // 解析用户是否希望添加水印（默认为 true，即添加水印）
     // 用户可通过请求参数 watermark=false 来禁用水印
     const applyWatermark = req.body.watermark !== 'false' && req.body.watermark !== false;
+    
+    // 解析用户自定义的水印透明度（可选，10-100）
+    let customOpacity = null;
+    if (req.body.watermarkOpacity !== undefined) {
+      const opacity = parseInt(req.body.watermarkOpacity, 10);
+      if (!isNaN(opacity) && opacity >= 10 && opacity <= 100) {
+        customOpacity = opacity;
+      }
+    }
 
     // 准备用户上下文（用于水印）
     // 格式: xise_id 或 user_id @nickname
@@ -98,7 +107,8 @@ router.post('/single', authenticateToken, upload.single('file'), async (req, res
     const context = {
       username: nickname ? `${userId} ${nickname}` : userId,
       userId: req.user?.id,
-      applyWatermark: applyWatermark
+      applyWatermark: applyWatermark,
+      customOpacity: customOpacity
     };
 
     // 使用统一上传函数（根据配置选择策略）
@@ -144,6 +154,15 @@ router.post('/multiple', authenticateToken, upload.array('files', 9), async (req
 
     // 解析用户是否希望添加水印（默认为 true，即添加水印）
     const applyWatermark = req.body.watermark !== 'false' && req.body.watermark !== false;
+    
+    // 解析用户自定义的水印透明度（可选，10-100）
+    let customOpacity = null;
+    if (req.body.watermarkOpacity !== undefined) {
+      const opacity = parseInt(req.body.watermarkOpacity, 10);
+      if (!isNaN(opacity) && opacity >= 10 && opacity <= 100) {
+        customOpacity = opacity;
+      }
+    }
 
     // 准备用户上下文（用于水印）
     // 格式: xise_id 或 user_id @nickname
@@ -152,7 +171,8 @@ router.post('/multiple', authenticateToken, upload.array('files', 9), async (req
     const context = {
       username: nicknameMultiple ? `${odIdMultiple} ${nicknameMultiple}` : odIdMultiple,
       userId: req.user?.id,
-      applyWatermark: applyWatermark
+      applyWatermark: applyWatermark,
+      customOpacity: customOpacity
     };
 
     const uploadResults = [];

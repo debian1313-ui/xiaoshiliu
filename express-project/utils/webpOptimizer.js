@@ -350,12 +350,13 @@ class WebPOptimizer {
       return image;
     }
     
-    console.log(`WebP Optimizer: 应用文字水印 - 内容: "${text}", 字体大小: ${this.options.watermarkFontSize}, 位置: ${this.options.watermarkPosition}`);
-    
     const fontSize = this.options.watermarkFontSize;
-    const opacity = this.options.watermarkOpacity;
+    // 用户自定义透明度优先，否则使用配置的透明度
+    const opacity = context.customOpacity || this.options.watermarkOpacity;
     const color = this.options.watermarkColor;
     const fontPath = this.options.watermarkFontPath;
+    
+    console.log(`WebP Optimizer: 应用文字水印 - 内容: "${text}", 字体大小: ${fontSize}, 透明度: ${opacity}%, 位置: ${this.options.watermarkPosition}`);
     
     // 创建文字水印SVG（传入字体路径）
     const svgBuffer = this.createTextWatermarkSvg(text, fontSize, color, opacity, fontPath);
@@ -614,6 +615,9 @@ class WebPOptimizer {
     const shouldApplyWatermark = userWantsWatermark && (this.options.enableWatermark || this.options.enableUsernameWatermark);
     const shouldResize = this.options.maxWidth || this.options.maxHeight;
     
+    // 用户自定义透明度（覆盖默认配置）
+    const customOpacity = context.customOpacity;
+    
     // 如果不需要任何处理，直接返回原图
     if (!shouldConvertToWebp && !shouldApplyWatermark && !shouldResize) {
       return {
@@ -630,7 +634,7 @@ class WebPOptimizer {
       
       console.log(`WebP Optimizer: 处理图片 - 原始尺寸: ${metadata.width}x${metadata.height}, 格式: ${metadata.format}`);
       console.log(`WebP Optimizer: 水印配置 - 后端主水印: ${this.options.enableWatermark ? '启用' : '禁用'}, 类型: ${this.options.watermarkType}, 用户名水印: ${this.options.enableUsernameWatermark ? '启用' : '禁用'}`);
-      console.log(`WebP Optimizer: 用户选择 - 添加水印: ${userWantsWatermark ? '是' : '否'}, 实际应用: ${shouldApplyWatermark ? '是' : '否'}`);
+      console.log(`WebP Optimizer: 用户选择 - 添加水印: ${userWantsWatermark ? '是' : '否'}, 实际应用: ${shouldApplyWatermark ? '是' : '否'}${customOpacity ? `, 自定义透明度: ${customOpacity}%` : ''}`);
       
       // 1. 尺寸缩放
       if (shouldResize) {
