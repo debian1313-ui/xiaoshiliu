@@ -498,7 +498,8 @@ const handleDrop = (event) => {
 
 const validateFile = (file) => {
   const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-  const maxSize = 5 * 1024 * 1024
+  // Use 10MB preliminary check - actual limit enforced by server config during upload
+  const maxSize = 10 * 1024 * 1024
 
   if (!validTypes.includes(file.type)) {
     const errorMsg = '不填有效的图片格式 (JPEG, PNG, GIF, WebP)'

@@ -249,7 +249,8 @@ const addFiles = async (files) => {
     // 先做一个宽松的预检查（10MB），实际限制会在uploadImage中根据服务器配置检查
     if (file.size > preliminaryMaxSize) {
       const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1)
-      const errorMsg = `图片文件过大 (${fileSizeMB}MB)，请选择更小的图片`
+      const maxSizeMB = (preliminaryMaxSize / (1024 * 1024)).toFixed(0)
+      const errorMsg = `图片大小为 ${fileSizeMB}MB，超过 ${maxSizeMB}MB 限制，请选择更小的图片`
 
       // 显示Toast提示
       showMessage(errorMsg, 'error')
