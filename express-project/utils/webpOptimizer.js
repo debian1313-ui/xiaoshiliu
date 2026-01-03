@@ -10,9 +10,9 @@ const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
 const config = require('../config/config');
+const text2png = require('text2png');
 
 // 常量定义
-const CHAR_WIDTH_RATIO = 0.6;  // 字符宽度估算比例
 const MAX_ALPHA = 255;         // Alpha通道最大值
 const DEFAULT_WATERMARK_PADDING = 20; // 水印默认边距（像素）
 
@@ -224,76 +224,82 @@ class WebPOptimizer {
   }
 
   /**
-   * 创建文字水印SVG
+   * 创建文字水印图片
+   * 使用text2png库直接渲染文字为PNG图片，支持自定义字体（包括中文字体）
    * @param {string} text - 水印文字
    * @param {number} fontSize - 字体大小
    * @param {string} color - 颜色 (hex格式)
    * @param {number} opacity - 透明度 (0-100)
-   * @param {string|null} _fontPath - 自定义字体路径（已弃用，librsvg不支持base64字体嵌入）
-   * @deprecated fontPath参数已弃用，现使用系统安装的Noto Sans CJK字体
-   * @returns {Buffer} SVG缓冲区
+   * @param {string|null} fontPath - 自定义字体路径（可选，默认使用内置中文字体）
+   * @returns {Buffer} PNG图片缓冲区
    */
-  createTextWatermarkSvg(text, fontSize, color, opacity, _fontPath = null) {
-    // 将hex颜色转换为rgba
-    const hexColor = color.replace('#', '');
-    const r = parseInt(hexColor.substring(0, 2), 16);
-    const g = parseInt(hexColor.substring(2, 4), 16);
-    const b = parseInt(hexColor.substring(4, 6), 16);
-    const a = opacity / 100;
+  createTextWatermarkPng(text, fontSize, color, opacity, fontPath = null) {
+    // 默认使用项目内置的中文字体
+    const defaultFontPath = path.join(process.cwd(), 'fonts', 'NotoSansSC-Regular.otf');
+    const actualFontPath = fontPath && fs.existsSync(fontPath) ? fontPath : defaultFontPath;
     
-    // 计算文字宽度（估算，中文字符宽度约等于字体大小）
-    // 检测中文字符并调整宽度估算
-    const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
-    const otherChars = text.length - chineseChars;
-    const charWidth = fontSize * CHAR_WIDTH_RATIO;
-    const width = Math.ceil(chineseChars * fontSize + otherChars * charWidth) + 20;
-    const height = fontSize + 10;
-    
-    // 使用系统安装的中文字体
-    // 注意：Sharp使用librsvg渲染SVG，librsvg依赖fontconfig发现系统字体
-    // base64嵌入字体不被librsvg支持，必须使用系统已安装的字体
-    // Dockerfile中已安装 font-noto-cjk，提供 "Noto Sans CJK" 字体
-    const fontFamily = '"Noto Sans CJK SC", "Noto Sans CJK", sans-serif';
-    
-    if (_fontPath) {
-      console.log(`WebP Optimizer: 忽略自定义字体路径 ${_fontPath}，改用系统安装的 Noto Sans CJK 字体（librsvg不支持base64字体嵌入）`);
+    // 检查字体文件是否存在
+    const fontExists = fs.existsSync(actualFontPath);
+    if (!fontExists) {
+      console.warn(`WebP Optimizer: 字体文件不存在: ${actualFontPath}，将使用系统默认字体`);
     } else {
-      console.log(`WebP Optimizer: 使用系统安装的 Noto Sans CJK 字体`);
+      console.log(`WebP Optimizer: 使用字体文件: ${actualFontPath}`);
     }
     
-    // 创建SVG，使用系统字体渲染中文
-    const svg = [
-      '<?xml version="1.0" encoding="UTF-8"?>',
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">`,
-      '  <defs>',
-      '    <style type="text/css">',
-      '      .watermark-text {',
-      `        font-family: ${fontFamily};`,
-      `        font-size: ${fontSize}px;`,
-      `        fill: rgba(${r}, ${g}, ${b}, ${a});`,
-      '        font-weight: normal;',
-      '      }',
-      '    </style>',
-      '  </defs>',
-      `  <text x="10" y="${fontSize}" class="watermark-text">${this.escapeXml(text)}</text>`,
-      '</svg>'
-    ].join('\n');
-    
-    return Buffer.from(svg);
-  }
-
-  /**
-   * 转义XML特殊字符
-   * @param {string} text
-   * @returns {string}
-   */
-  escapeXml(text) {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;');
+    try {
+      // 使用text2png生成文字图片
+      const options = {
+        font: `${fontSize}px NotoSansSC`,
+        color: color,
+        backgroundColor: 'transparent',
+        padding: 5,
+        lineSpacing: 5
+      };
+      
+      // 如果字体文件存在，使用本地字体
+      if (fontExists) {
+        options.localFontPath = actualFontPath;
+        options.localFontName = 'NotoSansSC';
+      }
+      
+      const pngBuffer = text2png(text, options);
+      
+      // 如果需要调整透明度，使用sharp处理
+      if (opacity < 100) {
+        // 计算alpha值 (0-255)
+        const alpha = Math.round((opacity / 100) * MAX_ALPHA);
+        
+        // 获取图片元数据和原始像素数据
+        return sharp(pngBuffer)
+          .ensureAlpha()
+          .raw()
+          .toBuffer({ resolveWithObject: true })
+          .then(({ data, info }) => {
+            // 修改每个像素的alpha通道
+            for (let i = 3; i < data.length; i += 4) {
+              // 只有当原始alpha不为0时才调整（保持透明区域透明）
+              if (data[i] > 0) {
+                data[i] = Math.round((data[i] / MAX_ALPHA) * alpha);
+              }
+            }
+            
+            // 重新创建图片
+            return sharp(data, {
+              raw: {
+                width: info.width,
+                height: info.height,
+                channels: 4
+              }
+            }).png().toBuffer();
+          });
+      }
+      
+      return Promise.resolve(pngBuffer);
+    } catch (error) {
+      console.error(`WebP Optimizer: 创建文字水印失败: ${error.message}`);
+      // 回退到简单的空白图片
+      return Promise.resolve(Buffer.alloc(0));
+    }
   }
 
   /**
@@ -340,36 +346,44 @@ class WebPOptimizer {
     
     console.log(`WebP Optimizer: 应用文字水印 - 内容: "${text}", 字体大小: ${fontSize}, 透明度: ${opacity}%, 位置: ${this.options.watermarkPosition}`);
     
-    // 创建文字水印SVG（传入字体路径）
-    const svgBuffer = this.createTextWatermarkSvg(text, fontSize, color, opacity, fontPath);
-    
-    // 获取SVG尺寸估算（改进中文字符宽度计算）
-    const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
-    const otherChars = text.length - chineseChars;
-    const charWidth = fontSize * CHAR_WIDTH_RATIO;
-    const watermarkWidth = Math.ceil(chineseChars * fontSize + otherChars * charWidth) + 20;
-    const watermarkHeight = fontSize + 10;
-    
-    // 计算位置
-    const position = this.getWatermarkPosition(
-      this.options.watermarkPosition,
-      metadata.width,
-      metadata.height,
-      watermarkWidth,
-      watermarkHeight,
-      {
-        positionMode: this.options.watermarkPositionMode,
-        preciseX: this.options.watermarkPreciseX,
-        preciseY: this.options.watermarkPreciseY
+    try {
+      // 创建文字水印PNG图片
+      const watermarkBuffer = await this.createTextWatermarkPng(text, fontSize, color, opacity, fontPath);
+      
+      if (!watermarkBuffer || watermarkBuffer.length === 0) {
+        console.warn('WebP Optimizer: 创建文字水印失败，跳过');
+        return image;
       }
-    );
-    
-    // 应用水印
-    return image.composite([{
-      input: svgBuffer,
-      top: position.y,
-      left: position.x
-    }]);
+      
+      // 获取水印图片尺寸
+      const watermarkMeta = await sharp(watermarkBuffer).metadata();
+      const watermarkWidth = watermarkMeta.width || 100;
+      const watermarkHeight = watermarkMeta.height || 30;
+      
+      // 计算位置
+      const position = this.getWatermarkPosition(
+        this.options.watermarkPosition,
+        metadata.width,
+        metadata.height,
+        watermarkWidth,
+        watermarkHeight,
+        {
+          positionMode: this.options.watermarkPositionMode,
+          preciseX: this.options.watermarkPreciseX,
+          preciseY: this.options.watermarkPreciseY
+        }
+      );
+      
+      // 应用水印
+      return image.composite([{
+        input: watermarkBuffer,
+        top: position.y,
+        left: position.x
+      }]);
+    } catch (error) {
+      console.error(`WebP Optimizer: 应用文字水印失败: ${error.message}`);
+      return image;
+    }
   }
 
   /**
@@ -536,36 +550,44 @@ class WebPOptimizer {
     const color = this.options.usernameWatermarkColor;
     const fontPath = this.options.usernameWatermarkFontPath;
     
-    // 创建文字水印SVG（传入字体路径）
-    const svgBuffer = this.createTextWatermarkSvg(text, fontSize, color, opacity, fontPath);
-    
-    // 获取SVG尺寸估算（改进中文字符宽度计算）
-    const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
-    const otherChars = text.length - chineseChars;
-    const charWidth = fontSize * CHAR_WIDTH_RATIO;
-    const watermarkWidth = Math.ceil(chineseChars * fontSize + otherChars * charWidth) + 20;
-    const watermarkHeight = fontSize + 10;
-    
-    // 计算位置
-    const position = this.getWatermarkPosition(
-      this.options.usernameWatermarkPosition,
-      metadata.width,
-      metadata.height,
-      watermarkWidth,
-      watermarkHeight,
-      {
-        positionMode: this.options.usernameWatermarkPositionMode,
-        preciseX: this.options.usernameWatermarkPreciseX,
-        preciseY: this.options.usernameWatermarkPreciseY
+    try {
+      // 创建文字水印PNG图片
+      const watermarkBuffer = await this.createTextWatermarkPng(text, fontSize, color, opacity, fontPath);
+      
+      if (!watermarkBuffer || watermarkBuffer.length === 0) {
+        console.warn('WebP Optimizer: 创建用户名水印失败，跳过');
+        return image;
       }
-    );
-    
-    // 应用水印
-    return image.composite([{
-      input: svgBuffer,
-      top: position.y,
-      left: position.x
-    }]);
+      
+      // 获取水印图片尺寸
+      const watermarkMeta = await sharp(watermarkBuffer).metadata();
+      const watermarkWidth = watermarkMeta.width || 100;
+      const watermarkHeight = watermarkMeta.height || 30;
+      
+      // 计算位置
+      const position = this.getWatermarkPosition(
+        this.options.usernameWatermarkPosition,
+        metadata.width,
+        metadata.height,
+        watermarkWidth,
+        watermarkHeight,
+        {
+          positionMode: this.options.usernameWatermarkPositionMode,
+          preciseX: this.options.usernameWatermarkPreciseX,
+          preciseY: this.options.usernameWatermarkPreciseY
+        }
+      );
+      
+      // 应用水印
+      return image.composite([{
+        input: watermarkBuffer,
+        top: position.y,
+        left: position.x
+      }]);
+    } catch (error) {
+      console.error(`WebP Optimizer: 应用用户名水印失败: ${error.message}`);
+      return image;
+    }
   }
 
   /**
@@ -590,10 +612,25 @@ class WebPOptimizer {
     const shouldConvertToWebp = this.shouldConvert(mimetype);
     
     // 用户可以通过 context.applyWatermark 控制是否添加水印
-    // 如果未指定（undefined），则使用后端配置的默认值
-    // 如果指定了 false 或 'false'，则不添加水印
-    // 如果指定了 true 或 'true'，则添加水印（前提是后端已启用）
-    const userWantsWatermark = context.applyWatermark !== false && context.applyWatermark !== 'false'; // 默认为 true
+    // 严格检查：只有明确为 true 或 'true' 或 undefined 时才添加水印
+    // 任何 false、'false'、0、'0'、null、'' 等值都不添加水印
+    const applyWatermarkValue = context.applyWatermark;
+    let userWantsWatermark;
+    
+    // 更严格的检查逻辑
+    if (applyWatermarkValue === undefined) {
+      // 未指定时使用后端默认配置（启用水印）
+      userWantsWatermark = true;
+    } else if (applyWatermarkValue === true || applyWatermarkValue === 'true') {
+      // 明确指定要添加水印
+      userWantsWatermark = true;
+    } else {
+      // 其他所有情况（false, 'false', 0, '0', null, '', etc.）都不添加水印
+      userWantsWatermark = false;
+    }
+    
+    console.log(`WebP Optimizer: applyWatermark参数 - 原始值: ${applyWatermarkValue}, 类型: ${typeof applyWatermarkValue}, 解析结果: ${userWantsWatermark}`);
+    
     const shouldApplyWatermark = userWantsWatermark && (this.options.enableWatermark || this.options.enableUsernameWatermark);
     const shouldResize = this.options.maxWidth || this.options.maxHeight;
     
@@ -748,15 +785,23 @@ class WebPOptimizer {
 // 创建单例实例
 const webpOptimizer = new WebPOptimizer();
 
+// 检查内置中文字体是否存在
+const builtinChineseFontPath = path.join(process.cwd(), 'fonts', 'NotoSansSC-Regular.otf');
+const builtinFontExists = fs.existsSync(builtinChineseFontPath);
+
 // 启动时输出配置信息，帮助用户排查问题
 console.log('========== WebP Optimizer 配置 ==========');
 console.log(`WebP转换: ${webpOptimizer.options.enableWebpConversion ? '启用' : '禁用'}`);
+console.log(`内置中文字体: ${builtinFontExists ? '✓ 已安装' : '✗ 未找到'}`);
+if (!builtinFontExists) {
+  console.log(`  ⚠️ 请确保 ${builtinChineseFontPath} 存在`);
+}
 console.log(`主水印: ${webpOptimizer.options.enableWatermark ? '启用' : '禁用'}`);
 if (webpOptimizer.options.enableWatermark) {
   console.log(`  - 类型: ${webpOptimizer.options.watermarkType}`);
   if (webpOptimizer.options.watermarkType === 'text') {
     console.log(`  - 文字: ${webpOptimizer.options.watermarkText || '(未配置)'}`);
-    console.log(`  - 字体: Noto Sans CJK (系统字体，支持中文)`);
+    console.log(`  - 字体: NotoSansSC-Regular.otf (内置字体，支持中文)`);
   } else if (webpOptimizer.options.watermarkType === 'image') {
     const imgPath = webpOptimizer.options.watermarkImage;
     const imgExists = imgPath && fs.existsSync(imgPath);
@@ -770,7 +815,7 @@ console.log(`用户名水印: ${webpOptimizer.options.enableUsernameWatermark ? 
 if (webpOptimizer.options.enableUsernameWatermark) {
   console.log(`  - 文字: ${webpOptimizer.options.usernameWatermarkText}`);
   console.log(`  - 位置: ${webpOptimizer.options.usernameWatermarkPosition}`);
-  console.log(`  - 字体: Noto Sans CJK (系统字体，支持中文)`);
+  console.log(`  - 字体: NotoSansSC-Regular.otf (内置字体，支持中文)`);
 }
 console.log('==========================================');
 
