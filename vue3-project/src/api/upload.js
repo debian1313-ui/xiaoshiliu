@@ -57,6 +57,19 @@ const LARGE_IMAGE_THRESHOLD = 3 * 1024 * 1024
 const IMAGE_CHUNK_SIZE = 1 * 1024 * 1024
 
 /**
+ * 格式化文件大小（内部使用）
+ * @param {number} bytes - 字节数
+ * @returns {string}
+ */
+function formatFileSizeInternal(bytes) {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+/**
  * 计算文件MD5
  * @param {File|Blob} file - 文件
  * @returns {Promise<string>} MD5值
@@ -112,7 +125,7 @@ async function uploadLargeImageChunked(file, options = {}) {
 
     // 计算分片数量
     const totalChunks = Math.ceil(file.size / chunkSize)
-    console.log(`📦 图片大小: ${formatFileSize(file.size)}, 分片数: ${totalChunks}`)
+    console.log(`📦 图片大小: ${formatFileSizeInternal(file.size)}, 分片数: ${totalChunks}`)
 
     const token = localStorage.getItem('token')
     if (!token) {
@@ -224,7 +237,7 @@ export async function uploadImage(file, options = {}) {
 
     // 检查压缩后的文件大小，如果大于3MB则使用分片上传
     if (compressedFile.size > LARGE_IMAGE_THRESHOLD) {
-      console.log(`📦 图片大于3MB (${formatFileSize(compressedFile.size)})，使用分片上传`)
+      console.log(`📦 图片大于3MB (${formatFileSizeInternal(compressedFile.size)})，使用分片上传`)
       return await uploadLargeImageChunked(compressedFile, options)
     }
 
