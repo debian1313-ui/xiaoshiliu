@@ -572,7 +572,7 @@ const uploadAllImages = async () => {
     // 上传新图片 - 使用新的upload.js API，传递水印选项
     const files = unuploadedImages.map(item => item.file)
 
-    const result = await uploadApi.uploadImages(files, { 
+    const result = await imageUploadApi.uploadImages(files, { 
       watermark: enableWatermark.value,
       watermarkOpacity: watermarkOpacity.value,
       onProgress: (progress) => {

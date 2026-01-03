@@ -604,7 +604,6 @@ export default {
   uploadImages,
   uploadCroppedImage,
   validateImageFile,
-  formatFileSize,
-  formatSpeed,
   createImagePreview
+  // formatFileSize and formatSpeed are exported as named exports above
 }
