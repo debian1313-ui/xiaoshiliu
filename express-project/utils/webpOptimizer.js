@@ -7,6 +7,7 @@
  */
 
 const sharp = require('sharp');
+const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
@@ -230,15 +231,15 @@ class WebPOptimizer {
   }
 
   /**
-   * 创建文字水印SVG
+   * 创建文字水印Canvas
    * @param {string} text - 水印文字
    * @param {number} fontSize - 字体大小
    * @param {string} color - 颜色 (hex格式)
    * @param {number} opacity - 透明度 (0-100)
    * @param {string|null} fontPath - 自定义字体路径
-   * @returns {Buffer} SVG缓冲区
+   * @returns {Promise<Buffer>} PNG缓冲区
    */
-  createTextWatermarkSvg(text, fontSize, color, opacity, fontPath = null) {
+  async createTextWatermarkCanvas(text, fontSize, color, opacity, fontPath = null) {
     // 将hex颜色转换为rgba
     const hexColor = color.replace('#', '');
     const r = parseInt(hexColor.substring(0, 2), 16);
@@ -246,142 +247,43 @@ class WebPOptimizer {
     const b = parseInt(hexColor.substring(4, 6), 16);
     const a = opacity / 100;
     
+    // 加载自定义字体（如果提供）
+    let fontFamily = 'sans-serif';
+    if (fontPath && fs.existsSync(fontPath)) {
+      try {
+        // 使用 @napi-rs/canvas 注册字体
+        GlobalFonts.registerFromPath(fontPath, 'CustomWatermarkFont');
+        fontFamily = 'CustomWatermarkFont';
+        console.log(`WebP Optimizer: 使用自定义字体 - ${fontPath}`);
+      } catch (fontError) {
+        console.error(`WebP Optimizer: 加载字体文件失败: ${fontError.message}`);
+        // 回退到系统默认字体
+      }
+    } else {
+      console.log(`WebP Optimizer: 使用系统默认字体`);
+    }
+    
     // 计算文字宽度（估算，中文字符宽度约等于字体大小）
-    // 检测中文字符并调整宽度估算
     const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
     const otherChars = text.length - chineseChars;
     const charWidth = fontSize * CHAR_WIDTH_RATIO;
     const width = Math.ceil(chineseChars * fontSize + otherChars * charWidth) + 20;
     const height = fontSize + 10;
     
-    // 构建字体相关的CSS
-    let fontFaceRule = '';
-    // 使用通用的衬线字体作为fallback，这些在大多数系统上都有中文支持
-    let fontFamily = '"Noto Sans CJK SC", "Source Han Sans CN", "WenQuanYi Zen Hei", "WenQuanYi Micro Hei", "Droid Sans Fallback", "Microsoft YaHei", "PingFang SC", "SimHei", "Heiti SC", sans-serif';
+    // 创建Canvas
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
     
-    const rawFontPath = fontPath ? String(fontPath) : '';
-    const getFontExtension = (input) => path.extname(input.split('?')[0]).toLowerCase();
-    const fontExtension = rawFontPath ? getFontExtension(rawFontPath) : '';
-    let safeExternalFontUrl = null;
-    if (rawFontPath && /^https?:\/\//i.test(rawFontPath)) {
-      try {
-        const parsedUrl = new URL(rawFontPath);
-        const allowedProtocols = ['http:', 'https:'];
-        if (allowedProtocols.includes(parsedUrl.protocol)) {
-          const hostname = parsedUrl.hostname;
-          const ipVersion = net.isIP(hostname);
-          let isPrivateIp = false;
-          if (ipVersion === 4) {
-            isPrivateIp = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|169\.254\.)/.test(hostname);
-          } else if (ipVersion === 6) {
-            const normalizedHost = hostname.toLowerCase();
-            isPrivateIp = normalizedHost === '::1' || normalizedHost.startsWith('fc00:') || normalizedHost.startsWith('fd00:') || normalizedHost.startsWith('fe80:');
-          }
-          if (hostname === 'localhost' || isPrivateIp) {
-            console.warn(`WebP Optimizer: 外部字体URL指向内网或本地地址，已忽略 - ${hostname}`);
-          } else {
-            safeExternalFontUrl = parsedUrl.toString();
-          }
-        } else {
-          console.warn(`WebP Optimizer: 外部字体协议不被允许 - ${parsedUrl.protocol}`);
-        }
-      } catch (err) {
-        console.warn(`WebP Optimizer: 外部字体URL无效 - ${err.message}`);
-      }
-    }
-    const isExternalFont = !!safeExternalFontUrl;
-    // 如果提供了自定义字体路径，将字体嵌入为base64，或使用远程字体URL
-    // 注意：librsvg对自定义字体的支持有限，可能需要安装系统字体
-    if (isExternalFont && safeExternalFontUrl) {
-      const ext = fontExtension;
-      let formatHint = 'truetype';
-      if (ext === '.otf') {
-        formatHint = 'opentype';
-      } else if (ext === '.woff') {
-        formatHint = 'woff';
-      } else if (ext === '.woff2') {
-        formatHint = 'woff2';
-      }
-      const encodedUrl = encodeURI(safeExternalFontUrl);
-      const cssSafeUrl = encodedUrl.replace(/([\\'"(){}@\s;])/g, '\\$1');
-      fontFaceRule = `
-        @font-face {
-          font-family: 'CustomWatermarkFont';
-          src: url('${cssSafeUrl}') format('${formatHint}');
-          font-weight: normal;
-          font-style: normal;
-        }`;
-      fontFamily = '"CustomWatermarkFont", "Noto Sans CJK SC", "Source Han Sans CN", "WenQuanYi Zen Hei", "SimHei", sans-serif';
-      console.log(`WebP Optimizer: 使用远程字体 - ${safeExternalFontUrl}`);
-    } else if (fontPath && fs.existsSync(fontPath)) {
-      try {
-        // 读取字体文件并转换为base64
-        const fontData = fs.readFileSync(fontPath);
-        const fontBase64 = fontData.toString('base64');
-        
-        // 根据字体文件扩展名确定MIME类型和格式
-        const ext = fontExtension;
-        let mimeType = 'font/ttf';
-        let formatHint = 'truetype';
-        if (ext === '.otf') {
-          mimeType = 'font/otf';
-          formatHint = 'opentype';
-        } else if (ext === '.woff') {
-          mimeType = 'font/woff';
-          formatHint = 'woff';
-        } else if (ext === '.woff2') {
-          mimeType = 'font/woff2';
-          formatHint = 'woff2';
-        }
-        
-        // 使用多种方式声明字体，增加兼容性
-        fontFaceRule = `
-          @font-face {
-            font-family: 'CustomWatermarkFont';
-            src: url('data:${mimeType};base64,${fontBase64}') format('${formatHint}');
-            font-weight: normal;
-            font-style: normal;
-          }`;
-        fontFamily = '"CustomWatermarkFont", "Noto Sans CJK SC", "Source Han Sans CN", "WenQuanYi Zen Hei", "SimHei", sans-serif';
-        console.log(`WebP Optimizer: 使用自定义字体(base64嵌入) - ${fontPath}, 大小: ${Math.round(fontData.length/1024)}KB`);
-      } catch (fontError) {
-        console.error(`WebP Optimizer: 读取字体文件失败: ${fontError.message}`);
-      }
-    } else {
-      console.log(`WebP Optimizer: 使用系统默认中文字体`);
-    }
+    // 设置字体和颜色
+    ctx.font = `${fontSize}px ${fontFamily}`;
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
+    ctx.textBaseline = 'top';
     
-    // 创建SVG - 使用dominant-baseline和text-anchor来更好地定位文字
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-      <defs>
-        <style type="text/css">
-          ${fontFaceRule}
-          .watermark-text {
-            font-family: ${fontFamily};
-            font-size: ${fontSize}px;
-            fill: rgba(${r}, ${g}, ${b}, ${a});
-            font-weight: normal;
-          }
-        </style>
-      </defs>
-      <text x="10" y="${fontSize}" class="watermark-text">${this.escapeXml(text)}</text>
-    </svg>`;
+    // 绘制文字
+    ctx.fillText(text, 10, 0);
     
-    return Buffer.from(svg);
-  }
-
-  /**
-   * 转义XML特殊字符
-   * @param {string} text
-   * @returns {string}
-   */
-  escapeXml(text) {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;');
+    // 返回PNG缓冲区
+    return canvas.toBuffer('image/png');
   }
 
   /**
@@ -428,10 +330,10 @@ class WebPOptimizer {
     
     console.log(`WebP Optimizer: 应用文字水印 - 内容: "${text}", 字体大小: ${fontSize}, 透明度: ${opacity}%, 位置: ${this.options.watermarkPosition}`);
     
-    // 创建文字水印SVG（传入字体路径）
-    const svgBuffer = this.createTextWatermarkSvg(text, fontSize, color, opacity, fontPath);
+    // 创建文字水印Canvas（传入字体路径）
+    const pngBuffer = await this.createTextWatermarkCanvas(text, fontSize, color, opacity, fontPath);
     
-    // 获取SVG尺寸估算（改进中文字符宽度计算）
+    // 获取Canvas尺寸估算（改进中文字符宽度计算）
     const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
     const otherChars = text.length - chineseChars;
     const charWidth = fontSize * CHAR_WIDTH_RATIO;
@@ -454,7 +356,7 @@ class WebPOptimizer {
     
     // 应用水印
     return image.composite([{
-      input: svgBuffer,
+      input: pngBuffer,
       top: position.y,
       left: position.x
     }]);
@@ -513,30 +415,33 @@ class WebPOptimizer {
       
       let watermarkBuffer;
       if (opacity < 1) {
-        // 需要调整透明度时，提取并修改alpha通道
-        // 使用 raw 格式获取像素数据，手动调整alpha通道
+        // 使用 @napi-rs/canvas 调整透明度
         const { data, info } = await resizedWatermark
           .raw()
           .toBuffer({ resolveWithObject: true });
         
+        // 创建Canvas并应用透明度
+        const canvas = createCanvas(info.width, info.height);
+        const ctx = canvas.getContext('2d');
+        
+        // 创建ImageData
+        const imageData = ctx.createImageData(info.width, info.height);
+        
         // 修改每个像素的alpha通道
-        for (let i = 3; i < data.length; i += 4) {
-          data[i] = Math.round(data[i] * opacity);
+        for (let i = 0; i < data.length; i += 4) {
+          imageData.data[i] = data[i];     // R
+          imageData.data[i + 1] = data[i + 1]; // G
+          imageData.data[i + 2] = data[i + 2]; // B
+          imageData.data[i + 3] = Math.round(data[i + 3] * opacity); // A
         }
         
-        // 重新创建图片
-        watermarkBuffer = await sharp(data, {
-          raw: {
-            width: info.width,
-            height: info.height,
-            channels: 4
-          }
-        }).png().toBuffer();
+        ctx.putImageData(imageData, 0, 0);
+        watermarkBuffer = canvas.toBuffer('image/png');
         
         console.log(`WebP Optimizer: 已应用水印透明度调整`);
       } else {
         // 不需要调整透明度时，直接使用原图
-        watermarkBuffer = await resizedWatermark.toBuffer();
+        watermarkBuffer = await resizedWatermark.png().toBuffer();
       }
       
       // 检查是否使用平铺模式
@@ -624,10 +529,10 @@ class WebPOptimizer {
     const color = this.options.usernameWatermarkColor;
     const fontPath = this.options.usernameWatermarkFontPath;
     
-    // 创建文字水印SVG（传入字体路径）
-    const svgBuffer = this.createTextWatermarkSvg(text, fontSize, color, opacity, fontPath);
+    // 创建文字水印Canvas（传入字体路径）
+    const pngBuffer = await this.createTextWatermarkCanvas(text, fontSize, color, opacity, fontPath);
     
-    // 获取SVG尺寸估算（改进中文字符宽度计算）
+    // 获取Canvas尺寸估算（改进中文字符宽度计算）
     const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
     const otherChars = text.length - chineseChars;
     const charWidth = fontSize * CHAR_WIDTH_RATIO;
@@ -650,7 +555,7 @@ class WebPOptimizer {
     
     // 应用水印
     return image.composite([{
-      input: svgBuffer,
+      input: pngBuffer,
       top: position.y,
       left: position.x
     }]);
