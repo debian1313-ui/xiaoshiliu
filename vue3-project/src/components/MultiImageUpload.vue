@@ -243,10 +243,12 @@ const addFiles = async (files) => {
 
   // 验证所有文件
   for (const file of fileArray) {
-    // 先检查文件大小
-    if (file.size > 5 * 1024 * 1024) {
+    // 先检查文件大小 - 从服务器配置获取最大大小
+    const maxSize = 5 * 1024 * 1024 // 默认5MB，实际会被uploadImage内部的动态配置覆盖
+    if (file.size > maxSize) {
       const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1)
-      const errorMsg = `图片大小为 ${fileSizeMB}MB，超过 5MB 限制，请选择更小的图片`
+      const maxSizeMB = (maxSize / (1024 * 1024)).toFixed(0)
+      const errorMsg = `图片大小为 ${fileSizeMB}MB，超过 ${maxSizeMB}MB 限制，请选择更小的图片`
 
       // 显示Toast提示
       showMessage(errorMsg, 'error')
@@ -484,65 +486,6 @@ const getAllImageData = async () => {
   }
 
   return allImageData
-}
-
-
-// 压缩图片
-const compressImage = (file, maxSizeMB = 0.8, quality = 0.4) => {
-  return new Promise((resolve) => {
-    // 对于800KB以下的文件不进行压缩
-    if (file.size <= maxSizeMB * 1024 * 1024) {
-      resolve(file)
-      return
-    }
-
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    const img = new Image()
-
-    img.onload = () => {
-      // 超过800KB的图片使用强力压缩
-      const compressQuality = 0.4
-      const maxDimension = 1200
-
-      // 计算压缩后的尺寸，保持宽高比
-      let { width, height } = img
-
-      if (width > maxDimension || height > maxDimension) {
-        const ratio = Math.min(maxDimension / width, maxDimension / height)
-        width = Math.floor(width * ratio)
-        height = Math.floor(height * ratio)
-      }
-
-      canvas.width = width
-      canvas.height = height
-
-      // 绘制压缩后的图片
-      ctx.drawImage(img, 0, 0, width, height)
-
-      // 转换为blob
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            // 创建新的File对象
-            const compressedFile = new File([blob], file.name, {
-              type: file.type,
-              lastModified: Date.now()
-            })
-
-            resolve(compressedFile)
-          } else {
-            resolve(file) // 压缩失败，返回原文件
-          }
-        },
-        file.type,
-        compressQuality
-      )
-    }
-
-    img.onerror = () => resolve(file) // 加载失败，返回原文件
-    img.src = URL.createObjectURL(file)
-  })
 }
 
 

@@ -30,52 +30,6 @@ async function getImageConfig() {
   }
 }
 
-// 压缩图片函数
-const compressImage = (file, maxSizeMB = 0.8, quality = 0.4) => {
-  return new Promise((resolve) => {
-    // 对于800KB以下的文件不进行压缩
-    if (file.size <= maxSizeMB * 1024 * 1024) {
-      resolve(file)
-      return
-    }
-
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    const img = new Image()
-
-    img.onload = () => {
-      // 超过800KB的图片使用强力压缩
-      const compressQuality = 0.4
-      const maxDimension = 1200
-
-      // 计算新的尺寸
-      let { width, height } = img
-      if (width > maxDimension || height > maxDimension) {
-        const ratio = Math.min(maxDimension / width, maxDimension / height)
-        width = Math.floor(width * ratio)
-        height = Math.floor(height * ratio)
-      }
-
-      canvas.width = width
-      canvas.height = height
-
-      // 绘制并压缩
-      ctx.drawImage(img, 0, 0, width, height)
-      canvas.toBlob((blob) => {
-        const compressedFile = new File([blob], file.name, {
-          type: file.type,
-          lastModified: Date.now()
-        })
-
-        resolve(compressedFile)
-      }, file.type, compressQuality)
-    }
-
-    img.onerror = () => resolve(file) // 加载失败，返回原文件
-    img.src = URL.createObjectURL(file)
-  })
-}
-
 /**
  * 计算文件MD5（用于生成唯一标识符）
  * @param {File} file - 文件
@@ -401,14 +355,12 @@ export async function uploadImage(file, options = {}) {
       throw new Error(`图片大小不能超过${maxSizeMB}MB`)
     }
 
-    // 压缩图片
-    const compressedFile = await compressImage(file)
-
-    // 如果压缩后的文件大小超过3MB，使用分片上传
-    if (compressedFile.size > IMAGE_CHUNK_THRESHOLD) {
-      console.log(`📦 文件大小 ${formatFileSize(compressedFile.size)} 超过阈值，使用分片上传`)
+    // WebP转换会在后端处理质量，不需要前端压缩
+    // 如果文件大小超过3MB，使用分片上传
+    if (file.size > IMAGE_CHUNK_THRESHOLD) {
+      console.log(`📦 文件大小 ${formatFileSize(file.size)} 超过阈值，使用分片上传`)
       
-      const result = await uploadImageChunked(compressedFile, {
+      const result = await uploadImageChunked(file, {
         onProgress: options.onProgress,
         onSpeedUpdate: options.onSpeedUpdate,
         watermark: options.watermark,
@@ -418,7 +370,7 @@ export async function uploadImage(file, options = {}) {
       if (result.success) {
         return {
           success: true,
-          data: { url: result.data.url, originalName: compressedFile.name, size: compressedFile.size },
+          data: { url: result.data.url, originalName: file.name, size: file.size },
           message: '上传成功'
         }
       } else {
@@ -428,8 +380,8 @@ export async function uploadImage(file, options = {}) {
 
     // 否则使用普通上传
     const formData = new FormData()
-    const filename = options.filename || (compressedFile instanceof File ? compressedFile.name : 'image.png')
-    formData.append('file', compressedFile, filename)
+    const filename = options.filename || (file instanceof File ? file.name : 'image.png')
+    formData.append('file', file, filename)
     
     // 添加水印选项（仅当显式开启时才应用）
     const applyWatermark = options.watermark === true

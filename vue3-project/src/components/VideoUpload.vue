@@ -121,10 +121,16 @@ const toastMessage = ref('')
 const toastType = ref('success')
 // 从服务器获取的配置
 const serverMaxSize = ref(null)
+const serverImageMaxSize = ref(null)
 
 // 计算实际使用的最大文件大小：优先使用服务器配置，如果未获取到则使用prop
 const actualMaxSize = computed(() => {
   return serverMaxSize.value !== null ? serverMaxSize.value : props.maxSize
+})
+
+// 计算实际使用的图片最大大小
+const actualImageMaxSize = computed(() => {
+  return serverImageMaxSize.value !== null ? serverImageMaxSize.value : 5 * 1024 * 1024
 })
 
 // 格式化显示的文件大小（MB）
@@ -138,6 +144,9 @@ onMounted(async () => {
     const config = await videoApi.getChunkConfig()
     if (config.maxFileSize) {
       serverMaxSize.value = config.maxFileSize
+    }
+    if (config.imageMaxFileSize) {
+      serverImageMaxSize.value = config.imageMaxFileSize
     }
   } catch (error) {
     console.warn('Failed to get server video config, using default config:', error)
@@ -244,8 +253,8 @@ const validateCoverFile = (file) => {
     return { valid: false, message: '请选择图片文件' }
   }
 
-  // 验证文件大小 (5MB)
-  const maxCoverSize = 5 * 1024 * 1024
+  // 验证文件大小 - 使用服务器配置的图片最大大小
+  const maxCoverSize = actualImageMaxSize.value
   if (file.size > maxCoverSize) {
     return { valid: false, message: `封面图片大小不能超过${formatFileSize(maxCoverSize)}` }
   }

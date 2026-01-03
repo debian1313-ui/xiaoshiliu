@@ -509,9 +509,10 @@ const validateFile = (file) => {
 
   if (file.size > maxSize) {
     const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1)
-    const errorMsg = `图片大小为 ${fileSizeMB}MB，超过 5MB 限制，不填更小的图片`
+    const maxSizeMB = (maxSize / (1024 * 1024)).toFixed(0)
+    const errorMsg = `图片大小为 ${fileSizeMB}MB，超过 ${maxSizeMB}MB 限制，请选择更小的图片`
 
-    avatarError.value = '图片大小不能超过 5MB'
+    avatarError.value = `图片大小不能超过 ${maxSizeMB}MB`
     $message.error(errorMsg)
     return false
   }
