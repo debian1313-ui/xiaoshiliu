@@ -565,7 +565,7 @@ const uploadAllImages = async () => {
   }
 
   isUploading.value = true
-  uploadProgress.value = { current: 0, total: files.length, speed: 0 }
+  uploadProgress.value = { current: 0, total: unuploadedImages.length, speed: 0 }
   error.value = ''
 
   try {
