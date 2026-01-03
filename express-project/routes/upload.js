@@ -19,6 +19,10 @@ const { validateVideoMedia, deleteInvalidVideo } = require('../utils/videoTransc
 
 const parseWatermarkFlag = (value) => value === true || value === 'true' || value === 1 || value === '1';
 
+// Cache file extension Sets for O(1) lookup performance
+const IMAGE_EXTENSIONS = new Set(config.upload.image.allowedExtensions);
+const VIDEO_EXTENSIONS = new Set(config.upload.video.allowedExtensions);
+
 // 配置 multer 内存存储（用于云端图床）
 const storage = multer.memoryStorage();
 
@@ -476,14 +480,12 @@ router.post('/chunk/merge', authenticateToken, async (req, res) => {
     
     // 自动检测文件类型（如果未提供）
     const ext = path.extname(filename).toLowerCase();
-    const imageExts = config.upload.image.allowedExtensions;
-    const videoExts = config.upload.video.allowedExtensions;
     
     let detectedFileType = fileType;
     if (!detectedFileType) {
-      if (imageExts.includes(ext)) {
+      if (IMAGE_EXTENSIONS.has(ext)) {
         detectedFileType = 'image';
-      } else if (videoExts.includes(ext)) {
+      } else if (VIDEO_EXTENSIONS.has(ext)) {
         detectedFileType = 'video';
       } else {
         detectedFileType = 'video'; // 默认为视频

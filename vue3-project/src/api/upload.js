@@ -582,7 +582,7 @@ export function validateImageFile(file, options = {}) {
   return { valid: true, error: null }
 }
 
-// Export formatFileSize and formatSpeed that were defined earlier
+// Export formatFileSize and formatSpeed as named exports
 export { formatFileSize, formatSpeed }
 
 export function createImagePreview(file) {
@@ -604,6 +604,7 @@ export default {
   uploadImages,
   uploadCroppedImage,
   validateImageFile,
+  formatFileSize, // Keep for backward compatibility
   createImagePreview
-  // formatFileSize and formatSpeed are exported as named exports above
+  // formatSpeed is exported as named export above
 }
