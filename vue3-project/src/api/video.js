@@ -18,7 +18,7 @@ const DEFAULT_MAX_FILE_SIZE = 100 * 1024 * 1024
 export const videoApi = {
   /**
    * 获取服务器分片配置
-   * @returns {Promise<{chunkSize: number, maxFileSize: number}>}
+   * @returns {Promise<{chunkSize: number, maxFileSize: number, imageMaxFileSize: number}>}
    */
   async getChunkConfig() {
     try {
@@ -26,13 +26,22 @@ export const videoApi = {
       if (response.success) {
         return {
           chunkSize: response.data.chunkSize || DEFAULT_CHUNK_SIZE,
-          maxFileSize: response.data.maxFileSize || DEFAULT_MAX_FILE_SIZE
+          maxFileSize: response.data.maxFileSize || DEFAULT_MAX_FILE_SIZE,
+          imageMaxFileSize: response.data.imageMaxFileSize || 5 * 1024 * 1024
         }
       }
-      return { chunkSize: DEFAULT_CHUNK_SIZE, maxFileSize: DEFAULT_MAX_FILE_SIZE }
+      return { 
+        chunkSize: DEFAULT_CHUNK_SIZE, 
+        maxFileSize: DEFAULT_MAX_FILE_SIZE,
+        imageMaxFileSize: 5 * 1024 * 1024
+      }
     } catch (error) {
       console.warn('获取分片配置失败，使用默认配置:', error)
-      return { chunkSize: DEFAULT_CHUNK_SIZE, maxFileSize: DEFAULT_MAX_FILE_SIZE }
+      return { 
+        chunkSize: DEFAULT_CHUNK_SIZE, 
+        maxFileSize: DEFAULT_MAX_FILE_SIZE,
+        imageMaxFileSize: 5 * 1024 * 1024
+      }
     }
   },
 

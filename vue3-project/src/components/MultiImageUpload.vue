@@ -95,7 +95,7 @@ import SvgIcon from '@/components/SvgIcon.vue'
 import MessageToast from '@/components/MessageToast.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 import { imageUploadApi, uploadApi } from '@/api/index.js'
-import { formatSpeed } from '@/api/upload.js'
+import { formatSpeed, PRELIMINARY_MAX_SIZE } from '@/api/upload.js'
 
 const props = defineProps({
   modelValue: {
@@ -243,13 +243,12 @@ const addFiles = async (files) => {
 
   // 验证所有文件
   // 注意：实际的大小验证会在uploadImage内部进行，这里只是前置检查
-  // 使用一个合理的默认值（10MB），如果超过这个大小很可能也会超过服务器配置
-  const preliminaryMaxSize = 10 * 1024 * 1024 // 10MB预检查，实际限制由服务器配置决定
+  // 使用PRELIMINARY_MAX_SIZE常量进行预检查，实际限制由服务器配置决定
   for (const file of fileArray) {
-    // 先做一个宽松的预检查（10MB），实际限制会在uploadImage中根据服务器配置检查
-    if (file.size > preliminaryMaxSize) {
+    // 先做一个宽松的预检查，实际限制会在uploadImage中根据服务器配置检查
+    if (file.size > PRELIMINARY_MAX_SIZE) {
       const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1)
-      const maxSizeMB = (preliminaryMaxSize / (1024 * 1024)).toFixed(0)
+      const maxSizeMB = (PRELIMINARY_MAX_SIZE / (1024 * 1024)).toFixed(0)
       const errorMsg = `图片大小为 ${fileSizeMB}MB，超过 ${maxSizeMB}MB 限制，请选择更小的图片`
 
       // 显示Toast提示

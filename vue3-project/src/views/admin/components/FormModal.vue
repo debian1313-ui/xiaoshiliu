@@ -181,6 +181,7 @@ import ContentEditableInput from '@/components/ContentEditableInput.vue'
 import messageManager from '@/utils/messageManager'
 // 移除uploadApi导入，改用MultiImageUpload组件的uploadAllImages方法
 import { imageUploadApi } from '@/api/index.js'
+import { PRELIMINARY_MAX_SIZE } from '@/api/upload.js'
 import { videoApi } from '@/api/video.js'
 import { useScrollLock } from '@/composables/useScrollLock'
 import { sanitizeContent } from '@/utils/contentSecurity'
@@ -1190,17 +1191,16 @@ const handleAvatarDrop = (event, fieldKey) => {
 const showAvatarCropDialog = async (file, fieldKey) => {
   // 验证文件
   const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-  // Use 10MB preliminary check - actual limit enforced by server config during upload
-  const maxSize = 10 * 1024 * 1024
+  // Use PRELIMINARY_MAX_SIZE constant - actual limit enforced by server config during upload
 
   if (!validTypes.includes(file.type)) {
     avatarErrors.value[fieldKey] = '请选择有效的图片格式 (JPEG, PNG, GIF, WebP)'
     return
   }
 
-  if (file.size > maxSize) {
+  if (file.size > PRELIMINARY_MAX_SIZE) {
     const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1)
-    const maxSizeMB = (maxSize / (1024 * 1024)).toFixed(0)
+    const maxSizeMB = (PRELIMINARY_MAX_SIZE / (1024 * 1024)).toFixed(0)
     avatarErrors.value[fieldKey] = `图片大小为 ${fileSizeMB}MB，超过 ${maxSizeMB}MB 限制，请选择更小的图片`
     return
   }

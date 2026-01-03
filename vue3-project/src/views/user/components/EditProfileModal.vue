@@ -165,6 +165,7 @@
 import { ref, reactive, nextTick, watch, inject, computed, onMounted } from 'vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import { imageUploadApi, authApi } from '@/api/index.js'
+import { PRELIMINARY_MAX_SIZE } from '@/api/upload.js'
 import Cropper from 'cropperjs'
 import 'cropperjs/dist/cropper.css'
 import EmojiPicker from '@/components/EmojiPicker.vue'
@@ -498,8 +499,7 @@ const handleDrop = (event) => {
 
 const validateFile = (file) => {
   const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-  // Use 10MB preliminary check - actual limit enforced by server config during upload
-  const maxSize = 10 * 1024 * 1024
+  // Use PRELIMINARY_MAX_SIZE constant - actual limit enforced by server config during upload
 
   if (!validTypes.includes(file.type)) {
     const errorMsg = '不填有效的图片格式 (JPEG, PNG, GIF, WebP)'
@@ -508,9 +508,9 @@ const validateFile = (file) => {
     return false
   }
 
-  if (file.size > maxSize) {
+  if (file.size > PRELIMINARY_MAX_SIZE) {
     const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1)
-    const maxSizeMB = (maxSize / (1024 * 1024)).toFixed(0)
+    const maxSizeMB = (PRELIMINARY_MAX_SIZE / (1024 * 1024)).toFixed(0)
     const errorMsg = `图片大小为 ${fileSizeMB}MB，超过 ${maxSizeMB}MB 限制，请选择更小的图片`
 
     avatarError.value = `图片大小不能超过 ${maxSizeMB}MB`

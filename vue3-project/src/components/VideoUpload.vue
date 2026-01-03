@@ -83,7 +83,7 @@ import { ref, watch, onMounted, computed } from 'vue'
 import SvgIcon from './SvgIcon.vue'
 import MessageToast from './MessageToast.vue'
 import { videoApi } from '@/api/video.js'
-import { uploadImage, formatSpeed } from '@/api/upload.js'
+import { uploadImage, formatSpeed, PRELIMINARY_MAX_SIZE } from '@/api/upload.js'
 import { generateVideoThumbnail, blobToFile, generateThumbnailFilename } from '@/utils/videoThumbnail.js'
 
 const props = defineProps({
@@ -130,8 +130,8 @@ const actualMaxSize = computed(() => {
 
 // 计算实际使用的图片最大大小
 const actualImageMaxSize = computed(() => {
-  // 默认使用10MB作为fallback，等待服务器配置加载
-  return serverImageMaxSize.value !== null ? serverImageMaxSize.value : 10 * 1024 * 1024
+  // 默认使用PRELIMINARY_MAX_SIZE作为fallback，等待服务器配置加载
+  return serverImageMaxSize.value !== null ? serverImageMaxSize.value : PRELIMINARY_MAX_SIZE
 })
 
 // 格式化显示的文件大小（MB）
