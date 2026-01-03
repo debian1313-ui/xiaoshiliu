@@ -252,16 +252,35 @@ class WebPOptimizer {
     let fontFaceRule = '';
     let fontFamily = '"Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", "PingFang SC", Arial, sans-serif';
     
-    // 如果提供了自定义字体路径，使用 @font-face 加载
+    // 如果提供了自定义字体路径，将字体嵌入为base64
+    // 这是唯一可靠的方法让librsvg（Sharp的SVG渲染器）正确加载自定义字体
     if (fontPath && fs.existsSync(fontPath)) {
-      const fontUrl = `file://${fontPath}`;
-      fontFaceRule = `
-        @font-face {
-          font-family: 'CustomWatermarkFont';
-          src: url('${fontUrl}');
-        }`;
-      fontFamily = '"CustomWatermarkFont", "Noto Sans CJK SC", "Source Han Sans SC", Arial, sans-serif';
-      console.log(`WebP Optimizer: 使用自定义字体 - ${fontPath}`);
+      try {
+        // 读取字体文件并转换为base64
+        const fontData = fs.readFileSync(fontPath);
+        const fontBase64 = fontData.toString('base64');
+        
+        // 根据字体文件扩展名确定MIME类型
+        const ext = path.extname(fontPath).toLowerCase();
+        let mimeType = 'font/ttf';
+        if (ext === '.otf') {
+          mimeType = 'font/otf';
+        } else if (ext === '.woff') {
+          mimeType = 'font/woff';
+        } else if (ext === '.woff2') {
+          mimeType = 'font/woff2';
+        }
+        
+        fontFaceRule = `
+          @font-face {
+            font-family: 'CustomWatermarkFont';
+            src: url('data:${mimeType};base64,${fontBase64}') format('${ext === '.otf' ? 'opentype' : 'truetype'}');
+          }`;
+        fontFamily = '"CustomWatermarkFont", "Noto Sans CJK SC", "Source Han Sans SC", Arial, sans-serif';
+        console.log(`WebP Optimizer: 使用自定义字体(base64嵌入) - ${fontPath}, 大小: ${Math.round(fontData.length/1024)}KB`);
+      } catch (fontError) {
+        console.error(`WebP Optimizer: 读取字体文件失败: ${fontError.message}`);
+      }
     }
     
     // 创建SVG
