@@ -883,7 +883,7 @@ class WebPOptimizer {
    * 处理图片 - 主入口函数
    * @param {Buffer} fileBuffer - 文件缓冲区
    * @param {string} mimetype - 文件MIME类型
-   * @param {Object} context - 上下文（包含用户信息等，以及 applyWatermark 控制是否添加水印）
+   * @param {Object} context - 上下文（包含用户信息等，以及 applyWatermark 控制是否添加水印，isAvatar 控制头像模式）
    * @returns {Promise<{buffer: Buffer, filename: string, mimetype: string, processed: boolean}>}
    */
   async processImage(fileBuffer, mimetype, context = {}) {
@@ -897,8 +897,12 @@ class WebPOptimizer {
       };
     }
     
+    // 头像上传模式：强制转换为WebP，质量75%
+    const isAvatar = context.isAvatar === true;
+    
     // 检查是否需要转换为WebP
-    const shouldConvertToWebp = this.shouldConvert(mimetype);
+    // 头像模式下强制转换为WebP
+    const shouldConvertToWebp = isAvatar || this.shouldConvert(mimetype);
     
     // 用户可以通过 context.applyWatermark 控制是否添加水印
     // 如果未指定（undefined），则使用后端配置的默认值
@@ -925,7 +929,7 @@ class WebPOptimizer {
       let image = sharp(fileBuffer);
       let metadata = await image.metadata();
       
-      console.log(`WebP Optimizer: 处理图片 - 原始尺寸: ${metadata.width}x${metadata.height}, 格式: ${metadata.format}`);
+      console.log(`WebP Optimizer: 处理图片 - 原始尺寸: ${metadata.width}x${metadata.height}, 格式: ${metadata.format}${isAvatar ? ', 头像模式' : ''}`);
       console.log(`WebP Optimizer: 水印配置 - 后端主水印: ${this.options.enableWatermark ? '启用' : '禁用'}, 类型: ${this.options.watermarkType}, 用户名水印: ${this.options.enableUsernameWatermark ? '启用' : '禁用'}`);
       console.log(`WebP Optimizer: 用户选择 - 添加水印: ${userWantsWatermark ? '是' : '否'}, 实际应用: ${shouldApplyWatermark ? '是' : '否'}${customOpacity ? `, 自定义透明度: ${customOpacity}%` : ''}`);
       
@@ -986,16 +990,18 @@ class WebPOptimizer {
       let outputMimetype = mimetype;
       
       if (shouldConvertToWebp) {
+        // 头像模式使用75%质量，其他使用配置的默认质量
+        const avatarQuality = 75;
         const webpOptions = {
-          quality: this.options.webpQuality,
+          quality: isAvatar ? avatarQuality : this.options.webpQuality,
           alphaQuality: this.options.webpAlphaQuality,
-          lossless: this.options.webpLossless
+          lossless: isAvatar ? false : this.options.webpLossless // 头像模式禁用无损压缩
         };
         
         outputBuffer = await image.webp(webpOptions).toBuffer();
         outputMimetype = 'image/webp';
         
-        console.log(`WebP Optimizer: 已转换为WebP - 质量: ${this.options.webpQuality}, 无损: ${this.options.webpLossless}`);
+        console.log(`WebP Optimizer: 已转换为WebP - 质量: ${webpOptions.quality}${isAvatar ? ' (头像模式)' : ''}, 无损: ${webpOptions.lossless}`);
       } else if (mimetype.toLowerCase() === 'image/webp') {
         // 如果原图是WebP，保持WebP格式输出
         const webpOptions = {

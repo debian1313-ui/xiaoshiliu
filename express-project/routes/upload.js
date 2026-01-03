@@ -105,6 +105,10 @@ router.post('/single', authenticateToken, upload.single('file'), async (req, res
       }
     }
 
+    // 解析是否是头像上传（头像强制转换为WebP，质量75%）
+    const isAvatarParam = req.body.isAvatar;
+    const isAvatar = isAvatarParam === true || isAvatarParam === 'true' || isAvatarParam === 1 || isAvatarParam === '1';
+
     // 准备用户上下文（用于水印）
     // 格式: nickname @xise_id 或 nickname @user_id
     const userId = req.user?.xise_id || req.user?.user_id || 'guest';
@@ -113,7 +117,8 @@ router.post('/single', authenticateToken, upload.single('file'), async (req, res
       username: nickname ? `${nickname} @${userId}` : userId,
       userId: req.user?.id,
       applyWatermark: applyWatermark,
-      customOpacity: customOpacity
+      customOpacity: customOpacity,
+      isAvatar: isAvatar // 头像上传标记，用于强制WebP转换
     };
 
     // 使用统一上传函数（根据配置选择策略）

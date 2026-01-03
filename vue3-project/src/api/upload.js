@@ -397,6 +397,9 @@ export async function uploadCroppedImage(blob, options = {}) {
     const formData = new FormData()
     const filename = options.filename || 'avatar.png'
     formData.append('file', blob, filename)
+    
+    // 标记为头像上传，后端将强制转换为WebP，质量75%
+    formData.append('isAvatar', 'true')
 
     // 自动检测token类型（管理员或普通用户）
     const adminToken = localStorage.getItem('admin_token')
