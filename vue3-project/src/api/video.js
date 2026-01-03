@@ -27,20 +27,20 @@ export const videoApi = {
         return {
           chunkSize: response.data.chunkSize || DEFAULT_CHUNK_SIZE,
           maxFileSize: response.data.maxFileSize || DEFAULT_MAX_FILE_SIZE,
-          imageMaxFileSize: response.data.imageMaxFileSize || 5 * 1024 * 1024
+          imageMaxFileSize: response.data.imageMaxFileSize || DEFAULT_IMAGE_MAX_SIZE
         }
       }
       return { 
         chunkSize: DEFAULT_CHUNK_SIZE, 
         maxFileSize: DEFAULT_MAX_FILE_SIZE,
-        imageMaxFileSize: 5 * 1024 * 1024
+        imageMaxFileSize: DEFAULT_IMAGE_MAX_SIZE
       }
     } catch (error) {
       console.warn('获取分片配置失败，使用默认配置:', error)
       return { 
         chunkSize: DEFAULT_CHUNK_SIZE, 
         maxFileSize: DEFAULT_MAX_FILE_SIZE,
-        imageMaxFileSize: 5 * 1024 * 1024
+        imageMaxFileSize: DEFAULT_IMAGE_MAX_SIZE
       }
     }
   },

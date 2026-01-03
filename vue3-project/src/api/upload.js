@@ -4,8 +4,8 @@ import SparkMD5 from 'spark-md5'
 const DEFAULT_CHUNK_SIZE = 3 * 1024 * 1024
 // 图片分片上传阈值 3MB
 const IMAGE_CHUNK_THRESHOLD = 3 * 1024 * 1024
-// 默认图片最大大小 5MB (will be overridden by server config)
-let IMAGE_MAX_SIZE = 5 * 1024 * 1024
+// 默认图片最大大小 100MB (will be overridden by server config)
+let IMAGE_MAX_SIZE = 100 * 1024 * 1024
 // 前端初步检查的最大大小 10MB (宽松的预检查，实际限制由服务器配置决定)
 export const PRELIMINARY_MAX_SIZE = 10 * 1024 * 1024
 

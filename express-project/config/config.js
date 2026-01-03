@@ -75,8 +75,8 @@ const config = {
   upload: {
     // 图片上传配置
     image: {
-      maxSize: process.env.IMAGE_MAX_SIZE || '10mb',
-      maxSizeBytes: parseSizeToBytes(process.env.IMAGE_MAX_SIZE || '5mb'),
+      maxSize: process.env.IMAGE_MAX_SIZE || '100mb',
+      maxSizeBytes: parseSizeToBytes(process.env.IMAGE_MAX_SIZE || '100mb'),
       allowedTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'],
       allowedExtensions: ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'],
       // 图片上传策略配置

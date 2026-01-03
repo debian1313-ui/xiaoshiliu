@@ -502,7 +502,7 @@ const validateFile = (file) => {
   // Use PRELIMINARY_MAX_SIZE constant - actual limit enforced by server config during upload
 
   if (!validTypes.includes(file.type)) {
-    const errorMsg = '不填有效的图片格式 (JPEG, PNG, GIF, WebP)'
+    const errorMsg = '请选择有效的图片格式 (JPEG, PNG, GIF, WebP)'
     avatarError.value = errorMsg
     $message.error(errorMsg)
     return false
