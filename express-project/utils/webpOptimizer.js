@@ -229,10 +229,11 @@ class WebPOptimizer {
    * @param {number} fontSize - 字体大小
    * @param {string} color - 颜色 (hex格式)
    * @param {number} opacity - 透明度 (0-100)
-   * @param {string|null} fontPath - 自定义字体路径（已弃用，改用系统字体）
+   * @param {string|null} _fontPath - 自定义字体路径（已弃用，librsvg不支持base64字体嵌入）
+   * @deprecated fontPath参数已弃用，现使用系统安装的Noto Sans CJK字体
    * @returns {Buffer} SVG缓冲区
    */
-  createTextWatermarkSvg(text, fontSize, color, opacity, fontPath = null) {
+  createTextWatermarkSvg(text, fontSize, color, opacity, _fontPath = null) {
     // 将hex颜色转换为rgba
     const hexColor = color.replace('#', '');
     const r = parseInt(hexColor.substring(0, 2), 16);
@@ -254,30 +255,31 @@ class WebPOptimizer {
     // Dockerfile中已安装 font-noto-cjk，提供 "Noto Sans CJK" 字体
     const fontFamily = '"Noto Sans CJK SC", "Noto Sans CJK", sans-serif';
     
-    if (fontPath) {
-      console.log(`WebP Optimizer: 忽略自定义字体路径 ${fontPath}，改用系统安装的 Noto Sans CJK 字体（librsvg不支持base64字体嵌入）`);
+    if (_fontPath) {
+      console.log(`WebP Optimizer: 忽略自定义字体路径 ${_fontPath}，改用系统安装的 Noto Sans CJK 字体（librsvg不支持base64字体嵌入）`);
     } else {
       console.log(`WebP Optimizer: 使用系统安装的 Noto Sans CJK 字体`);
     }
     
-    // 创建SVG - 使用dominant-baseline和text-anchor来更好地定位文字
-    // XML声明使用UTF-8编码确保中文字符正确处理
-    const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-  <defs>
-    <style type="text/css">
-      .watermark-text {
-        font-family: ${fontFamily};
-        font-size: ${fontSize}px;
-        fill: rgba(${r}, ${g}, ${b}, ${a});
-        font-weight: normal;
-      }
-    </style>
-  </defs>
-  <text x="10" y="${fontSize}" class="watermark-text">${this.escapeXml(text)}</text>
-</svg>`;
+    // 创建SVG，使用系统字体渲染中文
+    const svg = [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">`,
+      '  <defs>',
+      '    <style type="text/css">',
+      '      .watermark-text {',
+      `        font-family: ${fontFamily};`,
+      `        font-size: ${fontSize}px;`,
+      `        fill: rgba(${r}, ${g}, ${b}, ${a});`,
+      '        font-weight: normal;',
+      '      }',
+      '    </style>',
+      '  </defs>',
+      `  <text x="10" y="${fontSize}" class="watermark-text">${this.escapeXml(text)}</text>`,
+      '</svg>'
+    ].join('\n');
     
-    return Buffer.from(svg, 'utf8');
+    return Buffer.from(svg);
   }
 
   /**
