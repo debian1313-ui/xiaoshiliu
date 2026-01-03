@@ -575,11 +575,6 @@ router.post('/chunk/merge', authenticateToken, async (req, res) => {
         }
       });
     }
-        coverUrl: coverUrl,
-        transcoding: config.videoTranscoding.enabled && config.upload.video.strategy === 'local',
-        videoInfo: validationResult.info
-      }
-    });
   } catch (error) {
     console.error('分片合并失败:', error);
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
