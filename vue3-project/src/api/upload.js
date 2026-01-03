@@ -596,6 +596,14 @@ export async function uploadCroppedImage(blob, options = {}) {
   }
 }
 
+/**
+ * 验证图片文件
+ * @param {File} file - 文件对象
+ * @param {Object} options - 验证选项
+ * @param {number} options.maxSize - 最大文件大小（字节），默认使用IMAGE_MAX_SIZE（应在调用uploadImage后使用以确保获取到最新配置）
+ * @param {Array<string>} options.allowedTypes - 允许的文件类型
+ * @returns {Object} 验证结果 {valid: boolean, error: string}
+ */
 export function validateImageFile(file, options = {}) {
   const {
     maxSize = IMAGE_MAX_SIZE,
