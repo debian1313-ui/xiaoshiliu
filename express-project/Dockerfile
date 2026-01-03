@@ -1,10 +1,28 @@
 # 使用官方Node.js运行时作为基础镜像
 FROM node:18-alpine
 
-# 安装 FFmpeg、FFprobe 和中文字体
-# fonts-noto-cjk-extra 包含 Noto Sans CJK 字体，支持中日韩文字
-RUN apk add --no-cache ffmpeg fontconfig font-noto-cjk && \
-    fc-cache -fv
+# 安装 FFmpeg、FFprobe、中文字体和 canvas 依赖
+# canvas 需要 cairo, pango, libjpeg, giflib, librsvg 等
+RUN apk add --no-cache \
+    ffmpeg \
+    fontconfig \
+    font-noto-cjk \
+    # canvas 运行时依赖
+    cairo \
+    pango \
+    libjpeg-turbo \
+    giflib \
+    librsvg \
+    # canvas 编译依赖
+    build-base \
+    g++ \
+    cairo-dev \
+    pango-dev \
+    libjpeg-turbo-dev \
+    giflib-dev \
+    librsvg-dev \
+    python3 \
+    && fc-cache -fv
 
 # 设置工作目录
 WORKDIR /app
