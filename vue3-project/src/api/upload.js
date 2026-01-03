@@ -1,5 +1,3 @@
-import SparkMD5 from 'spark-md5'
-
 // 压缩图片函数
 const compressImage = (file, maxSizeMB = 0.8, quality = 0.4) => {
   return new Promise((resolve) => {
@@ -46,229 +44,26 @@ const compressImage = (file, maxSizeMB = 0.8, quality = 0.4) => {
   })
 }
 
-/**
- * 大图片分片上传的阈值 3MB
- */
-const LARGE_IMAGE_THRESHOLD = 3 * 1024 * 1024
-
-/**
- * 默认分片大小 1MB（图片分片比视频小一些）
- */
-const IMAGE_CHUNK_SIZE = 1 * 1024 * 1024
-
-/**
- * 格式化文件大小（内部使用）
- * @param {number} bytes - 字节数
- * @returns {string}
- */
-function formatFileSizeInternal(bytes) {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
-/**
- * 计算文件MD5
- * @param {File|Blob} file - 文件
- * @returns {Promise<string>} MD5值
- */
-async function calculateFileMD5(file) {
-  return new Promise((resolve, reject) => {
-    const spark = new SparkMD5.ArrayBuffer()
-    const reader = new FileReader()
-    const chunkSize = 2 * 1024 * 1024
-    let currentChunk = 0
-    const chunks = Math.ceil(file.size / chunkSize)
-
-    reader.onload = (e) => {
-      spark.append(e.target.result)
-      currentChunk++
-
-      if (currentChunk < chunks) {
-        loadNext()
-      } else {
-        resolve(spark.end())
-      }
-    }
-
-    reader.onerror = () => {
-      reject(new Error('文件读取失败'))
-    }
-
-    function loadNext() {
-      const start = currentChunk * chunkSize
-      const end = Math.min(start + chunkSize, file.size)
-      reader.readAsArrayBuffer(file.slice(start, end))
-    }
-
-    loadNext()
-  })
-}
-
-/**
- * 分片上传大图片
- * @param {File} file - 图片文件
- * @param {Object} options - 上传选项
- * @returns {Promise<{success: boolean, data?: Object, message?: string}>}
- */
-async function uploadLargeImageChunked(file, options = {}) {
-  try {
-    const chunkSize = IMAGE_CHUNK_SIZE
-    
-    // 计算文件唯一标识符
-    console.log('📊 计算图片MD5...')
-    const fileMD5 = await calculateFileMD5(file)
-    const identifier = `img_${fileMD5}_${file.size}`
-    console.log(`📝 图片标识符: ${identifier}`)
-
-    // 计算分片数量
-    const totalChunks = Math.ceil(file.size / chunkSize)
-    console.log(`📦 图片大小: ${formatFileSizeInternal(file.size)}, 分片数: ${totalChunks}`)
-
-    const token = localStorage.getItem('token')
-    if (!token) {
-      throw new Error('未登录，请先登录')
-    }
-
-    // 逐个上传分片
-    for (let i = 1; i <= totalChunks; i++) {
-      const start = (i - 1) * chunkSize
-      const end = Math.min(start + chunkSize, file.size)
-      const chunk = file.slice(start, end)
-
-      const formData = new FormData()
-      formData.append('file', chunk, `chunk_${i}`)
-      formData.append('identifier', identifier)
-      formData.append('chunkNumber', i.toString())
-      formData.append('totalChunks', totalChunks.toString())
-      formData.append('filename', file.name)
-      formData.append('fileType', 'image') // 标记为图片类型
-
-      console.log(`📤 上传图片分片 ${i}/${totalChunks}...`)
-      
-      const response = await fetch('/api/upload/chunk', {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error(`分片 ${i} 上传失败: HTTP ${response.status}`)
-      }
-
-      const result = await response.json()
-      if (result.code !== 200) {
-        throw new Error(`分片 ${i} 上传失败: ${result.message}`)
-      }
-
-      console.log(`✅ 图片分片 ${i}/${totalChunks} 上传成功`)
-    }
-
-    // 合并分片，传递水印选项
-    console.log('🔄 开始合并图片分片...')
-    const mergeFormData = new FormData()
-    mergeFormData.append('identifier', identifier)
-    mergeFormData.append('totalChunks', totalChunks.toString())
-    mergeFormData.append('filename', file.name)
-    mergeFormData.append('fileType', 'image')
-
-    // 添加用户名水印选项
-    if (options.watermark !== undefined) {
-      mergeFormData.append('watermark', options.watermark.toString())
-    }
-    // 添加图片水印选项
-    if (options.imageWatermark !== undefined) {
-      mergeFormData.append('imageWatermark', options.imageWatermark.toString())
-    }
-    if (options.watermarkOpacity !== undefined) {
-      mergeFormData.append('watermarkOpacity', options.watermarkOpacity.toString())
-    }
-    if (options.watermarkPosition !== undefined) {
-      mergeFormData.append('watermarkPosition', options.watermarkPosition.toString())
-    }
-    if (options.watermarkColor !== undefined) {
-      mergeFormData.append('watermarkColor', options.watermarkColor)
-    }
-    if (options.watermarkFontSize !== undefined) {
-      mergeFormData.append('watermarkFontSize', options.watermarkFontSize.toString())
-    }
-
-    const mergeResponse = await fetch('/api/upload/chunk/merge', {
-      method: 'POST',
-      body: mergeFormData,
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    })
-
-    if (!mergeResponse.ok) {
-      throw new Error(`图片合并失败: HTTP ${mergeResponse.status}`)
-    }
-
-    const mergeResult = await mergeResponse.json()
-    if (mergeResult.code !== 200) {
-      throw new Error(`图片合并失败: ${mergeResult.message}`)
-    }
-
-    console.log('✅ 大图片分片上传完成:', mergeResult.data)
-    return {
-      success: true,
-      data: { url: mergeResult.data.url, originalName: file.name, size: file.size }
-    }
-  } catch (error) {
-    console.error('❌ 大图片分片上传失败:', error)
-    return {
-      success: false,
-      message: error.message || '大图片上传失败'
-    }
-  }
-}
-
 export async function uploadImage(file, options = {}) {
   try {
     if (!file) throw new Error('请选择要上传的文件')
     if (file instanceof File && !file.type.startsWith('image/')) throw new Error('请选择图片文件')
-    // 增加图片大小限制到10MB（因为现在支持分片上传）
-    if (file.size > 10 * 1024 * 1024) throw new Error('图片大小不能超过10MB')
+    if (file.size > 5 * 1024 * 1024) throw new Error('图片大小不能超过5MB')
 
     // 压缩图片
     const compressedFile = await compressImage(file)
-    const filename = options.filename || (compressedFile instanceof File ? compressedFile.name : 'image.png')
 
-    // 检查压缩后的文件大小，如果大于3MB则使用分片上传
-    if (compressedFile.size > LARGE_IMAGE_THRESHOLD) {
-      console.log(`📦 图片大于3MB (${formatFileSizeInternal(compressedFile.size)})，使用分片上传`)
-      return await uploadLargeImageChunked(compressedFile, options)
-    }
-
-    // 小于3MB的图片使用普通上传
     const formData = new FormData()
+    const filename = options.filename || (compressedFile instanceof File ? compressedFile.name : 'image.png')
     formData.append('file', compressedFile, filename)
     
-    // 添加用户名水印选项（仅当显式开启时才应用）
+    // 添加水印选项（仅当显式开启时才应用）
     const applyWatermark = options.watermark === true
     formData.append('watermark', applyWatermark.toString())
     
-    // 添加图片水印选项（仅当显式开启时才应用）
-    const applyImageWatermark = options.imageWatermark === true
-    formData.append('imageWatermark', applyImageWatermark.toString())
-    
-    // 添加水印自定义设置（用于用户名水印）
+    // 添加水印透明度（如果用户指定）
     if (options.watermarkOpacity !== undefined) {
       formData.append('watermarkOpacity', options.watermarkOpacity.toString())
-    }
-    if (options.watermarkPosition !== undefined) {
-      formData.append('watermarkPosition', options.watermarkPosition.toString())
-    }
-    if (options.watermarkColor !== undefined) {
-      formData.append('watermarkColor', options.watermarkColor)
-    }
-    if (options.watermarkFontSize !== undefined) {
-      formData.append('watermarkFontSize', options.watermarkFontSize.toString())
     }
 
     // 创建AbortController用于超时控制
@@ -315,17 +110,7 @@ export async function uploadImage(file, options = {}) {
 
 export async function uploadImages(files, options = {}) {
   try {
-    const { 
-      maxCount = 9, 
-      onProgress, 
-      onSingleComplete, 
-      watermark,
-      imageWatermark,
-      watermarkOpacity,
-      watermarkPosition,
-      watermarkColor,
-      watermarkFontSize
-    } = options
+    const { maxCount = 9, onProgress, onSingleComplete, watermark, watermarkOpacity } = options
     const fileArray = Array.from(files)
 
     if (fileArray.length === 0) throw new Error('请选择要上传的文件')
@@ -344,15 +129,8 @@ export async function uploadImages(files, options = {}) {
           percent: Math.round(((i + 1) / fileArray.length) * 100)
         })
 
-        // 传递水印选项（包括所有自定义设置）
-        const result = await uploadImage(file, { 
-          watermark,
-          imageWatermark,
-          watermarkOpacity,
-          watermarkPosition,
-          watermarkColor,
-          watermarkFontSize
-        })
+        // 传递水印选项（包括透明度）
+        const result = await uploadImage(file, { watermark, watermarkOpacity })
 
         if (result.success) {
           results.push(result.data)

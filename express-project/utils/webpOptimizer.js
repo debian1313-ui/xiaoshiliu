@@ -732,8 +732,9 @@ class WebPOptimizer {
    * @returns {Promise<sharp.Sharp>}
    */
   async applyUsernameWatermark(image, metadata, context = {}) {
-    // 注意：是否调用此函数的决策已在 processImage 中完成
-    // 此处不再检查 this.options.enableUsernameWatermark
+    if (!this.options.enableUsernameWatermark) {
+      return image;
+    }
     
     const text = this.processWatermarkText(this.options.usernameWatermarkText, context);
     if (!text) {
@@ -742,17 +743,7 @@ class WebPOptimizer {
     }
     
     // 前端自定义选项优先，否则使用后端配置
-    // 获取基础字体大小（用户指定的或后端默认的）
-    const baseFontSize = context.usernameFontSize || this.options.usernameWatermarkFontSize;
-    
-    // 计算实际字体大小：基于图片尺寸进行缩放，确保不同分辨率下水印视觉大小一致
-    // 参考尺寸：以1200px宽度为基准
-    const referenceWidth = 1200;
-    const imageShortSide = Math.min(metadata.width, metadata.height);
-    // 缩放因子：限制在0.5-2.0范围内，避免过小或过大
-    const scaleFactor = Math.max(0.5, Math.min(2.0, imageShortSide / referenceWidth));
-    const fontSize = Math.round(baseFontSize * scaleFactor);
-    
+    const fontSize = context.usernameFontSize || this.options.usernameWatermarkFontSize;
     const opacity = context.usernameOpacity || this.options.usernameWatermarkOpacity;
     const color = context.usernameColor || this.options.usernameWatermarkColor;
     const fontPath = this.options.usernameWatermarkFontPath;
@@ -909,26 +900,19 @@ class WebPOptimizer {
     // 检查是否需要转换为WebP
     const shouldConvertToWebp = this.shouldConvert(mimetype);
     
-    // 用户可以通过 context.applyWatermark 控制是否添加用户名水印
-    // 用户可以通过 context.applyImageWatermark 控制是否添加图片水印
-    // 前端设置优先：如果用户在前端选择启用水印，则应用对应水印
-    // 后端配置作为默认值，但可以被前端覆盖
-    const userWantsUsernameWatermark = context.applyWatermark === true;
-    const userWantsImageWatermark = context.applyImageWatermark === true;
-    
-    // 决定是否应用各类水印：
-    // 1. 主水印（文字/图片）：用户前端选择启用 OR 后端配置启用
-    // 2. 用户名水印：用户前端选择启用 OR 后端配置启用
-    const shouldApplyMainWatermark = userWantsImageWatermark || this.options.enableWatermark;
-    const shouldApplyUsernameWatermark = userWantsUsernameWatermark || this.options.enableUsernameWatermark;
-    const shouldApplyAnyWatermark = shouldApplyMainWatermark || shouldApplyUsernameWatermark;
+    // 用户可以通过 context.applyWatermark 控制是否添加水印
+    // 如果未指定（undefined），则使用后端配置的默认值
+    // 如果指定了 false，则不添加水印
+    // 如果指定了 true，则添加水印（前提是后端已启用）
+    const userWantsWatermark = context.applyWatermark === true; // 默认为不添加，需显式开启
+    const shouldApplyWatermark = userWantsWatermark && (this.options.enableWatermark || this.options.enableUsernameWatermark);
     const shouldResize = this.options.maxWidth || this.options.maxHeight;
     
     // 用户自定义透明度（覆盖默认配置）
     const customOpacity = context.customOpacity;
     
     // 如果不需要任何处理，直接返回原图
-    if (!shouldConvertToWebp && !shouldApplyAnyWatermark && !shouldResize) {
+    if (!shouldConvertToWebp && !shouldApplyWatermark && !shouldResize) {
       return {
         buffer: fileBuffer,
         mimetype: mimetype,
@@ -942,8 +926,8 @@ class WebPOptimizer {
       let metadata = await image.metadata();
       
       console.log(`WebP Optimizer: 处理图片 - 原始尺寸: ${metadata.width}x${metadata.height}, 格式: ${metadata.format}`);
-      console.log(`WebP Optimizer: 水印配置 - 后端主水印: ${this.options.enableWatermark ? '启用' : '禁用'}, 类型: ${this.options.watermarkType}, 后端用户名水印: ${this.options.enableUsernameWatermark ? '启用' : '禁用'}`);
-      console.log(`WebP Optimizer: 用户选择 - 前端图片水印: ${userWantsImageWatermark ? '是' : '否'}, 前端用户名水印: ${userWantsUsernameWatermark ? '是' : '否'}, 实际主水印: ${shouldApplyMainWatermark ? '是' : '否'}, 实际用户名水印: ${shouldApplyUsernameWatermark ? '是' : '否'}${customOpacity ? `, 自定义透明度: ${customOpacity}%` : ''}`);
+      console.log(`WebP Optimizer: 水印配置 - 后端主水印: ${this.options.enableWatermark ? '启用' : '禁用'}, 类型: ${this.options.watermarkType}, 用户名水印: ${this.options.enableUsernameWatermark ? '启用' : '禁用'}`);
+      console.log(`WebP Optimizer: 用户选择 - 添加水印: ${userWantsWatermark ? '是' : '否'}, 实际应用: ${shouldApplyWatermark ? '是' : '否'}${customOpacity ? `, 自定义透明度: ${customOpacity}%` : ''}`);
       
       // 1. 尺寸缩放
       if (shouldResize) {
@@ -972,9 +956,9 @@ class WebPOptimizer {
       }
       
       // 2. 应用水印
-      if (shouldApplyAnyWatermark) {
-        // 应用文字/图片水印（前端启用或后端配置启用）
-        if (shouldApplyMainWatermark) {
+      if (shouldApplyWatermark) {
+        // 应用文字/图片水印
+        if (this.options.enableWatermark) {
           if (this.options.watermarkType === 'text') {
             image = await this.applyTextWatermark(image, metadata, context);
             // 获取buffer并重新创建Sharp实例，确保composite操作被应用
@@ -988,8 +972,8 @@ class WebPOptimizer {
           }
         }
         
-        // 应用用户名水印（前端启用或后端配置启用）
-        if (shouldApplyUsernameWatermark) {
+        // 应用用户名水印
+        if (this.options.enableUsernameWatermark) {
           image = await this.applyUsernameWatermark(image, metadata, context);
           // 获取buffer并重新创建Sharp实例，确保composite操作被应用
           const buffer = await image.toBuffer();

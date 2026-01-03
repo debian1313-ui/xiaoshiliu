@@ -46,25 +46,27 @@
 
     <!-- 水印选项 -->
     <div class="watermark-option">
-      <!-- 用户名水印选项 -->
       <label class="watermark-checkbox">
-        <input type="checkbox" v-model="enableUsernameWatermark" />
+        <input type="checkbox" v-model="enableWatermark" />
         <span class="checkmark"></span>
-        <span class="label-text">添加用户名水印</span>
+        <span class="label-text">添加水印</span>
       </label>
       
-      <!-- 用户名水印自定义设置（仅在启用时显示） -->
-      <WatermarkSettings 
-        v-model="watermarkSettings"
-        :enabled="enableUsernameWatermark"
-      />
-      
-      <!-- 图片水印选项 -->
-      <label class="watermark-checkbox image-watermark-checkbox">
-        <input type="checkbox" v-model="enableImageWatermark" />
-        <span class="checkmark"></span>
-        <span class="label-text">添加图片水印</span>
-      </label>
+      <!-- 水印透明度滑块（仅在启用水印时显示） -->
+      <div v-if="enableWatermark" class="watermark-opacity-slider">
+        <label class="opacity-label">
+          <span>透明度</span>
+          <span class="opacity-value">{{ watermarkOpacity }}%</span>
+        </label>
+        <input 
+          type="range" 
+          v-model.number="watermarkOpacity" 
+          min="10" 
+          max="100" 
+          step="5"
+          class="opacity-slider"
+        />
+      </div>
     </div>
 
     <div class="upload-tips">
@@ -88,7 +90,6 @@ import { ref, watch, nextTick } from 'vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import MessageToast from '@/components/MessageToast.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
-import WatermarkSettings from '@/components/WatermarkSettings.vue'
 import { imageUploadApi, uploadApi } from '@/api/index.js'
 
 const props = defineProps({
@@ -115,15 +116,9 @@ const isDragOver = ref(false)
 const isUploading = ref(false)
 
 // 水印选项（默认关闭，用户勾选后才添加水印）
-const enableUsernameWatermark = ref(false)  // 用户名水印
-const enableImageWatermark = ref(false)     // 图片水印
-// 水印自定义设置（位置、颜色、字号、透明度）- 用于用户名水印
-const watermarkSettings = ref({
-  position: '9',      // 右下角
-  color: '#ffffff',   // 白色
-  fontSize: 20,       // 20px字体
-  opacity: 50         // 50%透明度
-})
+const enableWatermark = ref(false)
+// 水印透明度（默认50%）
+const watermarkOpacity = ref(50)
 
 // 消息提示相关
 const showToast = ref(false)
@@ -570,17 +565,10 @@ const uploadAllImages = async () => {
     // 上传新图片 - 使用新的upload.js API，传递水印选项
     const files = unuploadedImages.map(item => item.file)
 
-    // 构建水印配置选项
-    const watermarkOptions = {
-      watermark: enableUsernameWatermark.value,         // 用户名水印开关
-      imageWatermark: enableImageWatermark.value,       // 图片水印开关
-      watermarkOpacity: watermarkSettings.value.opacity,
-      watermarkPosition: watermarkSettings.value.position,
-      watermarkColor: watermarkSettings.value.color,
-      watermarkFontSize: watermarkSettings.value.fontSize
-    }
-
-    const result = await uploadApi.uploadImages(files, watermarkOptions)
+    const result = await uploadApi.uploadImages(files, { 
+      watermark: enableWatermark.value,
+      watermarkOpacity: watermarkOpacity.value 
+    })
 
     if (result.success && result.data && result.data.uploaded && result.data.uploaded.length > 0) {
       // 更新上传成功的图片状态
@@ -1067,9 +1055,61 @@ defineExpose({
   color: var(--text-color-secondary);
 }
 
-/* 图片水印选项间距 */
-.image-watermark-checkbox {
+/* 水印透明度滑块样式 */
+.watermark-opacity-slider {
   margin-top: 10px;
+  padding: 8px 0;
+}
+
+.opacity-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-color-secondary);
+  margin-bottom: 6px;
+}
+
+.opacity-value {
+  font-weight: 500;
+  color: var(--primary-color);
+}
+
+.opacity-slider {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border-color-primary);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.opacity-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+}
+
+.opacity-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.opacity-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 /* 移动端显示不同的提示 */

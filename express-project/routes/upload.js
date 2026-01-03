@@ -19,54 +19,6 @@ const { validateVideoMedia, deleteInvalidVideo } = require('../utils/videoTransc
 
 const parseWatermarkFlag = (value) => value === true || value === 'true' || value === 1 || value === '1';
 
-/**
- * 解析水印自定义设置参数
- * @param {Object} body - 请求体
- * @returns {Object} 包含解析后的水印设置
- */
-const parseWatermarkSettings = (body) => {
-  const settings = {};
-  
-  // 解析图片水印开关（前端控制）
-  if (body.imageWatermark !== undefined) {
-    settings.applyImageWatermark = parseWatermarkFlag(body.imageWatermark);
-  }
-  
-  // 解析水印透明度（10-100）
-  if (body.watermarkOpacity !== undefined) {
-    const opacity = parseInt(body.watermarkOpacity, 10);
-    if (!isNaN(opacity) && opacity >= 10 && opacity <= 100) {
-      settings.usernameOpacity = opacity;
-    }
-  }
-  
-  // 解析水印位置（九宫格 1-9）
-  if (body.watermarkPosition !== undefined) {
-    const position = body.watermarkPosition;
-    if (['1', '2', '3', '4', '5', '6', '7', '8', '9'].includes(position)) {
-      settings.usernamePosition = position;
-    }
-  }
-  
-  // 解析水印颜色（十六进制格式）
-  if (body.watermarkColor !== undefined) {
-    const color = body.watermarkColor;
-    if (/^#[0-9A-Fa-f]{6}$/.test(color)) {
-      settings.usernameColor = color;
-    }
-  }
-  
-  // 解析水印字体大小（12-40px）
-  if (body.watermarkFontSize !== undefined) {
-    const fontSize = parseInt(body.watermarkFontSize, 10);
-    if (!isNaN(fontSize) && fontSize >= 12 && fontSize <= 40) {
-      settings.usernameFontSize = fontSize;
-    }
-  }
-  
-  return settings;
-};
-
 // 配置 multer 内存存储（用于云端图床）
 const storage = multer.memoryStorage();
 
@@ -138,12 +90,19 @@ router.post('/single', authenticateToken, upload.single('file'), async (req, res
     }
 
     // 解析用户是否希望添加水印（默认不添加，需显式传递 true）
+    // 用户可通过请求参数 watermark=true 来启用水印
     const watermarkParam = req.body.watermark;
     const applyWatermark = parseWatermarkFlag(watermarkParam);
     console.log(`水印参数解析 - 原始值: ${watermarkParam}, 类型: ${typeof watermarkParam}, 结果: ${applyWatermark}`);
     
-    // 解析用户自定义的水印设置
-    const watermarkSettings = parseWatermarkSettings(req.body);
+    // 解析用户自定义的水印透明度（可选，10-100）
+    let customOpacity = null;
+    if (req.body.watermarkOpacity !== undefined) {
+      const opacity = parseInt(req.body.watermarkOpacity, 10);
+      if (!isNaN(opacity) && opacity >= 10 && opacity <= 100) {
+        customOpacity = opacity;
+      }
+    }
 
     // 准备用户上下文（用于水印）
     // 格式: nickname @xise_id 或 nickname @user_id
@@ -153,7 +112,7 @@ router.post('/single', authenticateToken, upload.single('file'), async (req, res
       username: nickname ? `${nickname} @${userId}` : userId,
       userId: req.user?.id,
       applyWatermark: applyWatermark,
-      ...watermarkSettings
+      customOpacity: customOpacity
     };
 
     // 使用统一上传函数（根据配置选择策略）
@@ -202,8 +161,14 @@ router.post('/multiple', authenticateToken, upload.array('files', 9), async (req
     const applyWatermark = parseWatermarkFlag(watermarkParamMultiple);
     console.log(`[多图上传] 水印参数解析 - 原始值: ${watermarkParamMultiple}, 类型: ${typeof watermarkParamMultiple}, 结果: ${applyWatermark}`);
     
-    // 解析用户自定义的水印设置
-    const watermarkSettings = parseWatermarkSettings(req.body);
+    // 解析用户自定义的水印透明度（可选，10-100）
+    let customOpacity = null;
+    if (req.body.watermarkOpacity !== undefined) {
+      const opacity = parseInt(req.body.watermarkOpacity, 10);
+      if (!isNaN(opacity) && opacity >= 10 && opacity <= 100) {
+        customOpacity = opacity;
+      }
+    }
 
     // 准备用户上下文（用于水印）
     // 格式: nickname @xise_id 或 nickname @user_id
@@ -213,7 +178,7 @@ router.post('/multiple', authenticateToken, upload.array('files', 9), async (req
       username: nicknameMultiple ? `${nicknameMultiple} @${odIdMultiple}` : odIdMultiple,
       userId: req.user?.id,
       applyWatermark: applyWatermark,
-      ...watermarkSettings
+      customOpacity: customOpacity
     };
 
     const uploadResults = [];
@@ -500,7 +465,7 @@ router.post('/chunk', authenticateToken, chunkUpload.single('file'), async (req,
 // 合并分片
 router.post('/chunk/merge', authenticateToken, async (req, res) => {
   try {
-    const { identifier, totalChunks, filename, fileType } = req.body;
+    const { identifier, totalChunks, filename } = req.body;
     
     if (!identifier || !totalChunks || !filename) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
@@ -509,10 +474,7 @@ router.post('/chunk/merge', authenticateToken, async (req, res) => {
       });
     }
     
-    // 判断是图片还是视频
-    const isImage = fileType === 'image' || identifier.startsWith('img_');
-    
-    console.log(`🔄 开始合并分片 - 用户ID: ${req.user.id}, 文件名: ${filename}, 总分片数: ${totalChunks}, 类型: ${isImage ? '图片' : '视频'}`);
+    console.log(`🔄 开始合并分片 - 用户ID: ${req.user.id}, 文件名: ${filename}, 总分片数: ${totalChunks}`);
     
     // 合并分片
     const mergeResult = await mergeChunks(identifier, parseInt(totalChunks), filename);
@@ -526,120 +488,59 @@ router.post('/chunk/merge', authenticateToken, async (req, res) => {
     
     const filePath = mergeResult.filePath;
     
-    // 根据文件类型进行不同处理
-    if (isImage) {
-      // 图片处理：读取合并后的文件，进行水印处理，然后上传
-      const fs = require('fs');
-      const fileBuffer = fs.readFileSync(filePath);
-      
-      // 解析水印设置
-      const applyWatermark = parseWatermarkFlag(req.body.watermark);
-      const watermarkSettings = parseWatermarkSettings(req.body);
-      
-      // 准备用户上下文
-      const userId = req.user?.xise_id || req.user?.user_id || 'guest';
-      const nickname = req.user?.nickname || '';
-      const context = {
-        username: nickname ? `${nickname} @${userId}` : userId,
-        userId: req.user?.id,
-        applyWatermark: applyWatermark,
-        ...watermarkSettings
-      };
-      
-      // 确定 mimetype
-      const ext = path.extname(filename).toLowerCase();
-      let mimetype = 'image/jpeg';
-      if (ext === '.png') mimetype = 'image/png';
-      else if (ext === '.webp') mimetype = 'image/webp';
-      else if (ext === '.gif') mimetype = 'image/gif';
-      
-      // 使用统一上传函数处理图片（会应用水印）
-      const result = await uploadFile(
-        fileBuffer,
-        filename,
-        mimetype,
-        context
-      );
-      
-      // 删除临时合并的文件
-      try {
-        fs.unlinkSync(filePath);
-      } catch (cleanupError) {
-        console.warn('清理临时文件失败:', cleanupError.message);
-      }
-      
-      if (result.success) {
-        console.log(`✅ 大图片分片合并上传完成 - 用户ID: ${req.user.id}, 文件名: ${filename}, URL: ${result.url}`);
-        
-        res.json({
-          code: RESPONSE_CODES.SUCCESS,
-          message: '图片上传成功',
-          data: {
-            originalname: filename,
-            url: result.url
-          }
-        });
-      } else {
-        res.status(HTTP_STATUS.BAD_REQUEST).json({
-          code: RESPONSE_CODES.VALIDATION_ERROR,
-          message: result.message || '图片处理上传失败'
-        });
-      }
-    } else {
-      // 视频处理：保持原有逻辑
-      // 使用 ffprobe 验证视频文件有效性
-      console.log(`🔍 使用 ffprobe 验证视频文件: ${filePath}`);
-      const validationResult = await validateVideoMedia(filePath);
-      
-      if (!validationResult.valid) {
-        console.error(`❌ 视频验证失败: ${validationResult.message}`);
-        // 删除无效的视频文件
-        await deleteInvalidVideo(filePath);
-        return res.status(HTTP_STATUS.BAD_REQUEST).json({
-          code: RESPONSE_CODES.VALIDATION_ERROR,
-          message: validationResult.message || '视频文件无效，已删除'
-        });
-      }
-      
-      // 生成视频访问URL
-      const basename = path.basename(filePath);
-      const videoUrl = `${config.upload.video.local.baseUrl}/${config.upload.video.local.uploadDir}/${basename}`;
-      
-      let coverUrl = null;
-      
-      // 如果启用了视频转码，且是本地存储策略，则添加到转码队列
-      if (config.videoTranscoding.enabled && config.upload.video.strategy === 'local') {
-        try {
-          console.log('🎬 将视频添加到转码队列...');
-          
-          const taskId = transcodingQueue.addTask(
-            filePath,
-            req.user.id,
-            videoUrl
-          );
-          
-          console.log(`✅ 视频已加入转码队列 [任务ID: ${taskId}]`);
-        } catch (error) {
-          console.error('❌ 添加到转码队列失败:', error.message);
-          // 转码失败不影响视频上传
-        }
-      }
-      
-      console.log(`✅ 分片合并完成 - 用户ID: ${req.user.id}, 文件名: ${filename}, URL: ${videoUrl}`);
-      
-      res.json({
-        code: RESPONSE_CODES.SUCCESS,
-        message: '视频上传成功',
-        data: {
-          originalname: filename,
-          url: videoUrl,
-          filePath: filePath,
-          coverUrl: coverUrl,
-          transcoding: config.videoTranscoding.enabled && config.upload.video.strategy === 'local',
-          videoInfo: validationResult.info
-        }
+    // 使用 ffprobe 验证视频文件有效性
+    console.log(`🔍 使用 ffprobe 验证视频文件: ${filePath}`);
+    const validationResult = await validateVideoMedia(filePath);
+    
+    if (!validationResult.valid) {
+      console.error(`❌ 视频验证失败: ${validationResult.message}`);
+      // 删除无效的视频文件
+      await deleteInvalidVideo(filePath);
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        code: RESPONSE_CODES.VALIDATION_ERROR,
+        message: validationResult.message || '视频文件无效，已删除'
       });
     }
+    
+    // 生成视频访问URL
+    const ext = path.extname(filename);
+    const basename = path.basename(filePath);
+    const videoUrl = `${config.upload.video.local.baseUrl}/${config.upload.video.local.uploadDir}/${basename}`;
+    
+    let coverUrl = null;
+    
+    // 如果启用了视频转码，且是本地存储策略，则添加到转码队列
+    if (config.videoTranscoding.enabled && config.upload.video.strategy === 'local') {
+      try {
+        console.log('🎬 将视频添加到转码队列...');
+        
+        const taskId = transcodingQueue.addTask(
+          filePath,
+          req.user.id,
+          videoUrl
+        );
+        
+        console.log(`✅ 视频已加入转码队列 [任务ID: ${taskId}]`);
+      } catch (error) {
+        console.error('❌ 添加到转码队列失败:', error.message);
+        // 转码失败不影响视频上传
+      }
+    }
+    
+    console.log(`✅ 分片合并完成 - 用户ID: ${req.user.id}, 文件名: ${filename}, URL: ${videoUrl}`);
+    
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      message: '视频上传成功',
+      data: {
+        originalname: filename,
+        url: videoUrl,
+        filePath: filePath,
+        coverUrl: coverUrl,
+        transcoding: config.videoTranscoding.enabled && config.upload.video.strategy === 'local',
+        videoInfo: validationResult.info
+      }
+    });
   } catch (error) {
     console.error('分片合并失败:', error);
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
