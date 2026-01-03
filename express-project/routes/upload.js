@@ -476,8 +476,8 @@ router.post('/chunk/merge', authenticateToken, async (req, res) => {
     
     // 自动检测文件类型（如果未提供）
     const ext = path.extname(filename).toLowerCase();
-    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
-    const videoExts = ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm'];
+    const imageExts = config.upload.image.allowedExtensions;
+    const videoExts = config.upload.video.allowedExtensions;
     
     let detectedFileType = fileType;
     if (!detectedFileType) {

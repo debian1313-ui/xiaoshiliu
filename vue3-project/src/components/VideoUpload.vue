@@ -83,7 +83,7 @@ import { ref, watch, onMounted, computed } from 'vue'
 import SvgIcon from './SvgIcon.vue'
 import MessageToast from './MessageToast.vue'
 import { videoApi } from '@/api/video.js'
-import { uploadImage } from '@/api/upload.js'
+import { uploadImage, formatSpeed } from '@/api/upload.js'
 import { generateVideoThumbnail, blobToFile, generateThumbnailFilename } from '@/utils/videoThumbnail.js'
 
 const props = defineProps({
@@ -521,15 +521,6 @@ const formatFileSize = (bytes) => {
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
-// 格式化上传速度
-const formatSpeed = (bytesPerSecond) => {
-  if (bytesPerSecond === 0) return '0 B/s'
-  const k = 1024
-  const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s']
-  const i = Math.floor(Math.log(bytesPerSecond) / Math.log(k))
-  return parseFloat((bytesPerSecond / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 // 显示消息提示

@@ -95,6 +95,7 @@ import SvgIcon from '@/components/SvgIcon.vue'
 import MessageToast from '@/components/MessageToast.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 import { imageUploadApi, uploadApi } from '@/api/index.js'
+import { formatSpeed } from '@/api/upload.js'
 
 const props = defineProps({
   modelValue: {
@@ -622,15 +623,6 @@ const uploadAllImages = async () => {
 // 获取图片数量
 const getImageCount = () => {
   return imageList.value.length
-}
-
-// 格式化上传速度
-const formatSpeed = (bytesPerSecond) => {
-  if (bytesPerSecond === 0) return '0 B/s'
-  const k = 1024
-  const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s']
-  const i = Math.floor(Math.log(bytesPerSecond) / Math.log(k))
-  return parseFloat((bytesPerSecond / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 // 重置组件

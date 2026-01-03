@@ -77,6 +77,7 @@ const config = {
     image: {
       maxSize: process.env.IMAGE_MAX_SIZE || '10mb',
       allowedTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+      allowedExtensions: ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'],
       // 图片上传策略配置
       strategy: process.env.IMAGE_UPLOAD_STRATEGY || 'imagehost', // 'local', 'imagehost' 或 'r2'
       // 本地存储配置
@@ -105,6 +106,7 @@ const config = {
       maxSize: process.env.VIDEO_MAX_SIZE || '100mb',
       maxSizeBytes: parseSizeToBytes(process.env.VIDEO_MAX_SIZE || '100mb'),
       allowedTypes: ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm'],
+      allowedExtensions: ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm'],
       // 视频上传策略配置（只支持本地和R2，不支持第三方图床）
       strategy: process.env.VIDEO_UPLOAD_STRATEGY || 'local', // 'local' 或 'r2'
       // 本地存储配置
