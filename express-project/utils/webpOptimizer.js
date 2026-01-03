@@ -617,14 +617,17 @@ class WebPOptimizer {
    * @param {Object} metadata - 图片元数据
    * @returns {Promise<sharp.Sharp>}
    */
+/**
+   * 应用图片水印 - 修正版（支持 PNG 透明度叠加）
+   */
   async applyImageWatermark(image, metadata) {
     if (!this.options.enableWatermark || this.options.watermarkType !== 'image') {
       return image;
     }
     
     const watermarkPath = this.options.watermarkImage;
-    console.log(`WebP Optimizer: 尝试加载图片水印 - 路径: ${watermarkPath}`);
     
+    // 修正：移除错误的 fs.parse，改用标准的路径和存在性检查
     if (!watermarkPath) {
       console.warn('WebP Optimizer: 未配置水印图片路径');
       return image;
@@ -636,13 +639,11 @@ class WebPOptimizer {
     }
     
     try {
-      console.log(`WebP Optimizer: 成功找到水印图片: ${watermarkPath}`);
-      // 加载水印图片
-      let watermark = sharp(watermarkPath);
-      const watermarkMeta = await watermark.metadata();
-      console.log(`WebP Optimizer: 水印图片尺寸: ${watermarkMeta.width}x${watermarkMeta.height}, 格式: ${watermarkMeta.format}, 通道数: ${watermarkMeta.channels}`);
+      // 1. 加载水印并确保有 Alpha 通道（PNG 默认会有，但 ensureAlpha 可以增加兼容性）
+      let watermarkProcessor = sharp(watermarkPath).ensureAlpha();
+      const watermarkMeta = await watermarkProcessor.metadata();
       
-      // 计算水印尺寸（基于比例）
+      // 2. 计算缩放尺寸（基于配置比例）
       const ratio = this.options.watermarkImageRatio / 10;
       const targetSize = Math.min(metadata.width, metadata.height) * ratio;
       
@@ -655,57 +656,33 @@ class WebPOptimizer {
         newWidth = Math.round((watermarkMeta.width / watermarkMeta.height) * targetSize);
       }
       
-      // 调整水印大小
+      // 3. 调整水印大小
+      watermarkProcessor = watermarkProcessor.resize(newWidth, newHeight);
+      
+      // 4. 应用全局透明度 (关键修复)
       const opacity = this.options.watermarkOpacity;
-      console.log(`WebP Optimizer: 水印缩放 - 目标尺寸: ${newWidth}x${newHeight}, 透明度: ${opacity}%, 平铺模式: ${this.options.watermarkTileMode ? '是' : '否'}`);
-      
-      // 调整水印大小并转换为RGBA
-      let watermarkBuffer = await watermark
-        .resize(newWidth, newHeight)
-        .ensureAlpha()
-        .png()
-        .toBuffer();
-      
-      // 如果需要调整透明度（不是100%），使用recombine来调整alpha通道
       if (opacity < 100) {
-        const opacityFactor = opacity / 100;
-        console.log(`WebP Optimizer: 应用透明度系数: ${opacityFactor}`);
-        
-        // 使用sharp的recombine功能来调整alpha通道
-        // 这比手动处理像素更可靠
-        watermarkBuffer = await sharp(watermarkBuffer)
-          .recombine([
-            [1, 0, 0, 0],  // R通道保持不变
-            [0, 1, 0, 0],  // G通道保持不变
-            [0, 0, 1, 0],  // B通道保持不变
-            [0, 0, 0, opacityFactor]  // A通道乘以透明度系数
-          ])
-          .png()
-          .toBuffer();
-        
-        console.log(`WebP Optimizer: 已通过recombine应用水印透明度 (${opacity}%)`);
-      } else {
-        console.log(`WebP Optimizer: 使用原始透明度 (100%)`);
+        const alphaFactor = opacity / 100;
+        // 使用 linear 函数调整通道：[R, G, B, A] 
+        // 保持 RGB (1倍增益)，将 Alpha 通道乘以 alphaFactor
+        watermarkProcessor = watermarkProcessor.linear([1, 1, 1, alphaFactor], [0, 0, 0, 0]);
       }
       
-      // 检查是否使用平铺模式
+      // 转换为 PNG Buffer 供后续 composite 使用
+      const watermarkBuffer = await watermarkProcessor.png().toBuffer();
+      
+      // 5. 处理合成（平铺或单点）
       if (this.options.watermarkTileMode) {
-        // 平铺模式：在整个图片上平铺水印
         const compositeOps = [];
-        const padding = 20; // 水印之间的间距
-        
-        // 计算需要多少行和列
+        const padding = 20;
         const cols = Math.ceil(metadata.width / (newWidth + padding));
         const rows = Math.ceil(metadata.height / (newHeight + padding));
-        
-        console.log(`WebP Optimizer: 平铺模式 - 列数: ${cols}, 行数: ${rows}`);
         
         for (let row = 0; row < rows; row++) {
           for (let col = 0; col < cols; col++) {
             const x = col * (newWidth + padding);
             const y = row * (newHeight + padding);
             
-            // 确保水印在图片范围内
             if (x < metadata.width && y < metadata.height) {
               compositeOps.push({
                 input: watermarkBuffer,
@@ -716,11 +693,8 @@ class WebPOptimizer {
             }
           }
         }
-        
-        console.log(`WebP Optimizer: 平铺水印数量: ${compositeOps.length}`);
         return image.composite(compositeOps);
       } else {
-        // 单个水印模式
         const position = this.getWatermarkPosition(
           this.options.watermarkPosition,
           metadata.width,
@@ -734,9 +708,6 @@ class WebPOptimizer {
           }
         );
         
-        console.log(`WebP Optimizer: 水印位置 - x: ${position.x}, y: ${position.y}`);
-        
-        // 应用水印
         return image.composite([{
           input: watermarkBuffer,
           top: position.y,
@@ -745,12 +716,10 @@ class WebPOptimizer {
         }]);
       }
     } catch (error) {
-      console.error('WebP Optimizer: 应用图片水印失败:', error.message);
-      console.error(error.stack);
+      console.error('WebP Optimizer: 图片水印应用失败:', error.message);
       return image;
     }
   }
-
   /**
    * 应用用户名水印
    * @param {sharp.Sharp} image - Sharp图片对象
