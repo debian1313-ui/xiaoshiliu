@@ -85,7 +85,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import MessageToast from '@/components/MessageToast.vue'
 import { 
@@ -112,6 +112,11 @@ const error = ref('')
 const isDragOver = ref(false)
 const isUploading = ref(false)
 const uploadProgress = ref(0)
+
+// 监听外部值变化，保持响应式同步
+watch(() => props.modelValue, (newValue) => {
+  attachment.value = newValue
+}, { immediate: false })
 
 // 消息提示
 const showToast = ref(false)
@@ -218,7 +223,8 @@ const removeAttachment = () => {
 // 下载附件
 const handleDownload = () => {
   if (attachment.value && attachment.value.filename) {
-    downloadAttachment(attachment.value.filename, attachment.value.originalname)
+    const originalName = attachment.value.originalname || attachment.value.filename
+    downloadAttachment(attachment.value.filename, originalName)
   }
 }
 

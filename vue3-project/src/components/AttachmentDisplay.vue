@@ -34,13 +34,16 @@ const props = defineProps({
 const handleDownload = () => {
   if (props.attachment) {
     const filename = props.attachment.filename || props.attachment.url?.split('/').pop()
-    const originalName = props.attachment.originalname || props.attachment.name
+    const originalName = props.attachment.originalname || props.attachment.name || filename
     
     if (filename) {
       downloadAttachment(filename, originalName)
     } else if (props.attachment.url) {
-      // 如果只有URL，直接打开
-      window.open(props.attachment.url, '_blank')
+      // 验证URL协议，防止XSS攻击
+      const url = props.attachment.url
+      if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/')) {
+        window.open(url, '_blank', 'noopener,noreferrer')
+      }
     }
   }
 }
