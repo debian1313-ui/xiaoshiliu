@@ -46,6 +46,14 @@
             >
               上传视频
             </button>
+            <button 
+              type="button" 
+              class="tab-btn" 
+              :class="{ active: uploadType === 'attachment' }"
+              @click="switchUploadType('attachment')"
+            >
+              上传附件
+            </button>
           </div>
 
           <!-- 上传组件 -->
@@ -56,6 +64,8 @@
               v-model="form.images" 
               :max-images="9" 
               :allow-delete-last="true"
+              :enable-watermark="enableWatermark"
+              :watermark-opacity="watermarkOpacity"
               @error="handleUploadError" 
             />
             <VideoUpload 
@@ -64,13 +74,48 @@
               v-model="form.video"
               @error="handleUploadError"
             />
+            <AttachmentUpload
+              v-if="uploadType === 'attachment'"
+              ref="attachmentUploadRef"
+              v-model="form.attachment"
+              @error="handleUploadError"
+              @uploaded="handleAttachmentUploaded"
+            />
           </div>
 
-          <div v-if="uploadType === 'image'" class="text-image-section">
-            <button type="button" class="text-image-btn" @click="openTextImageModal">
-              <SvgIcon name="magic" width="16" height="16" />
-              <span>文字配图</span>
-            </button>
+          <!-- 图片上传时显示的选项 -->
+          <div v-if="uploadType === 'image'" class="image-upload-options">
+            <div class="text-image-section">
+              <button type="button" class="text-image-btn" @click="openTextImageModal">
+                <SvgIcon name="magic" width="16" height="16" />
+                <span>文字配图</span>
+              </button>
+            </div>
+            
+            <!-- 水印选项 - 仅在图片上传时显示 -->
+            <div class="watermark-option">
+              <label class="watermark-checkbox">
+                <input type="checkbox" v-model="enableWatermark" />
+                <span class="checkmark"></span>
+                <span class="label-text">添加水印</span>
+              </label>
+              
+              <!-- 水印透明度滑块 -->
+              <div v-if="enableWatermark" class="watermark-opacity-slider">
+                <label class="opacity-label">
+                  <span>透明度</span>
+                  <span class="opacity-value">{{ watermarkOpacity }}%</span>
+                </label>
+                <input 
+                  type="range" 
+                  v-model.number="watermarkOpacity" 
+                  min="10" 
+                  max="100" 
+                  step="5"
+                  class="opacity-slider"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -147,6 +192,7 @@ import { hasMentions, cleanMentions } from '@/utils/mentionParser'
 
 import MultiImageUpload from '@/components/MultiImageUpload.vue'
 import VideoUpload from '@/components/VideoUpload.vue'
+import AttachmentUpload from '@/components/AttachmentUpload.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import TagSelector from '@/components/TagSelector.vue'
 import DropdownSelect from '@/components/DropdownSelect.vue'
@@ -165,10 +211,15 @@ const { lock, unlock } = useScrollLock()
 
 const multiImageUploadRef = ref(null)
 const videoUploadRef = ref(null)
+const attachmentUploadRef = ref(null)
 const contentTextarea = ref(null)
 
 // 上传类型状态
-const uploadType = ref('image') // 'image' 或 'video'
+const uploadType = ref('image') // 'image', 'video' 或 'attachment'
+
+// 水印选项（仅图片上传时使用）
+const enableWatermark = ref(false)
+const watermarkOpacity = ref(50)
 
 const isPublishing = ref(false)
 const isSavingDraft = ref(false)
@@ -186,6 +237,7 @@ const form = reactive({
   content: '',
   images: [],
   video: null,
+  attachment: null,
   tags: [],
   category_id: null
 })
@@ -214,6 +266,9 @@ const canPublish = computed(() => {
     if (!videoUploadRef.value) return false
     const videoData = videoUploadRef.value.getVideoData()
     return videoData && (videoData.uploaded || videoData.file)
+  } else if (uploadType.value === 'attachment') {
+    // 检查附件是否已上传
+    return form.attachment !== null
   }
   
   return false
@@ -234,6 +289,9 @@ const canSaveDraft = computed(() => {
     if (!videoUploadRef.value) return false
     const videoData = videoUploadRef.value.getVideoData()
     return videoData && (videoData.uploaded || videoData.file)
+  } else if (uploadType.value === 'attachment') {
+    // 检查附件是否已上传
+    return form.attachment !== null
   }
   
   return false
@@ -310,6 +368,12 @@ const handleUploadError = (error) => {
   showMessage(error, 'error')
 }
 
+// 处理附件上传完成
+const handleAttachmentUploaded = (attachmentData) => {
+  form.attachment = attachmentData
+  showMessage('附件上传成功', 'success')
+}
+
 // 切换上传类型
 const switchUploadType = (type) => {
   if (uploadType.value === type) return
@@ -318,14 +382,31 @@ const switchUploadType = (type) => {
   
   // 切换时清空对应的数据
   if (type === 'image') {
-    form.video = ''
+    form.video = null
+    form.attachment = null
     if (videoUploadRef.value) {
       videoUploadRef.value.reset()
     }
-  } else {
+    if (attachmentUploadRef.value) {
+      attachmentUploadRef.value.reset()
+    }
+  } else if (type === 'video') {
     form.images = []
+    form.attachment = null
     if (multiImageUploadRef.value) {
       multiImageUploadRef.value.reset()
+    }
+    if (attachmentUploadRef.value) {
+      attachmentUploadRef.value.reset()
+    }
+  } else if (type === 'attachment') {
+    form.images = []
+    form.video = null
+    if (multiImageUploadRef.value) {
+      multiImageUploadRef.value.reset()
+    }
+    if (videoUploadRef.value) {
+      videoUploadRef.value.reset()
     }
   }
 }
@@ -654,6 +735,7 @@ const resetForm = () => {
   form.content = ''
   form.images = []
   form.video = null
+  form.attachment = null
   form.tags = []
   form.category_id = null
   
@@ -662,6 +744,9 @@ const resetForm = () => {
   }
   if (videoUploadRef.value) {
     videoUploadRef.value.reset()
+  }
+  if (attachmentUploadRef.value) {
+    attachmentUploadRef.value.reset()
   }
 }
 
@@ -1650,6 +1735,121 @@ const handleSaveDraft = async () => {
 .text-image-btn:active {
   transform: translateY(0);
   box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
+/* 图片上传选项容器 */
+.image-upload-options {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* 水印选项样式 */
+.watermark-option {
+  padding: 0.5rem 0;
+}
+
+.watermark-checkbox {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  font-size: 14px;
+  color: var(--text-color-primary);
+}
+
+.watermark-checkbox input[type="checkbox"] {
+  display: none;
+}
+
+.watermark-checkbox .checkmark {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-color-primary);
+  border-radius: 4px;
+  margin-right: 8px;
+  position: relative;
+  transition: all 0.2s ease;
+  background: var(--bg-color-primary);
+}
+
+.watermark-checkbox input[type="checkbox"]:checked + .checkmark {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.watermark-checkbox input[type="checkbox"]:checked + .checkmark::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.watermark-checkbox .label-text {
+  color: var(--text-color-secondary);
+}
+
+/* 水印透明度滑块样式 */
+.watermark-opacity-slider {
+  margin-top: 10px;
+  padding: 8px 0;
+}
+
+.opacity-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-color-secondary);
+  margin-bottom: 6px;
+}
+
+.opacity-value {
+  font-weight: 500;
+  color: var(--primary-color);
+}
+
+.opacity-slider {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border-color-primary);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.opacity-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+}
+
+.opacity-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.opacity-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .publish-actions .cancel-btn,
