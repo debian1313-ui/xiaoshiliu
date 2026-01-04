@@ -115,7 +115,7 @@
 
         <!-- 工具栏 -->
         <div class="editor-toolbar">
-          <button type="button" class="toolbar-btn" @click="scrollToTagSection" aria-label="话题">
+          <button type="button" class="toolbar-btn" @click="openTagSelector" aria-label="话题">
             <SvgIcon name="hash" width="18" height="18" />
             <span>话题</span>
           </button>
@@ -505,12 +505,6 @@ const toggleMentionPanel = () => {
 const closeMentionPanel = () => {
   showMentionPanel.value = false
   unlock()
-}
-
-// 滚动到标签区域
-const scrollToTagSection = () => {
-  showTagSelect.value = true
-  lock()
 }
 
 // 打开分类选择
