@@ -286,6 +286,7 @@ export const authApi = {
 // 导入新的图片上传API
 import * as imageUploadApi from './upload.js'
 import * as videoUploadApi from './video.js'
+import * as attachmentUploadApi from './attachment.js'
 
 // 图片上传API（保持向后兼容）
 export const uploadApi = {
@@ -346,11 +347,18 @@ export const uploadApi = {
   // 视频上传相关方法
   validateVideoFile: videoUploadApi.videoApi.validateVideoFile,
   createVideoPreview: videoUploadApi.videoApi.createVideoPreview,
-  revokeVideoPreview: videoUploadApi.videoApi.revokeVideoPreview
+  revokeVideoPreview: videoUploadApi.videoApi.revokeVideoPreview,
+
+  // 附件上传相关方法
+  uploadAttachment: attachmentUploadApi.uploadAttachment,
+  downloadAttachment: attachmentUploadApi.downloadAttachment,
+  getAttachmentDownloadUrl: attachmentUploadApi.getAttachmentDownloadUrl,
+  validateAttachmentFile: attachmentUploadApi.validateAttachmentFile,
+  getFileIconType: attachmentUploadApi.getFileIconType
 }
 
 // 导出图片上传API（推荐使用）
-export { imageUploadApi, videoUploadApi }
+export { imageUploadApi, videoUploadApi, attachmentUploadApi }
 
 // 通知相关API
 export const notificationApi = {

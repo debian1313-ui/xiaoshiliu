@@ -133,6 +133,36 @@ const config = {
         // 分片过期时间（毫秒），默认2小时
         expireTime: parseInt(process.env.VIDEO_CHUNK_EXPIRE_TIME) || 2 * 60 * 60 * 1000
       }
+    },
+    // 附件上传配置
+    attachment: {
+      maxSize: process.env.ATTACHMENT_MAX_SIZE || '50mb',
+      maxSizeBytes: parseSizeToBytes(process.env.ATTACHMENT_MAX_SIZE || '50mb'),
+      // 允许的文件类型
+      allowedTypes: [
+        'application/zip',
+        'application/x-zip-compressed',
+        'application/x-rar-compressed',
+        'application/x-7z-compressed',
+        'application/gzip',
+        'application/x-tar',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'text/plain',
+        'text/csv'
+      ],
+      // 允许的文件扩展名
+      allowedExtensions: ['.zip', '.rar', '.7z', '.gz', '.tar', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv'],
+      // 本地存储配置
+      local: {
+        uploadDir: process.env.ATTACHMENT_UPLOAD_DIR || 'uploads/attachments',
+        baseUrl: process.env.LOCAL_BASE_URL || 'http://localhost:3001'
+      }
     }
   },
 

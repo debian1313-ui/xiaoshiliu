@@ -4,7 +4,8 @@ const { HTTP_STATUS, RESPONSE_CODES } = require('../constants');
 const multer = require('multer');
 const path = require('path');
 const { authenticateToken } = require('../middleware/auth');
-const { uploadFile, uploadVideo, uploadImage } = require('../utils/uploadHelper');
+const { uploadFile, uploadVideo, uploadImage, uploadAttachment, getAttachmentFilePath, attachmentExists } = require('../utils/uploadHelper');
+const fs = require('fs');
 const transcodingQueue = require('../utils/transcodingQueue');
 const config = require('../config/config');
 const { pool } = require('../config/config');
@@ -650,6 +651,131 @@ router.post('/chunk/merge/image', authenticateToken, async (req, res) => {
   }
 });
 
+// 文件过滤器 - 附件
+const attachmentFileFilter = (req, file, cb) => {
+  // 检查文件类型
+  const allowedTypes = config.upload.attachment.allowedTypes;
+  const allowedExtensions = config.upload.attachment.allowedExtensions;
+  const ext = path.extname(file.originalname).toLowerCase();
+  
+  if (allowedTypes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error('不支持的附件类型，允许的类型：zip, rar, 7z, gz, tar, pdf, doc, docx, xls, xlsx, ppt, pptx, txt, csv'), false);
+  }
+};
+
+// 配置 multer - 附件
+const attachmentUpload = multer({
+  storage: storage,
+  fileFilter: attachmentFileFilter,
+  limits: {
+    fileSize: config.upload.attachment.maxSizeBytes
+  }
+});
+
+// 附件上传
+router.post('/attachment', authenticateToken, attachmentUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
+        code: RESPONSE_CODES.VALIDATION_ERROR, 
+        message: '没有上传文件' 
+      });
+    }
+
+    console.log(`附件上传开始 - 用户ID: ${req.user.id}, 文件名: ${req.file.originalname}, 大小: ${req.file.size}`);
+
+    // 上传附件文件
+    const result = await uploadAttachment(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype
+    );
+
+    if (result.success) {
+      console.log(`附件上传成功 - 用户ID: ${req.user.id}, 文件名: ${req.file.originalname}`);
+
+      res.json({
+        code: RESPONSE_CODES.SUCCESS,
+        message: '上传成功',
+        data: {
+          originalname: req.file.originalname,
+          filename: result.filename,
+          size: req.file.size,
+          mimetype: req.file.mimetype,
+          url: result.url
+        }
+      });
+    } else {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({ 
+        code: RESPONSE_CODES.VALIDATION_ERROR, 
+        message: result.message || '附件上传失败' 
+      });
+    }
+  } catch (error) {
+    console.error('附件上传失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
+      code: RESPONSE_CODES.ERROR, 
+      message: '上传失败' 
+    });
+  }
+});
+
+// 附件下载
+router.get('/attachment/download/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    
+    // 验证文件名（防止路径遍历攻击）
+    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
+        code: RESPONSE_CODES.VALIDATION_ERROR, 
+        message: '无效的文件名' 
+      });
+    }
+
+    // 检查文件是否存在
+    if (!attachmentExists(filename)) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ 
+        code: RESPONSE_CODES.NOT_FOUND, 
+        message: '文件不存在' 
+      });
+    }
+
+    const filePath = getAttachmentFilePath(filename);
+    
+    // 获取原始文件名（从查询参数或使用存储的文件名）
+    const originalFilename = req.query.name || filename;
+    
+    // 设置下载头
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(originalFilename)}"`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    
+    // 发送文件
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.pipe(res);
+    
+    fileStream.on('error', (error) => {
+      console.error('附件下载失败:', error);
+      if (!res.headersSent) {
+        res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
+          code: RESPONSE_CODES.ERROR, 
+          message: '文件下载失败' 
+        });
+      }
+    });
+    
+    console.log(`附件下载 - 文件名: ${filename}, 原始名: ${originalFilename}`);
+  } catch (error) {
+    console.error('附件下载失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
+      code: RESPONSE_CODES.ERROR, 
+      message: '下载失败' 
+    });
+  }
+});
+
 // 错误处理中间件
 router.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
@@ -662,6 +788,11 @@ router.use((error, req, res, next) => {
   }
 
   if (error.message === '只允许上传图片文件' || error.message === '只允许上传视频文件') {
+    return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: error.message });
+  }
+
+  // 处理附件类型错误
+  if (error.message && error.message.includes('不支持的附件类型')) {
     return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: error.message });
   }
 

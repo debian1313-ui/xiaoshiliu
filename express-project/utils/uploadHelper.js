@@ -497,6 +497,78 @@ async function uploadFile(fileBuffer, filename, mimetype, context = {}) {
   }
 }
 
+/**
+ * 保存附件文件到本地
+ * @param {Buffer} fileBuffer - 文件缓冲区
+ * @param {string} filename - 文件名
+ * @param {string} mimetype - 文件MIME类型
+ * @returns {Promise<{success: boolean, url?: string, filePath?: string, message?: string}>}
+ */
+async function saveAttachmentToLocal(fileBuffer, filename, mimetype) {
+  try {
+    // 确保上传目录存在
+    const uploadDir = path.join(process.cwd(), config.upload.attachment.local.uploadDir);
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    // 生成唯一文件名（保留原始扩展名）
+    const ext = path.extname(filename);
+    const hash = crypto.createHash('md5').update(fileBuffer).digest('hex');
+    const uniqueFilename = `${Date.now()}_${hash}${ext}`;
+    const filePath = path.join(uploadDir, uniqueFilename);
+
+    // 保存文件
+    fs.writeFileSync(filePath, fileBuffer);
+
+    // 返回访问URL和文件路径
+    const url = `${config.upload.attachment.local.baseUrl}/${config.upload.attachment.local.uploadDir}/${uniqueFilename}`;
+    return {
+      success: true,
+      url: url,
+      filePath: filePath,
+      filename: uniqueFilename,
+      originalFilename: filename
+    };
+  } catch (error) {
+    console.error('❌ 附件本地保存失败:', error.message);
+    return {
+      success: false,
+      message: error.message || '附件本地保存失败'
+    };
+  }
+}
+
+/**
+ * 上传附件文件
+ * @param {Buffer} fileBuffer - 文件缓冲区
+ * @param {string} filename - 文件名
+ * @param {string} mimetype - 文件MIME类型
+ * @returns {Promise<{success: boolean, url?: string, filePath?: string, message?: string}>}
+ */
+async function uploadAttachment(fileBuffer, filename, mimetype) {
+  // 目前只支持本地存储
+  return await saveAttachmentToLocal(fileBuffer, filename, mimetype);
+}
+
+/**
+ * 获取附件文件路径
+ * @param {string} filename - 文件名
+ * @returns {string} 文件路径
+ */
+function getAttachmentFilePath(filename) {
+  return path.join(process.cwd(), config.upload.attachment.local.uploadDir, filename);
+}
+
+/**
+ * 检查附件文件是否存在
+ * @param {string} filename - 文件名
+ * @returns {boolean}
+ */
+function attachmentExists(filename) {
+  const filePath = getAttachmentFilePath(filename);
+  return fs.existsSync(filePath);
+}
 
 module.exports = {
   uploadToImageHost,
@@ -509,5 +581,9 @@ module.exports = {
   uploadVideo,
   uploadFile,
   adminAuth,
-  processImageFile
+  processImageFile,
+  saveAttachmentToLocal,
+  uploadAttachment,
+  getAttachmentFilePath,
+  attachmentExists
 };
