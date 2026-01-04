@@ -1,17 +1,16 @@
 <template>
   <div class="publish-container">
+    <!-- 顶部导航栏 -->
     <div class="publish-header">
-      <div class="header-left">
-        <h1 class="page-title">发布笔记</h1>
-      </div>
+      <button class="back-btn" @click="handleBack">
+        <SvgIcon name="leftArrow" width="24" height="24" />
+      </button>
       <div class="header-right">
-        <button class="draft-box-btn" @click="goToDraftBox">
-          <SvgIcon name="draft" width="20" height="20" color="white" />
-          <span>草稿箱</span>
+        <button class="header-action-btn" @click="goToDraftBox">
+          <SvgIcon name="draft" width="20" height="20" />
         </button>
-        <button class="manage-btn" @click="goToPostManagement">
+        <button class="header-action-btn" @click="goToPostManagement">
           <SvgIcon name="post" width="20" height="20" />
-          <span>笔记管理</span>
         </button>
       </div>
     </div>
@@ -26,108 +25,209 @@
         </div>
       </div>
 
-      <form v-if="isLoggedIn" @submit.prevent="handlePublish" class="publish-form">
-        <div class="upload-section">
-          <!-- Tab选项 -->
-          <div class="upload-tabs">
-            <button 
-              type="button" 
-              class="tab-btn" 
-              :class="{ active: uploadType === 'image' }"
-              @click="switchUploadType('image')"
-            >
-              上传图文
-            </button>
-            <button 
-              type="button" 
-              class="tab-btn" 
-              :class="{ active: uploadType === 'video' }"
-              @click="switchUploadType('video')"
-            >
-              上传视频
-            </button>
-          </div>
+      <div v-if="isLoggedIn" class="editor-main">
+        <!-- 媒体类型切换 -->
+        <div class="media-type-tabs">
+          <button 
+            type="button" 
+            class="media-tab" 
+            :class="{ active: uploadType === 'image' }"
+            @click="switchUploadType('image')"
+          >
+            图文
+          </button>
+          <button 
+            type="button" 
+            class="media-tab" 
+            :class="{ active: uploadType === 'video' }"
+            @click="switchUploadType('video')"
+          >
+            视频
+          </button>
+        </div>
 
-          <!-- 上传组件 -->
-          <div class="upload-content">
-            <MultiImageUpload 
-              v-if="uploadType === 'image'"
-              ref="multiImageUploadRef" 
-              v-model="form.images" 
-              :max-images="9" 
-              :allow-delete-last="true"
-              @error="handleUploadError" 
-            />
-            <VideoUpload 
-              v-if="uploadType === 'video'"
-              ref="videoUploadRef"
-              v-model="form.video"
-              @error="handleUploadError"
-            />
-          </div>
+        <!-- 上传组件 -->
+        <div class="media-upload-section">
+          <MultiImageUpload 
+            v-if="uploadType === 'image'"
+            ref="multiImageUploadRef" 
+            v-model="form.images" 
+            :max-images="9" 
+            :allow-delete-last="true"
+            @error="handleUploadError" 
+          />
+          <VideoUpload 
+            v-if="uploadType === 'video'"
+            ref="videoUploadRef"
+            v-model="form.video"
+            @error="handleUploadError"
+          />
+        </div>
 
-          <div v-if="uploadType === 'image'" class="text-image-section">
-            <button type="button" class="text-image-btn" @click="openTextImageModal">
-              <SvgIcon name="magic" width="16" height="16" />
-              <span>文字配图</span>
-            </button>
+        <!-- 文字配图按钮 -->
+        <div v-if="uploadType === 'image'" class="text-image-section">
+          <button type="button" class="text-image-btn" @click="openTextImageModal">
+            <SvgIcon name="magic" width="16" height="16" />
+            <span>文字配图</span>
+          </button>
+        </div>
+
+        <!-- 标题输入 -->
+        <div class="title-section">
+          <input 
+            v-model="form.title" 
+            type="text" 
+            class="title-input" 
+            placeholder="添加标题" 
+            maxlength="100"
+          />
+        </div>
+
+        <!-- 正文输入 -->
+        <div class="content-section">
+          <ContentEditableInput 
+            ref="contentTextarea" 
+            v-model="form.content" 
+            :input-class="'content-textarea'"
+            placeholder="添加正文" 
+            :enable-mention="true" 
+            :mention-users="mentionUsers" 
+            @focus="handleContentFocus"
+            @blur="handleContentBlur" 
+            @keydown="handleInputKeydown" 
+            @mention="handleMentionInput" 
+          />
+        </div>
+
+        <!-- 标签展示区域 -->
+        <div v-if="form.tags.length > 0" class="tags-display">
+          <div class="tags-scroll">
+            <span 
+              v-for="(tag, index) in form.tags" 
+              :key="index" 
+              class="tag-chip"
+              @click="removeTag(index)"
+            >
+              #{{ tag }}
+            </span>
           </div>
         </div>
 
-        <div class="input-section">
-          <input v-model="form.title" type="text" class="title-input" placeholder="请输入标题" maxlength="100"
-            @input="validateForm" />
-          <div class="char-count">{{ form.title.length }}/100</div>
+        <!-- 工具栏 -->
+        <div class="editor-toolbar">
+          <button type="button" class="toolbar-btn" @click="scrollToTagSection" aria-label="话题">
+            <SvgIcon name="hash" width="18" height="18" />
+            <span>话题</span>
+          </button>
+          <button type="button" class="toolbar-btn" @click="toggleMentionPanel" aria-label="用户">
+            <SvgIcon name="mention" width="18" height="18" />
+            <span>用户</span>
+          </button>
+          <button type="button" class="toolbar-btn" @click="toggleEmojiPanel" aria-label="表情">
+            <SvgIcon name="emoji" width="18" height="18" />
+            <span>表情</span>
+          </button>
         </div>
 
-        <div class="input-section">
-          <div class="content-input-wrapper">
-            <ContentEditableInput ref="contentTextarea" v-model="form.content" :input-class="'content-textarea'"
-              placeholder="请输入内容" :enable-mention="true" :mention-users="mentionUsers" @focus="handleContentFocus"
-              @blur="handleContentBlur" @keydown="handleInputKeydown" @mention="handleMentionInput" />
-            <div class="content-actions">
-              <button type="button" class="topic-btn" @click="scrollToTagSection">
-                <SvgIcon name="hash" class="topic-icon" width="20" height="20" />
-              </button>
-              <button type="button" class="mention-btn" @click="toggleMentionPanel">
-                <SvgIcon name="mention" class="mention-icon" width="20" height="20" />
-              </button>
-              <button type="button" class="emoji-btn" @click="toggleEmojiPanel">
-                <SvgIcon name="emoji" class="emoji-icon" width="20" height="20" />
-              </button>
+        <!-- 表情选择器 -->
+        <div v-if="showEmojiPanel" class="emoji-panel-overlay" v-click-outside="closeEmojiPanel">
+          <div class="emoji-panel" @click.stop>
+            <EmojiPicker @select="handleEmojiSelect" />
+          </div>
+        </div>
+
+        <MentionModal :visible="showMentionPanel" @close="closeMentionPanel" @select="handleMentionSelect" />
+
+        <!-- 分隔线 -->
+        <div class="editor-divider"></div>
+
+        <!-- 设置选项列表 -->
+        <div class="settings-list">
+          <!-- 分类选项 -->
+          <div class="setting-item" @click="openCategorySelect">
+            <div class="setting-left">
+              <SvgIcon name="category" width="20" height="20" />
+              <span>选择分类</span>
+            </div>
+            <div class="setting-right">
+              <span class="setting-value">{{ selectedCategoryName || '请选择' }}</span>
+              <SvgIcon name="right" width="16" height="16" />
             </div>
           </div>
-          <div class="char-count">{{ form.content.length }}/2000</div>
 
-          <div v-if="showEmojiPanel" class="emoji-panel-overlay" v-click-outside="closeEmojiPanel">
-            <div class="emoji-panel" @click.stop>
-              <EmojiPicker @select="handleEmojiSelect" />
+          <!-- 标签选项 -->
+          <div ref="tagSectionRef" class="setting-item" @click="openTagSelector">
+            <div class="setting-left">
+              <SvgIcon name="hash" width="20" height="20" />
+              <span>添加标签</span>
+            </div>
+            <div class="setting-right">
+              <span class="setting-value">{{ form.tags.length > 0 ? `已选${form.tags.length}个` : '最多10个' }}</span>
+              <SvgIcon name="right" width="16" height="16" />
             </div>
           </div>
 
-          <MentionModal :visible="showMentionPanel" @close="closeMentionPanel" @select="handleMentionSelect" />
+          <!-- 公开可见选项 -->
+          <div class="setting-item">
+            <div class="setting-left">
+              <SvgIcon name="view" width="20" height="20" />
+              <span>公开可见</span>
+            </div>
+            <div class="setting-right">
+              <span class="setting-value">公开</span>
+              <SvgIcon name="right" width="16" height="16" />
+            </div>
+          </div>
         </div>
 
-        <div class="category-section">
-          <div class="section-title">分类</div>
-          <DropdownSelect v-model="form.category_id" :options="categories" placeholder="请选择分类" label-key="name"
-            value-key="id" max-width="300px" min-width="200px" @change="handleCategoryChange" />
+        <!-- 分类选择弹窗 -->
+        <div v-if="showCategorySelect" class="select-modal-overlay" @click="closeCategorySelect">
+          <div class="select-modal" @click.stop>
+            <div class="select-modal-header">
+              <span>选择分类</span>
+              <button class="close-modal-btn" @click="closeCategorySelect">
+                <SvgIcon name="close" width="20" height="20" />
+              </button>
+            </div>
+            <div class="select-modal-content">
+              <div 
+                v-for="category in categories" 
+                :key="category.id" 
+                class="select-option"
+                :class="{ active: form.category_id === category.id }"
+                @click="selectCategory(category)"
+              >
+                {{ category.name }}
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div ref="tagSectionRef" class="tag-section">
-          <div class="section-title">标签 (最多10个)</div>
-          <TagSelector v-model="form.tags" :max-tags="10" />
+        <!-- 标签选择弹窗 -->
+        <div v-if="showTagSelect" class="select-modal-overlay" @click="closeTagSelector">
+          <div class="select-modal tag-modal" @click.stop>
+            <div class="select-modal-header">
+              <span>添加标签</span>
+              <button class="close-modal-btn" @click="closeTagSelector">
+                <SvgIcon name="close" width="20" height="20" />
+              </button>
+            </div>
+            <div class="select-modal-content">
+              <TagSelector v-model="form.tags" :max-tags="10" />
+            </div>
+          </div>
         </div>
-      </form>
-
-      <div v-if="isLoggedIn" class="publish-actions">
-        <button class="draft-btn" :disabled="!canSaveDraft || isSavingDraft" @click="handleSaveDraft">
-          {{ isSavingDraft ? '保存中...' : '存草稿' }}
-        </button>
-        <button class="publish-btn" :disabled="!canPublish || isPublishing" @click="handlePublish">
-          {{ isPublishing ? '发布中...' : '发布' }}
-        </button>
       </div>
+    </div>
+
+    <!-- 底部操作栏 -->
+    <div v-if="isLoggedIn" class="publish-footer">
+      <button class="footer-btn draft-btn" :disabled="!canSaveDraft || isSavingDraft" @click="handleSaveDraft">
+        {{ isSavingDraft ? '保存中...' : '存草稿' }}
+      </button>
+      <button class="footer-btn publish-btn" :disabled="!canPublish || isPublishing" @click="handlePublish">
+        {{ isPublishing ? '发布中...' : '发布笔记' }}
+      </button>
     </div>
 
     <MessageToast v-if="showToast" :message="toastMessage" :type="toastType" @close="handleToastClose" />
@@ -152,7 +252,6 @@ import MultiImageUpload from '@/components/MultiImageUpload.vue'
 import VideoUpload from '@/components/VideoUpload.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import TagSelector from '@/components/TagSelector.vue'
-import DropdownSelect from '@/components/DropdownSelect.vue'
 import MessageToast from '@/components/MessageToast.vue'
 import EmojiPicker from '@/components/EmojiPicker.vue'
 import MentionModal from '@/components/mention/MentionModal.vue'
@@ -180,6 +279,8 @@ const showEmojiPanel = ref(false)
 const showMentionPanel = ref(false)
 const isContentFocused = ref(false)
 const showTextImageModal = ref(false)
+const showCategorySelect = ref(false)
+const showTagSelect = ref(false)
 
 const showToast = ref(false)
 const toastMessage = ref('')
@@ -408,9 +509,49 @@ const closeMentionPanel = () => {
 
 // 滚动到标签区域
 const scrollToTagSection = () => {
-  if (tagSectionRef.value) {
-    tagSectionRef.value.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }
+  showTagSelect.value = true
+  lock()
+}
+
+// 打开分类选择
+const openCategorySelect = () => {
+  showCategorySelect.value = true
+  lock()
+}
+
+// 关闭分类选择
+const closeCategorySelect = () => {
+  showCategorySelect.value = false
+  unlock()
+}
+
+// 选择分类
+const selectCategory = (category) => {
+  form.category_id = category.id
+  closeCategorySelect()
+}
+
+// 计算选中的分类名称
+const selectedCategoryName = computed(() => {
+  const category = categories.value.find(c => c.id === form.category_id)
+  return category ? category.name : ''
+})
+
+// 打开标签选择
+const openTagSelector = () => {
+  showTagSelect.value = true
+  lock()
+}
+
+// 关闭标签选择
+const closeTagSelector = () => {
+  showTagSelect.value = false
+  unlock()
+}
+
+// 移除标签
+const removeTag = (index) => {
+  form.tags.splice(index, 1)
 }
 
 // 处理@符号输入事件
@@ -903,290 +1044,374 @@ const handleSaveDraft = async () => {
 </script>
 
 <style scoped>
+/* 主容器 */
 .publish-container {
   min-height: 100vh;
   background: var(--bg-color-primary);
   color: var(--text-color-primary);
-  padding-bottom: calc(48px + constant(safe-area-inset-bottom));
-  padding-bottom: calc(48px + env(safe-area-inset-bottom));
-  margin: 72px auto;
-  min-width: 700px;
-  max-width: 700px;
+  padding-bottom: 80px;
   transition: background-color 0.2s ease;
 }
 
+/* 顶部导航栏 */
 .publish-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem;
+  padding: 12px 16px;
   background: var(--bg-color-primary);
-  border-bottom: 1px solid var(--border-color-primary);
   position: sticky;
   top: 0;
   z-index: 100;
-  transition: background-color 0.2s ease,border-color 0.2s ease;
 }
 
-.header-left {
+.back-btn {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: transparent;
+  color: var(--text-color-primary);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background 0.2s ease;
+}
+
+.back-btn:hover {
+  background: var(--bg-color-secondary);
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 8px;
 }
 
-.draft-box-btn {
+.header-action-btn {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: var(--primary-color);
-  color: white;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   border: none;
-  border-radius: 6px;
+  background: transparent;
+  color: var(--text-color-secondary);
   cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 500;
+  border-radius: 50%;
   transition: all 0.2s ease;
 }
 
-.draft-box-btn:hover {
-  background: var(--primary-color-dark);
-}
-
-.manage-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: var(--primary-color);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-.manage-btn:hover {
-  background: var(--primary-color-dark);
-}
-
-.page-title {
-  font-size: 1.2rem;
-  font-weight: 600;
-  margin: 0;
+.header-action-btn:hover {
+  background: var(--bg-color-secondary);
   color: var(--text-color-primary);
 }
 
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.draft-btn {
-  width: 20%;
-  padding: 12px;
-  background-color: var(--text-color-secondary);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 16px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.draft-btn:hover:not(:disabled) {
-  background: var(--text-color-primary);
-}
-
-.draft-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.publish-btn {
-  width: 20%;
-  padding: 12px;
-  background-color: var(--primary-color);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 16px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.publish-btn:hover:not(:disabled) {
-  background: var(--primary-color-dark);
-}
-
-.publish-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.loading-icon {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
+/* 内容区域 */
 .publish-content {
-  padding: 1rem;
-  max-width: 600px;
-  margin: 0 auto;
-  background-color: var(--bg-color-primary);
-  transition: background-color 0.2s ease;
+  padding: 0 16px;
 }
 
-.publish-form {
+.editor-main {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0;
 }
 
-.upload-section {
-  margin-bottom: 0.5rem;
-}
-
-.upload-tabs {
+/* 媒体类型切换 */
+.media-type-tabs {
   display: flex;
-  margin-bottom: 1rem;
+  gap: 16px;
+  padding: 12px 0;
   border-bottom: 1px solid var(--border-color-primary);
+  margin-bottom: 16px;
 }
 
-.tab-btn {
-  padding: 12px 24px;
+.media-tab {
+  padding: 8px 16px;
   border: none;
   background: transparent;
   color: var(--text-color-secondary);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
+  border-radius: 20px;
   transition: all 0.2s ease;
-  border-bottom: 2px solid transparent;
-  position: relative;
 }
 
-.tab-btn:hover {
+.media-tab.active {
+  background: var(--primary-color);
+  color: white;
+}
+
+.media-tab:hover:not(.active) {
+  background: var(--bg-color-secondary);
+}
+
+/* 媒体上传区域 */
+.media-upload-section {
+  margin-bottom: 16px;
+}
+
+/* 文字配图按钮 */
+.text-image-section {
+  margin-bottom: 16px;
+}
+
+.text-image-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-color-secondary);
   color: var(--text-color-primary);
+  border: 1px solid var(--border-color-primary);
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
 }
 
-.tab-btn.active {
-  color: var(--primary-color);
-  border-bottom-color: var(--primary-color);
+.text-image-btn:hover {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
 }
 
-.upload-content {
-  margin-bottom: 1rem;
-}
-
-.image-upload-section {
-  margin-bottom: 0.5rem;
-}
-
-.input-section {
-  position: relative;
+/* 标题输入 */
+.title-section {
+  margin-bottom: 8px;
 }
 
 .title-input {
   width: 100%;
-  padding: 10px;
-  border: 1px solid var(--border-color-primary);
-  border-radius: 8px;
-  background: var(--bg-color-primary);
+  padding: 12px 0;
+  border: none;
+  background: transparent;
   color: var(--text-color-primary);
-  font-size: 16px;
-  font-weight: bold;
-  transition: all 0.2s ease;
+  font-size: 18px;
+  font-weight: 500;
   box-sizing: border-box;
 }
 
 .title-input:focus {
   outline: none;
-  border-color: var(--primary-color);
 }
 
 .title-input::placeholder {
-  color: var(--text-color-secondary);
+  color: var(--text-color-tertiary);
 }
 
-.content-input-wrapper {
-  position: relative;
-  border: 1px solid var(--border-color-primary);
-  border-radius: 8px;
-  background: var(--bg-color-primary);
-  transition: all 0.2s ease;
+/* 正文输入 */
+.content-section {
+  margin-bottom: 16px;
+  min-height: 120px;
 }
 
-.content-input-wrapper:focus-within {
-  border-color: var(--primary-color);
-}
-
-.content-textarea {
+.content-section :deep(.content-textarea) {
   width: 100%;
-  padding: 1rem;
-  padding-bottom: 3rem;
+  padding: 0;
   border: none;
-  border-radius: 8px;
   background: transparent;
   color: var(--text-color-primary);
-  font-size: 16px;
-  line-height: 1.5;
-  transition: all 0.2s ease;
-  min-height: 120px;
-  box-sizing: border-box;
-  caret-color: var(--primary-color);
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100px;
 }
 
-.content-textarea:focus {
+.content-section :deep(.content-textarea:focus) {
   outline: none;
 }
 
-.content-textarea:empty:before {
+.content-section :deep(.content-textarea:empty:before) {
   content: attr(placeholder);
-  color: var(--text-color-secondary);
-  pointer-events: none;
+  color: var(--text-color-tertiary);
 }
 
-.content-actions {
-  position: absolute;
-  bottom: 0.5rem;
-  left: 1rem;
+/* 标签展示区域 */
+.tags-display {
+  margin-bottom: 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tags-scroll {
+  display: flex;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  background: var(--bg-color-secondary);
+  color: var(--text-color-primary);
+  border: 1px solid var(--border-color-primary);
+  border-radius: 16px;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tag-chip:hover {
+  background: var(--primary-color-light);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+/* 工具栏 */
+.editor-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  background: var(--bg-color-secondary);
+  color: var(--text-color-primary);
+  border: 1px solid var(--border-color-primary);
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s ease;
+}
+
+.toolbar-btn:hover {
+  background: var(--bg-color-tertiary);
+  border-color: var(--text-color-secondary);
+}
+
+/* 表情面板 */
+.emoji-panel-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.emoji-panel {
+  background: var(--bg-color-primary);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  max-width: 90vw;
+  max-height: 80vh;
+}
+
+/* 分隔线 */
+.editor-divider {
+  height: 1px;
+  background: var(--border-color-primary);
+  margin: 8px 0;
+}
+
+/* 设置选项列表 */
+.settings-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-color-light);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.setting-item:hover {
+  background: var(--bg-color-secondary);
+  margin: 0 -16px;
+  padding: 16px;
+}
+
+.setting-item:last-child {
+  border-bottom: none;
+}
+
+.setting-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-color-primary);
+  font-size: 15px;
+}
+
+.setting-right {
   display: flex;
   align-items: center;
   gap: 8px;
+  color: var(--text-color-tertiary);
+  font-size: 14px;
 }
 
-.emoji-btn,
-.mention-btn,
-.topic-btn {
+.setting-value {
+  color: var(--text-color-secondary);
+}
+
+/* 选择弹窗 */
+.select-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.select-modal {
+  width: 100%;
+  max-width: 500px;
+  max-height: 60vh;
+  background: var(--bg-color-primary);
+  border-radius: 16px 16px 0 0;
+  overflow: hidden;
+  animation: slideUp 0.3s ease;
+}
+
+.tag-modal {
+  max-height: 80vh;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.select-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-color-primary);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.close-modal-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1195,348 +1420,88 @@ const handleSaveDraft = async () => {
   border: none;
   background: transparent;
   color: var(--text-color-secondary);
-  border-radius: 50%;
   cursor: pointer;
-  transition: all 0.2s ease;
+  border-radius: 50%;
 }
 
-.emoji-btn:hover,
-.mention-btn:hover,
-.topic-btn:hover {
+.close-modal-btn:hover {
   background: var(--bg-color-secondary);
-  color: var(--text-color-primary);
 }
 
-.emoji-icon,
-.mention-icon,
-.topic-icon {
-  width: 20px;
-  height: 20px;
+.select-modal-content {
+  padding: 16px;
+  max-height: calc(60vh - 60px);
+  overflow-y: auto;
 }
 
-.emoji-panel-overlay {
+.tag-modal .select-modal-content {
+  max-height: calc(80vh - 60px);
+}
+
+.select-option {
+  padding: 14px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  font-size: 15px;
+}
+
+.select-option:hover {
+  background: var(--bg-color-secondary);
+}
+
+.select-option.active {
+  background: var(--primary-color-light);
+  color: var(--primary-color);
+}
+
+/* 底部操作栏 */
+.publish-footer {
   position: fixed;
-  top: 0;
+  bottom: 0;
   left: 0;
   right: 0;
-  bottom: 0;
-  background: transparent;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: fadeIn 0.2s ease;
-}
-
-.emoji-panel {
+  gap: 12px;
+  padding: 12px 16px;
   background: var(--bg-color-primary);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  overflow: hidden;
-  animation: scaleIn 0.2s ease;
-  max-width: 90vw;
-  max-height: 80vh;
+  border-top: 1px solid var(--border-color-primary);
+  z-index: 100;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.char-count {
-  position: absolute;
-  bottom: 0.5rem;
-  right: 0.75rem;
-  font-size: 0.8rem;
-  color: var(--text-color-secondary);
-  background: var(--bg-color-primary);
-  padding: 0.25rem;
-  transition: background-color 0.2s ease;
-}
-
-
-.section-title {
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--text-color-primary);
-  margin-bottom: 0.75rem;
-}
-
-.tag-input-wrapper {
-  border: 1px solid var(--border-color-primary);
-  border-radius: 8px;
-  background: var(--bg-color-primary);
-  padding: 0.75rem;
-  transition: border-color 0.2s ease;
-}
-
-.tag-input-wrapper:focus-within {
-  border-color: var(--primary-color);
-}
-
-.selected-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.selected-tag {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.4rem 0.6rem;
-  background: var(--primary-color);
-  color: var(--button-text-color);
-  border-radius: 16px;
-  font-size: 0.8rem;
-  animation: fadeIn 0.2s ease;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.remove-tag-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border: none;
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 12px;
-  line-height: 1;
-}
-
-.remove-tag-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: scale(1.1);
-}
-
-.tag-input-container {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.tag-input {
+.footer-btn {
   flex: 1;
-  border: none;
-  background: transparent;
-  color: var(--text-color-primary);
-  font-size: 0.9rem;
-  outline: none;
-  padding: 0.25rem 0;
-}
-
-.tag-input:disabled {
-  background-color: var(--disabled-bg);
-  cursor: not-allowed;
-}
-
-.tag-input::placeholder {
-  color: var(--text-color-secondary);
-}
-
-.add-tag-btn {
-  padding: 0.25rem 0.75rem;
-  background: var(--primary-color);
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.add-tag-btn:hover {
-  background: var(--primary-color-dark);
-}
-
-.tag-suggestions {
-  margin-top: 0.75rem;
-  padding: 0.75rem;
-  background: var(--bg-color-secondary);
-  border-radius: 8px;
-  border: 1px solid var(--border-color-primary);
-}
-
-.suggestions-title {
-  font-size: 0.8rem;
-  color: var(--text-color-secondary);
-  margin-bottom: 0.5rem;
-}
-
-.suggestions-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.tag-suggestion {
-  padding: 0.4rem 0.8rem;
-  border: 1px solid var(--border-color-primary);
-  border-radius: 16px;
-  background: var(--bg-color-primary);
-  color: var(--text-color-primary);
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.tag-suggestion:hover {
-  border-color: var(--primary-color);
-  background: var(--primary-color);
-  color: white;
-}
-
-.recommended-tags {
-  margin-top: 0.75rem;
-  padding: 0.75rem;
-  background: var(--bg-color-secondary);
-  border-radius: 8px;
-  border: 1px solid var(--border-color-primary);
-}
-
-.recommendations-title {
-  font-size: 0.8rem;
-  color: var(--text-color-secondary);
-  margin-bottom: 0.5rem;
-}
-
-.tags-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.tag-item {
-  padding: 0.4rem 0.8rem;
-  border: 1px solid var(--border-color-primary);
-  border-radius: 16px;
-  background: var(--bg-color-primary);
-  color: var(--text-color-primary);
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.tag-item:hover {
-  border-color: var(--primary-color);
-  background: var(--primary-color);
-  color: white;
-}
-
-.tag-item.active {
-  background: var(--primary-color);
-  color: white;
-  border-color: var(--primary-color);
-}
-
-.category-section {
-  margin-bottom: 1rem;
-}
-
-
-
-.publish-actions {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 1rem;
-  padding: 2rem 1rem;
-  margin-top: 2rem;
-  background: var(--bg-color-primary);
-}
-
-.publish-actions .cancel-btn {
-  padding: 0.75rem 1.5rem;
-  background: transparent;
-  color: var(--text-color-secondary);
-  border: 1px solid var(--border-color-primary);
-  border-radius: 8px;
-  font-size: 0.9rem;
+  padding: 14px 20px;
+  border-radius: 24px;
+  font-size: 16px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
-  min-width: 100px;
 }
 
-
-
-.publish-actions .loading-icon {
-  animation: spin 1s linear infinite;
+.footer-btn.draft-btn {
+  background: transparent;
+  color: var(--text-color-primary);
+  border: 1px solid var(--border-color-primary);
 }
 
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
+.footer-btn.draft-btn:hover:not(:disabled) {
+  background: var(--bg-color-secondary);
 }
 
-/* 响应式设计 */
-@media (max-width: 960px) {
-  .publish-container {
-    min-width: 100%;
-    max-width: 100%;
-    margin: 72px 0;
-  }
+.footer-btn.publish-btn {
+  background: #ff4757;
+  color: white;
+  border: none;
+}
 
-  .publish-header {
-    padding: 0.75rem 1rem;
-  }
+.footer-btn.publish-btn:hover:not(:disabled) {
+  background: #ff3344;
+}
 
-  .header-right {
-    gap: 0.5rem;
-  }
-
-  .draft-box-btn,
-  .manage-btn {
-    padding: 0.4rem 0.8rem;
-    font-size: 0.8rem;
-  }
-
-  .publish-content {
-    padding: 0.75rem;
-  }
-
-  .publish-actions {
-    padding: 1rem 0.75rem;
-  }
+.footer-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* 登录提示样式 */
@@ -1574,104 +1539,33 @@ const handleSaveDraft = async () => {
   line-height: 1.5;
 }
 
-.tag-input {
-  min-width: 80px;
-}
-
-.publish-actions {
-  padding: 1.5rem 0.75rem;
-  gap: 0.75rem;
-}
-
-.publish-actions .cancel-btn,
-.publish-actions .draft-btn,
-.publish-actions .publish-btn {
-  padding: 0.6rem 1.2rem;
-  font-size: 0.85rem;
-  min-width: 80px;
-}
-
-@media (max-width: 480px) {
-  .publish-header {
-    padding: 16px 14px;
+/* 响应式设计 - 桌面端 */
+@media (min-width: 768px) {
+  .publish-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding-bottom: 100px;
   }
-
-  .page-title {
-    margin-left: 12px;
+  
+  .select-modal {
+    max-width: 400px;
+    border-radius: 16px;
+    margin-bottom: 20vh;
   }
-
-  .header-actions {
-    gap: 0.5rem;
+  
+  .select-modal-overlay {
+    align-items: center;
   }
-
-  .cancel-btn {
-    padding: 0.4rem 0.8rem;
-    font-size: 0.8rem;
+  
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
-
-  .draft-btn {
-    padding: 0.4rem 0.8rem;
-    font-size: 0.8rem;
-  }
-
-  .publish-btn {
-    padding: 0.4rem 0.8rem;
-    font-size: 0.8rem;
-  }
-
-  .publish-content {
-    padding: 1rem;
-  }
-
-
-  .tag-input {
-    min-width: 60px;
-    font-size: 0.85rem;
-  }
-
-  .publish-actions {
-    padding: 1rem 0.5rem;
-    gap: 0.5rem;
-    flex-direction: column;
-  }
-
-}
-
-.text-image-section {
-  margin-top: 0.75rem;
-  display: flex;
-  justify-content: flex-start;
-}
-
-.text-image-btn {
-  display: flex;
-  align-items: center;
-  padding: 0.4rem;
-  background: var(--primary-color);
-  color: var(--button-text-color);
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-.text-image-btn:hover {
-  background: var(--primary-color-dark);
-}
-
-.text-image-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
-}
-
-.publish-actions .cancel-btn,
-.publish-actions .draft-btn,
-.publish-actions .publish-btn {
-  width: 100%;
-  padding: 0.75rem;
-  font-size: 0.9rem;
-  min-width: unset;
 }
 </style>
