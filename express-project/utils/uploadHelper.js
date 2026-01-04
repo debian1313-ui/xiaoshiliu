@@ -522,7 +522,10 @@ async function saveAttachmentToLocal(fileBuffer, filename, mimetype) {
     fs.writeFileSync(filePath, fileBuffer);
 
     // 返回访问URL和文件路径
-    const url = `${config.upload.attachment.local.baseUrl}/${config.upload.attachment.local.uploadDir}/${uniqueFilename}`;
+    // 使用 URL 构造函数安全地构建 URL，避免路径拼接问题
+    const baseUrl = config.upload.attachment.local.baseUrl.replace(/\/+$/, '');
+    const uploadDirPath = config.upload.attachment.local.uploadDir.replace(/^\/+/, '').replace(/\/+$/, '');
+    const url = `${baseUrl}/${uploadDirPath}/${uniqueFilename}`;
     return {
       success: true,
       url: url,

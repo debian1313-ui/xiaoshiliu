@@ -748,8 +748,11 @@ router.get('/attachment/download/:filename', async (req, res) => {
     // 获取原始文件名（从查询参数或使用存储的文件名）
     const originalFilename = req.query.name || filename;
     
-    // 设置下载头
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(originalFilename)}"`);
+    // 安全地设置下载头，使用RFC 5987编码处理文件名
+    // 移除可能导致头注入的字符
+    const safeFilename = originalFilename.replace(/[\r\n]/g, '');
+    const encodedFilename = encodeURIComponent(safeFilename).replace(/'/g, '%27');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`);
     res.setHeader('Content-Type', 'application/octet-stream');
     
     // 发送文件
