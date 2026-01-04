@@ -86,6 +86,9 @@
               placeholder="请输入内容" :enable-mention="true" :mention-users="mentionUsers" @focus="handleContentFocus"
               @blur="handleContentBlur" @keydown="handleInputKeydown" @mention="handleMentionInput" />
             <div class="content-actions">
+              <button type="button" class="topic-btn" @click="scrollToTagSection">
+                <SvgIcon name="hash" class="topic-icon" width="20" height="20" />
+              </button>
               <button type="button" class="mention-btn" @click="toggleMentionPanel">
                 <SvgIcon name="mention" class="mention-icon" width="20" height="20" />
               </button>
@@ -111,7 +114,7 @@
             value-key="id" max-width="300px" min-width="200px" @change="handleCategoryChange" />
         </div>
 
-        <div class="tag-section">
+        <div ref="tagSectionRef" class="tag-section">
           <div class="section-title">标签 (最多10个)</div>
           <TagSelector v-model="form.tags" :max-tags="10" />
         </div>
@@ -166,6 +169,7 @@ const { lock, unlock } = useScrollLock()
 const multiImageUploadRef = ref(null)
 const videoUploadRef = ref(null)
 const contentTextarea = ref(null)
+const tagSectionRef = ref(null)
 
 // 上传类型状态
 const uploadType = ref('image') // 'image' 或 'video'
@@ -400,6 +404,13 @@ const toggleMentionPanel = () => {
 const closeMentionPanel = () => {
   showMentionPanel.value = false
   unlock()
+}
+
+// 滚动到标签区域
+const scrollToTagSection = () => {
+  if (tagSectionRef.value) {
+    tagSectionRef.value.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 }
 
 // 处理@符号输入事件
@@ -1174,7 +1185,8 @@ const handleSaveDraft = async () => {
 }
 
 .emoji-btn,
-.mention-btn {
+.mention-btn,
+.topic-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1189,13 +1201,15 @@ const handleSaveDraft = async () => {
 }
 
 .emoji-btn:hover,
-.mention-btn:hover {
+.mention-btn:hover,
+.topic-btn:hover {
   background: var(--bg-color-secondary);
   color: var(--text-color-primary);
 }
 
 .emoji-icon,
-.mention-icon {
+.mention-icon,
+.topic-icon {
   width: 20px;
   height: 20px;
 }
