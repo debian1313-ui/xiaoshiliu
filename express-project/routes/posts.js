@@ -2,14 +2,14 @@ const express = require('express');
 const router = express.Router();
 const { HTTP_STATUS, RESPONSE_CODES, ERROR_MESSAGES } = require('../constants');
 const { pool } = require('../config/config');
-const { optionalAuth, authenticateToken } = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
 const NotificationHelper = require('../utils/notificationHelper');
 const { extractMentionedUsers, hasMentions } = require('../utils/mentionParser');
 const { batchCleanupFiles } = require('../utils/fileCleanup');
 const { sanitizeContent } = require('../utils/contentSecurity');
 
 // 获取笔记列表
-router.get('/', optionalAuth, async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
@@ -504,7 +504,7 @@ router.get('/following', authenticateToken, async (req, res) => {
 });
 
 // 获取笔记详情
-router.get('/:id', optionalAuth, async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const postId = req.params.id;
     const currentUserId = req.user ? req.user.id : null;
@@ -831,7 +831,7 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // 搜索笔记
-router.get('/search', optionalAuth, async (req, res) => {
+router.get('/search', authenticateToken, async (req, res) => {
   try {
     const keyword = req.query.keyword;
     const page = parseInt(req.query.page) || 1;
@@ -919,7 +919,7 @@ router.get('/search', optionalAuth, async (req, res) => {
 });
 
 // 获取笔记评论列表
-router.get('/:id/comments', optionalAuth, async (req, res) => {
+router.get('/:id/comments', authenticateToken, async (req, res) => {
   try {
     const postId = req.params.id;
     const page = parseInt(req.query.page) || 1;

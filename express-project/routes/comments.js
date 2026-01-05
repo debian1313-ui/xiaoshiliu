@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { HTTP_STATUS, RESPONSE_CODES, ERROR_MESSAGES } = require('../constants');
 const { pool } = require('../config/config');
-const { authenticateToken, optionalAuth } = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
 const NotificationHelper = require('../utils/notificationHelper');
 const { extractMentionedUsers, hasMentions } = require('../utils/mentionParser');
 const { sanitizeContent } = require('../utils/contentSecurity');
@@ -32,7 +32,7 @@ async function deleteCommentRecursive(commentId) {
 }
 
 // 获取评论列表
-router.get('/', optionalAuth, async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const postId = req.query.post_id;
     const page = parseInt(req.query.page) || 1;
@@ -229,7 +229,7 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // 获取子评论列表
-router.get('/:id/replies', optionalAuth, async (req, res) => {
+router.get('/:id/replies', authenticateToken, async (req, res) => {
   try {
     const parentId = req.params.id;
     const page = parseInt(req.query.page) || 1;

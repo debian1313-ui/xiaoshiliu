@@ -2,9 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { HTTP_STATUS, RESPONSE_CODES, ERROR_MESSAGES } = require('../constants');
 const { pool } = require('../config/config');
+const { authenticateToken } = require('../middleware/auth');
 
 // 获取所有标签
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const [rows] = await pool.execute(
       'SELECT * FROM tags ORDER BY name ASC'
@@ -23,7 +24,7 @@ router.get('/', async (req, res) => {
 });
 
 // 获取热门标签
-router.get('/hot', async (req, res) => {
+router.get('/hot', authenticateToken, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
     // 直接使用 use_count 字段获取热门标签

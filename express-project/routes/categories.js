@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/config');
 const { success, error } = require('../utils/responseHelper');
+const { authenticateToken } = require('../middleware/auth');
 
 /**
  * @api {get} /api/categories 获取分类列表
@@ -32,7 +33,7 @@ const { success, error } = require('../utils/responseHelper');
  *       ]
  *     }
  */
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const { sortField = 'id', sortOrder = 'asc', name, category_title } = req.query;
 

@@ -2,9 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { success, error } = require('../utils/responseHelper');
 const { getMultipleTableStats } = require('../utils/statsHelper');
+const { authenticateToken } = require('../middleware/auth');
 
 // 获取系统统计信息
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     // 定义需要统计的表
     const tables = [

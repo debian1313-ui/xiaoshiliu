@@ -2,11 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { HTTP_STATUS, RESPONSE_CODES, ERROR_MESSAGES } = require('../constants');
 const { pool } = require('../config/config');
-const { optionalAuth, authenticateToken } = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
 const NotificationHelper = require('../utils/notificationHelper');
 
 // 搜索用户（必须放在 /:id 之前）
-router.get('/search', optionalAuth, async (req, res) => {
+router.get('/search', authenticateToken, async (req, res) => {
   try {
     const keyword = req.query.keyword;
     const page = parseInt(req.query.page) || 1;
@@ -98,7 +98,7 @@ router.get('/search', optionalAuth, async (req, res) => {
 
 // 获取用户信息
 // 获取用户个性标签
-router.get('/:id/personality-tags', async (req, res) => {
+router.get('/:id/personality-tags', authenticateToken, async (req, res) => {
   try {
     const userIdParam = req.params.id;
     // 始终通过汐社号查找用户信息
@@ -140,7 +140,7 @@ router.get('/:id/personality-tags', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const userIdParam = req.params.id;
     // 只通过汐社号(user_id)进行查找
@@ -183,7 +183,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // 获取用户列表
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
@@ -217,7 +217,7 @@ router.get('/', async (req, res) => {
 });
 
 // 获取用户发布的笔记列表
-router.get('/:id/posts', optionalAuth, async (req, res) => {
+router.get('/:id/posts', authenticateToken, async (req, res) => {
   try {
     const userIdParam = req.params.id;
     const page = parseInt(req.query.page) || 1;
@@ -339,7 +339,7 @@ router.get('/:id/posts', optionalAuth, async (req, res) => {
 });
 
 // 获取用户收藏列表
-router.get('/:id/collections', optionalAuth, async (req, res) => {
+router.get('/:id/collections', authenticateToken, async (req, res) => {
   try {
     const userIdParam = req.params.id;
     const page = parseInt(req.query.page) || 1;
@@ -435,7 +435,7 @@ router.get('/:id/collections', optionalAuth, async (req, res) => {
 });
 
 // 获取用户点赞列表
-router.get('/:id/likes', optionalAuth, async (req, res) => {
+router.get('/:id/likes', authenticateToken, async (req, res) => {
   try {
     const userIdParam = req.params.id;
     const page = parseInt(req.query.page) || 1;
@@ -634,7 +634,7 @@ router.delete('/:id/follow', authenticateToken, async (req, res) => {
 });
 
 // 获取关注状态
-router.get('/:id/follow-status', optionalAuth, async (req, res) => {
+router.get('/:id/follow-status', authenticateToken, async (req, res) => {
   try {
     const userIdParam = req.params.id;
     const followerId = req.user ? req.user.id : null;
@@ -697,7 +697,7 @@ router.get('/:id/follow-status', optionalAuth, async (req, res) => {
 });
 
 // 获取用户关注列表
-router.get('/:id/following', optionalAuth, async (req, res) => {
+router.get('/:id/following', authenticateToken, async (req, res) => {
   try {
     const userIdParam = req.params.id;
     const page = parseInt(req.query.page) || 1;
@@ -791,7 +791,7 @@ router.get('/:id/following', optionalAuth, async (req, res) => {
 });
 
 // 获取用户粉丝列表
-router.get('/:id/followers', optionalAuth, async (req, res) => {
+router.get('/:id/followers', authenticateToken, async (req, res) => {
   try {
     const userIdParam = req.params.id;
     const page = parseInt(req.query.page) || 1;
@@ -881,7 +881,7 @@ router.get('/:id/followers', optionalAuth, async (req, res) => {
 });
 
 // 获取互相关注列表
-router.get('/:id/mutual-follows', optionalAuth, async (req, res) => {
+router.get('/:id/mutual-follows', authenticateToken, async (req, res) => {
   try {
     const userIdParam = req.params.id;
     const page = parseInt(req.query.page) || 1;
@@ -993,7 +993,7 @@ router.get('/:id/mutual-follows', optionalAuth, async (req, res) => {
 });
 
 // 获取用户统计信息
-router.get('/:id/stats', async (req, res) => {
+router.get('/:id/stats', authenticateToken, async (req, res) => {
   try {
     const userIdParam = req.params.id;
     console.log(`获取用户统计信息 - 用户ID: ${userIdParam}`);
