@@ -198,21 +198,51 @@ router.get('/', optionalAuth, async (req, res) => {
 
     // 获取每个笔记的图片、标签和用户点赞收藏状态
     for (let post of rows) {
+      // 获取付费设置（用于保护付费内容）
+      const [paymentRows] = await pool.execute(
+        'SELECT enabled, free_preview_count FROM post_payment_settings WHERE post_id = ?',
+        [post.id]
+      );
+      const isPaidContent = paymentRows.length > 0 && paymentRows[0].enabled === 1;
+      const freePreviewCount = isPaidContent ? (paymentRows[0].free_preview_count || 0) : 0;
+      
+      // 检查是否为作者或已购买
+      const isAuthor = currentUserId && post.user_id === currentUserId;
+      let hasPurchased = false;
+      if (isPaidContent && currentUserId && !isAuthor) {
+        const [purchaseRows] = await pool.execute(
+          'SELECT id FROM user_purchased_content WHERE user_id = ? AND post_id = ?',
+          [currentUserId, post.id]
+        );
+        hasPurchased = purchaseRows.length > 0;
+      }
+      
+      const shouldProtectContent = isPaidContent && !isAuthor && !hasPurchased;
+      
       // 根据笔记类型获取图片或视频封面
       if (post.type === 2) {
         // 视频笔记：获取视频封面
         const [videos] = await pool.execute('SELECT video_url, cover_url FROM post_videos WHERE post_id = ?', [post.id]);
         post.images = videos.length > 0 && videos[0].cover_url ? [videos[0].cover_url] : [];
-        post.video_url = videos.length > 0 ? videos[0].video_url : null;
+        // 保护付费视频：不返回video_url
+        post.video_url = shouldProtectContent ? null : (videos.length > 0 ? videos[0].video_url : null);
         // 为瀑布流设置image字段
         post.image = videos.length > 0 && videos[0].cover_url ? videos[0].cover_url : null;
       } else {
         // 图文笔记：获取笔记图片
         const [images] = await pool.execute('SELECT image_url FROM post_images WHERE post_id = ?', [post.id]);
-        post.images = images.map(img => img.image_url);
+        let imageUrls = images.map(img => img.image_url);
+        // 保护付费图片：限制为免费预览数量
+        if (shouldProtectContent && imageUrls.length > freePreviewCount) {
+          imageUrls = imageUrls.slice(0, freePreviewCount);
+        }
+        post.images = imageUrls;
         // 为瀑布流设置image字段（取第一张图片）
-        post.image = images.length > 0 ? images[0].image_url : null;
+        post.image = imageUrls.length > 0 ? imageUrls[0] : null;
       }
+      
+      // 标记是否为付费内容
+      post.isPaidContent = isPaidContent;
 
       // 获取笔记标签
       const [tags] = await pool.execute(
@@ -449,23 +479,55 @@ router.get('/following', authenticateToken, async (req, res) => {
         [currentUserId, ...postIds]
       );
       const collectedPostIds = new Set(allCollections.map(c => c.post_id));
+      
+      // 批量获取付费设置
+      const [allPaymentSettings] = await pool.execute(
+        `SELECT post_id, enabled, free_preview_count FROM post_payment_settings WHERE post_id IN (${placeholders})`,
+        postIds
+      );
+      const paymentSettingsByPostId = {};
+      allPaymentSettings.forEach(ps => {
+        paymentSettingsByPostId[ps.post_id] = ps;
+      });
+      
+      // 批量获取当前用户已购买的内容
+      const [allPurchases] = await pool.execute(
+        `SELECT post_id FROM user_purchased_content WHERE user_id = ? AND post_id IN (${placeholders})`,
+        [currentUserId, ...postIds]
+      );
+      const purchasedPostIds = new Set(allPurchases.map(p => p.post_id));
 
       // 为每个笔记填充数据
       for (let post of rows) {
+        // 判断是否需要保护付费内容
+        const paymentSetting = paymentSettingsByPostId[post.id];
+        const isPaidContent = paymentSetting && paymentSetting.enabled === 1;
+        const isAuthor = post.user_id === currentUserId;
+        const hasPurchased = purchasedPostIds.has(post.id);
+        const shouldProtectContent = isPaidContent && !isAuthor && !hasPurchased;
+        const freePreviewCount = isPaidContent ? (paymentSetting.free_preview_count || 0) : 0;
+        
         if (post.type === 2) {
           // 视频笔记
           const video = videosByPostId[post.id];
           post.images = video && video.cover_url ? [video.cover_url] : [];
-          post.video_url = video ? video.video_url : null;
+          // 保护付费视频：不返回video_url
+          post.video_url = shouldProtectContent ? null : (video ? video.video_url : null);
           post.image = video && video.cover_url ? video.cover_url : null;
         } else {
           // 图文笔记
-          post.images = imagesByPostId[post.id] || [];
-          post.image = post.images.length > 0 ? post.images[0] : null;
+          let images = imagesByPostId[post.id] || [];
+          // 保护付费图片：限制为免费预览数量
+          if (shouldProtectContent && images.length > freePreviewCount) {
+            images = images.slice(0, freePreviewCount);
+          }
+          post.images = images;
+          post.image = images.length > 0 ? images[0] : null;
         }
         post.tags = tagsByPostId[post.id] || [];
         post.liked = likedPostIds.has(post.id);
         post.collected = collectedPostIds.has(post.id);
+        post.isPaidContent = isPaidContent;
       }
     }
 
@@ -580,15 +642,47 @@ router.get('/:id', optionalAuth, async (req, res) => {
     }
 
     // 检查当前用户是否已购买付费内容
+    let hasPurchased = false;
+    const isAuthor = currentUserId && post.user_id === currentUserId;
+    
     if (currentUserId && post.paymentSettings && post.paymentSettings.enabled) {
       const [purchaseRows] = await pool.execute(
         'SELECT id FROM user_purchased_content WHERE user_id = ? AND post_id = ?',
         [currentUserId, postId]
       );
-      post.hasPurchased = purchaseRows.length > 0;
-      console.log(`🔍 [帖子详情] 用户 ${currentUserId} 是否已购买帖子 ${postId}: ${post.hasPurchased}`);
-    } else {
-      post.hasPurchased = false;
+      hasPurchased = purchaseRows.length > 0;
+      console.log(`🔍 [帖子详情] 用户 ${currentUserId} 是否已购买帖子 ${postId}: ${hasPurchased}`);
+    }
+    
+    post.hasPurchased = hasPurchased;
+
+    // 保护付费内容：如果是付费内容且用户未购买且不是作者，隐藏付费部分
+    if (post.paymentSettings && post.paymentSettings.enabled && !hasPurchased && !isAuthor) {
+      const freePreviewCount = post.paymentSettings.freePreviewCount || 0;
+      
+      // 限制图片数量为免费预览数量
+      if (post.images && post.images.length > freePreviewCount) {
+        post.images = post.images.slice(0, freePreviewCount);
+      }
+      
+      // 隐藏视频URL（只保留封面图用于预览）
+      if (post.type === 2) {
+        post.video_url = null;
+        if (post.videos) {
+          post.videos = post.videos.map(v => ({ cover_url: v.cover_url, video_url: null }));
+        }
+      }
+      
+      // 隐藏附件
+      post.attachment = null;
+      
+      // 截断内容文本（只显示前100个字符作为预览）
+      if (post.content && post.content.length > 100) {
+        post.content = post.content.substring(0, 100) + '...';
+        post.contentTruncated = true;
+      }
+      
+      console.log(`🔒 [帖子详情] 付费内容已保护 - 帖子ID: ${postId}, 用户ID: ${currentUserId || '未登录'}`);
     }
 
     // 检查当前用户是否已点赞和收藏（仅在用户已登录时检查）
@@ -858,9 +952,38 @@ router.get('/search', optionalAuth, async (req, res) => {
 
     // 获取每个笔记的图片、标签和用户点赞收藏状态
     for (let post of rows) {
+      // 获取付费设置（用于保护付费内容）
+      const [paymentRows] = await pool.execute(
+        'SELECT enabled, free_preview_count FROM post_payment_settings WHERE post_id = ?',
+        [post.id]
+      );
+      const isPaidContent = paymentRows.length > 0 && paymentRows[0].enabled === 1;
+      const freePreviewCount = isPaidContent ? (paymentRows[0].free_preview_count || 0) : 0;
+      
+      // 检查是否为作者或已购买
+      const isAuthor = currentUserId && post.user_id === currentUserId;
+      let hasPurchased = false;
+      if (isPaidContent && currentUserId && !isAuthor) {
+        const [purchaseRows] = await pool.execute(
+          'SELECT id FROM user_purchased_content WHERE user_id = ? AND post_id = ?',
+          [currentUserId, post.id]
+        );
+        hasPurchased = purchaseRows.length > 0;
+      }
+      
+      const shouldProtectContent = isPaidContent && !isAuthor && !hasPurchased;
+      
       // 获取笔记图片
       const [images] = await pool.execute('SELECT image_url FROM post_images WHERE post_id = ?', [post.id]);
-      post.images = images.map(img => img.image_url);
+      let imageUrls = images.map(img => img.image_url);
+      // 保护付费图片：限制为免费预览数量
+      if (shouldProtectContent && imageUrls.length > freePreviewCount) {
+        imageUrls = imageUrls.slice(0, freePreviewCount);
+      }
+      post.images = imageUrls;
+      
+      // 标记是否为付费内容
+      post.isPaidContent = isPaidContent;
 
       // 获取笔记标签
       const [tags] = await pool.execute(
