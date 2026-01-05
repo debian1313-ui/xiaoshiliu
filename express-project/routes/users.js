@@ -4,6 +4,7 @@ const { HTTP_STATUS, RESPONSE_CODES, ERROR_MESSAGES } = require('../constants');
 const { pool } = require('../config/config');
 const { optionalAuth, authenticateToken } = require('../middleware/auth');
 const NotificationHelper = require('../utils/notificationHelper');
+const { sanitizeUser, sanitizeUsers } = require('../utils/dataSanitizer');
 
 // 搜索用户（必须放在 /:id 之前）
 router.get('/search', optionalAuth, async (req, res) => {
@@ -140,12 +141,16 @@ router.get('/:id/personality-tags', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const userIdParam = req.params.id;
-    // 只通过汐社号(user_id)进行查找
+    const currentUserId = req.user ? req.user.id : null;
+    
+    // 只通过汐社号(user_id)进行查找，显式指定需要的字段（不包含敏感字段如password, oauth2_id等）
     const [rows] = await pool.execute(
-      'SELECT * FROM users WHERE user_id = ?',
+      `SELECT id, user_id, nickname, avatar, bio, location, email, follow_count, fans_count, like_count, 
+              created_at, gender, zodiac_sign, mbti, education, major, interests, verified 
+       FROM users WHERE user_id = ?`,
       [userIdParam]
     );
 
@@ -158,7 +163,7 @@ router.get('/:id', async (req, res) => {
       });
     }
 
-    const user = rows[0];
+    let user = rows[0];
 
     // 处理interests字段（如果是JSON字符串则解析）
     if (user.interests) {
@@ -170,6 +175,9 @@ router.get('/:id', async (req, res) => {
         user.interests = null;
       }
     }
+
+    // 对用户数据进行脱敏处理（非本人不可见邮箱等私密信息）
+    user = sanitizeUser(user, { currentUserId });
 
     res.json({
       code: RESPONSE_CODES.SUCCESS,
@@ -190,7 +198,8 @@ router.get('/', async (req, res) => {
     const offset = (page - 1) * limit;
 
     const [rows] = await pool.execute(
-      `SELECT id, user_id, nickname, avatar, bio, location, follow_count, fans_count, like_count, created_at FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      `SELECT id, user_id, nickname, avatar, bio, location, follow_count, fans_count, like_count, verified, created_at 
+       FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?`,
       [limit.toString(), offset.toString()]
     );
 
@@ -201,7 +210,7 @@ router.get('/', async (req, res) => {
       code: RESPONSE_CODES.SUCCESS,
       message: 'success',
       data: {
-        users: rows,
+        users: sanitizeUsers(rows),
         pagination: {
           page,
           limit,

@@ -7,6 +7,7 @@ const { generateAccessToken, generateRefreshToken, verifyToken } = require('../u
 const { authenticateToken } = require('../middleware/auth');
 const { getIPLocation, getRealIP } = require('../utils/ipLocation');
 const { sendEmailCode } = require('../utils/email');
+const { sanitizeUser } = require('../utils/dataSanitizer');
 const svgCaptcha = require('svg-captcha');
 const path = require('path');
 const fs = require('fs');
@@ -620,7 +621,7 @@ router.post('/login', async (req, res) => {
 
     // 查找用户
     const [userRows] = await pool.execute(
-      'SELECT id, user_id, nickname, password, avatar, bio, location, follow_count, fans_count, like_count, is_active, gender, zodiac_sign, mbti, education, major, interests FROM users WHERE user_id = ?',
+      'SELECT id, user_id, nickname, password, avatar, bio, location, follow_count, fans_count, like_count, is_active, gender, zodiac_sign, mbti, education, major, interests, verified FROM users WHERE user_id = ?',
       [user_id.toString()]
     );
 
@@ -669,8 +670,9 @@ router.post('/login', async (req, res) => {
     // 更新用户对象中的location字段
     user.location = ipLocation;
 
-    // 移除密码字段
+    // 移除敏感字段
     delete user.password;
+    delete user.is_active;
 
     // 处理interests字段（如果是JSON字符串则解析）
     if (user.interests) {
@@ -791,7 +793,7 @@ router.get('/me', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     const [userRows] = await pool.execute(
-      'SELECT id, user_id, nickname, avatar, bio, location, email, follow_count, fans_count, like_count, is_active, created_at, gender, zodiac_sign, mbti, education, major, interests,verified FROM users WHERE id = ?',
+      'SELECT id, user_id, nickname, avatar, bio, location, email, follow_count, fans_count, like_count, created_at, gender, zodiac_sign, mbti, education, major, interests, verified FROM users WHERE id = ?',
       [userId.toString()]
     );
 
@@ -1140,8 +1142,8 @@ router.put('/admin/admins/:id/password', authenticateToken, async (req, res) => 
 
 // ========== OAuth2 登录相关 ==========
 
-// OAuth2用户信息查询字段（减少重复）
-const OAUTH2_USER_SELECT_FIELDS = 'id, user_id, nickname, avatar, bio, location, follow_count, fans_count, like_count, is_active, gender, zodiac_sign, mbti, education, major, interests';
+// OAuth2用户信息查询字段（减少重复）- 不包含敏感字段如password, oauth2_id, is_active
+const OAUTH2_USER_SELECT_FIELDS = 'id, user_id, nickname, avatar, bio, location, follow_count, fans_count, like_count, gender, zodiac_sign, mbti, education, major, interests, verified';
 
 // 生成OAuth2 state参数
 const generateOAuth2State = () => {
@@ -1316,9 +1318,9 @@ router.get('/oauth2/callback', async (req, res) => {
       return res.redirect('/?error=invalid_user_id');
     }
 
-    // 首先尝试通过oauth2_id查找用户
+    // 首先尝试通过oauth2_id查找用户（包含is_active用于检查账户状态）
     let [existingUsers] = await pool.execute(
-      `SELECT ${OAUTH2_USER_SELECT_FIELDS} FROM users WHERE oauth2_id = ?`,
+      `SELECT ${OAUTH2_USER_SELECT_FIELDS}, is_active FROM users WHERE oauth2_id = ?`,
       [oauth2UserId]
     );
 
@@ -1332,6 +1334,9 @@ router.get('/oauth2/callback', async (req, res) => {
       if (!user.is_active) {
         return res.redirect('/?error=account_disabled');
       }
+      
+      // 移除敏感字段
+      delete user.is_active;
     } else {
       // 未找到绑定的用户，创建新用户
       isNewUser = true;
