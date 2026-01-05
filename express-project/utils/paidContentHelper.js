@@ -82,12 +82,19 @@ function protectPostListItem(post, options) {
   } else {
     // 图文笔记
     let images = imageUrls || [];
+    let coverImage = images.length > 0 ? images[0] : null;
+    
     // 保护付费图片：限制为免费预览数量
-    if (protect && images.length > freeCount) {
-      images = images.slice(0, freeCount);
+    // 但始终至少显示1张图片作为封面（用户体验更好）
+    if (protect) {
+      const minPreview = Math.max(1, freeCount);
+      if (images.length > minPreview) {
+        images = images.slice(0, minPreview);
+      }
     }
     post.images = images;
-    post.image = images.length > 0 ? images[0] : null;
+    // 封面图始终显示第一张（即使是付费内容也显示封面）
+    post.image = coverImage;
   }
   
   post.isPaidContent = paid;
