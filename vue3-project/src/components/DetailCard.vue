@@ -200,33 +200,6 @@
                 </a>
               </div>
               
-              <!-- 付费内容解锁区域 -->
-              <div v-if="showPaymentOverlay" class="payment-overlay">
-                <div class="payment-overlay-content">
-                  <div class="payment-lock-icon">🔒</div>
-                  <div class="payment-info">
-                    <div class="payment-title">付费内容</div>
-                    <div class="payment-description">
-                      <template v-if="hiddenImageCount > 0">
-                        还有 {{ hiddenImageCount }} {{ props.item.type === 2 ? '个视频' : '张图片' }}需要解锁
-                      </template>
-                      <template v-else>
-                        解锁后查看完整内容
-                      </template>
-                    </div>
-                    <div class="payment-price">
-                      <span class="price-icon">🍒</span>
-                      <span class="price-value">{{ paymentSettings?.price || 0 }}</span>
-                      <span class="price-unit">石榴点</span>
-                    </div>
-                  </div>
-                  <button class="unlock-btn" @click="handleUnlockContent" :disabled="isUnlocking">
-                    <template v-if="isUnlocking">解锁中...</template>
-                    <template v-else>立即解锁</template>
-                  </button>
-                </div>
-              </div>
-              
               <div class="post-tags">
                 <span v-for="tag in postData.tags" :key="tag" class="tag clickable-tag" @click="handleTagClick(tag)">#{{
                   tag }}</span>
@@ -3362,97 +3335,12 @@ function handleAvatarError(event) {
   flex-shrink: 0;
 }
 
-/* 付费内容解锁区域样式 */
-.payment-overlay {
-  margin: 16px 0;
-  padding: 20px;
-  background: linear-gradient(135deg, rgba(var(--primary-color-rgb), 0.05), rgba(var(--primary-color-rgb), 0.1));
-  border-radius: 12px;
-  border: 1px solid rgba(var(--primary-color-rgb), 0.2);
-}
-
-.payment-overlay-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  text-align: center;
-}
-
-.payment-lock-icon {
-  font-size: 32px;
-  line-height: 1;
-}
-
-.payment-info {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.payment-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-color-primary);
-}
-
-.payment-description {
-  font-size: 14px;
-  color: var(--text-color-secondary);
-}
-
 .content-locked-hint {
   display: block;
   margin-top: 8px;
   color: var(--text-color-tertiary);
   font-size: 13px;
   font-style: italic;
-}
-
-.payment-price {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  margin-top: 4px;
-}
-
-.price-icon {
-  font-size: 18px;
-}
-
-.price-value {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--primary-color);
-}
-
-.price-unit {
-  font-size: 14px;
-  color: var(--text-color-secondary);
-}
-
-.unlock-btn {
-  background: var(--primary-color);
-  border: none;
-  color: white;
-  padding: 12px 32px;
-  border-radius: 24px;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  margin-top: 8px;
-}
-
-.unlock-btn:hover:not(:disabled) {
-  background: var(--primary-color-dark);
-  transform: translateY(-1px);
-}
-
-.unlock-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 /* 图片区域付费遮罩 */
