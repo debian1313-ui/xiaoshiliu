@@ -82,19 +82,19 @@ function protectPostListItem(post, options) {
     // 图文笔记
     let images = imageData || [];
     
-    // 将图片数据按 is_free 排序：免费的在前（使用Number转换确保类型一致）
-    images = [...images].sort((a, b) => (Number(b.is_free) || 0) - (Number(a.is_free) || 0));
+    // 将图片数据按 is_free 排序：免费的在前
+    images = [...images].sort((a, b) => (b.is_free || 0) - (a.is_free || 0));
     
     // 保护付费图片：只显示标记为免费的图片
     if (protect) {
-      images = images.filter(img => Number(img.is_free) === 1);
+      images = images.filter(img => img.is_free === 1);
     }
     
     // 提取URL列表
     const imageUrls = images.map(img => img.url || img.image_url);
     
     post.images = imageUrls;
-    // 封面图：优先使用免费图片（已排序，第一张就是免费图片）
+    // 封面图：如果有图片则显示第一张（免费图片在前）
     post.image = imageUrls.length > 0 ? imageUrls[0] : null;
   }
   
@@ -110,11 +110,11 @@ function protectPostListItem(post, options) {
 function protectPostDetail(post, options = {}) {
   const imageData = options.imageData || [];
   
-  // 将图片按 is_free 排序：免费的在前（使用Number转换确保类型一致）
-  let sortedImages = [...imageData].sort((a, b) => (Number(b.is_free) || 0) - (Number(a.is_free) || 0));
+  // 将图片按 is_free 排序：免费的在前
+  let sortedImages = [...imageData].sort((a, b) => (b.is_free || 0) - (a.is_free || 0));
   
-  // 只显示标记为免费的图片（使用Number比较，避免类型问题）
-  const freeImages = sortedImages.filter(img => Number(img.is_free) === 1);
+  // 只显示标记为免费的图片
+  const freeImages = sortedImages.filter(img => img.is_free === 1);
   post.images = freeImages.map(img => img.url || img.image_url);
   
   // 隐藏视频URL（只保留封面图用于预览）
