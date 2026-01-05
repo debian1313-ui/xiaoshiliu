@@ -15,13 +15,6 @@ const USER_PRIVATE_FIELDS = [
   'email'
 ];
 
-// 需要部分脱敏的字段
-const FIELDS_TO_MASK = {
-  email: maskEmail,
-  id_card: maskIdCard,
-  contact_phone: maskPhone
-};
-
 /**
  * 邮箱脱敏处理
  * 例如：example@gmail.com -> ex***le@gmail.com
@@ -48,7 +41,7 @@ function maskEmail(email) {
 
 /**
  * 身份证号码脱敏处理
- * 例如：110101199001011234 -> 1101***********1234
+ * 例如：110101199001011234 -> 1101***1234
  * @param {string} idCard - 原始身份证号码
  * @returns {string} - 脱敏后的身份证号码
  */
