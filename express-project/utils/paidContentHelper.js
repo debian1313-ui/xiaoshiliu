@@ -110,8 +110,10 @@ function protectPostDetail(post, options = {}) {
   const freePreviewCount = options.freePreviewCount || 0;
   
   // 限制图片数量为免费预览数量
-  if (post.images && post.images.length > freePreviewCount) {
-    post.images = post.images.slice(0, freePreviewCount);
+  // 但始终至少显示1张图片作为封面（用户体验更好）
+  const minPreview = Math.max(1, freePreviewCount);
+  if (post.images && post.images.length > minPreview) {
+    post.images = post.images.slice(0, minPreview);
   }
   
   // 隐藏视频URL（只保留封面图用于预览）
