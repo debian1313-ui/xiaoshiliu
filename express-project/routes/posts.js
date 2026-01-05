@@ -563,6 +563,34 @@ router.get('/:id', optionalAuth, async (req, res) => {
       post.attachment = null;
     }
 
+    // 获取付费设置信息
+    const [paymentRows] = await pool.execute(
+      'SELECT enabled, payment_type, price, free_preview_count FROM post_payment_settings WHERE post_id = ?',
+      [postId]
+    );
+    if (paymentRows.length > 0) {
+      post.paymentSettings = {
+        enabled: paymentRows[0].enabled === 1,
+        paymentType: paymentRows[0].payment_type,
+        price: parseFloat(paymentRows[0].price),
+        freePreviewCount: paymentRows[0].free_preview_count
+      };
+    } else {
+      post.paymentSettings = null;
+    }
+
+    // 检查当前用户是否已购买付费内容
+    if (currentUserId && post.paymentSettings && post.paymentSettings.enabled) {
+      const [purchaseRows] = await pool.execute(
+        'SELECT id FROM user_purchased_content WHERE user_id = ? AND post_id = ?',
+        [currentUserId, postId]
+      );
+      post.hasPurchased = purchaseRows.length > 0;
+      console.log(`🔍 [帖子详情] 用户 ${currentUserId} 是否已购买帖子 ${postId}: ${post.hasPurchased}`);
+    } else {
+      post.hasPurchased = false;
+    }
+
     // 检查当前用户是否已点赞和收藏（仅在用户已登录时检查）
     if (currentUserId) {
       const [likeResult] = await pool.execute(
@@ -605,7 +633,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 // 创建笔记
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { title, content, category_id, images, video, tags, is_draft, type, attachment } = req.body;
+    const { title, content, category_id, images, video, tags, is_draft, type, attachment, paymentSettings } = req.body;
     const userId = req.user.id;
     const postType = type || 1; // 默认为图文类型
 
@@ -619,6 +647,7 @@ router.post('/', authenticateToken, async (req, res) => {
     console.log('图片数量:', images ? images.length : 0);
     console.log('视频数据:', video ? JSON.stringify(video) : 'null');
     console.log('附件数据:', attachment ? JSON.stringify(attachment) : 'null');
+    console.log('付费设置:', paymentSettings ? JSON.stringify(paymentSettings) : 'null');
     console.log('标签:', tags);
 
     // 验证必填字段：发布时要求标题和内容，草稿时不强制要求
@@ -712,6 +741,27 @@ router.post('/', authenticateToken, async (req, res) => {
         [postId.toString(), attachment.url, attachment.name || 'attachment', attachment.size || 0]
       );
       console.log('✅ 附件记录插入成功');
+    }
+
+    // 处理付费设置
+    if (paymentSettings && paymentSettings.enabled) {
+      // 验证价格必须大于0
+      const price = parseFloat(paymentSettings.price) || 0;
+      if (price <= 0) {
+        console.log('❌ 验证失败: 付费设置的价格必须大于0');
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '付费设置的价格必须大于0' });
+      }
+      
+      console.log('💰 开始处理付费设置...');
+      console.log('付费类型:', paymentSettings.paymentType);
+      console.log('价格:', price);
+      console.log('免费预览数量:', paymentSettings.freePreviewCount);
+
+      await pool.execute(
+        'INSERT INTO post_payment_settings (post_id, enabled, payment_type, price, free_preview_count) VALUES (?, ?, ?, ?, ?)',
+        [postId.toString(), 1, paymentSettings.paymentType || 'single', price, paymentSettings.freePreviewCount || 0]
+      );
+      console.log('✅ 付费设置记录插入成功');
     }
 
     // 处理标签
@@ -1012,7 +1062,7 @@ router.post('/:id/collect', authenticateToken, async (req, res) => {
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const postId = req.params.id;
-    const { title, content, category_id, images, video, tags, is_draft, attachment } = req.body;
+    const { title, content, category_id, images, video, tags, is_draft, attachment, paymentSettings } = req.body;
     const userId = req.user.id;
 
     // 验证必填字段：如果不是草稿（is_draft=0），则要求标题、内容和分类不能为空
@@ -1142,6 +1192,29 @@ router.put('/:id', authenticateToken, async (req, res) => {
           [postId.toString(), attachment.url, attachment.name || 'attachment', attachment.size || 0]
         );
         console.log('✅ 附件记录更新成功');
+      }
+    }
+
+    // 处理付费设置更新
+    if (paymentSettings !== undefined) {
+      // 删除原有付费设置记录
+      await pool.execute('DELETE FROM post_payment_settings WHERE post_id = ?', [postId.toString()]);
+      
+      // 如果启用了付费设置，插入记录
+      if (paymentSettings && paymentSettings.enabled) {
+        // 验证价格必须大于0
+        const price = parseFloat(paymentSettings.price) || 0;
+        if (price <= 0) {
+          console.log('❌ 验证失败: 付费设置的价格必须大于0');
+          return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '付费设置的价格必须大于0' });
+        }
+        
+        console.log('💰 更新付费设置...');
+        await pool.execute(
+          'INSERT INTO post_payment_settings (post_id, enabled, payment_type, price, free_preview_count) VALUES (?, ?, ?, ?, ?)',
+          [postId.toString(), 1, paymentSettings.paymentType || 'single', price, paymentSettings.freePreviewCount || 0]
+        );
+        console.log('✅ 付费设置更新成功');
       }
     }
 
@@ -1319,6 +1392,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     await pool.execute('DELETE FROM post_images WHERE post_id = ?', [postId.toString()]);
     await pool.execute('DELETE FROM post_videos WHERE post_id = ?', [postId.toString()]);
     await pool.execute('DELETE FROM post_tags WHERE post_id = ?', [postId.toString()]);
+    await pool.execute('DELETE FROM post_payment_settings WHERE post_id = ?', [postId.toString()]);
     await pool.execute('DELETE FROM likes WHERE target_type = 1 AND target_id = ?', [postId.toString()]);
     await pool.execute('DELETE FROM collections WHERE post_id = ?', [postId.toString()]);
     await pool.execute('DELETE FROM comments WHERE post_id = ?', [postId.toString()]);

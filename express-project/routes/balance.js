@@ -372,4 +372,171 @@ router.post('/exchange-out', authenticateToken, async (req, res) => {
   }
 });
 
+// 购买付费内容
+router.post('/purchase-content', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { postId } = req.body;
+
+    console.log(`🔓 [购买内容] 用户 ${userId} 尝试购买帖子 ${postId}`);
+
+    if (!postId) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        code: RESPONSE_CODES.VALIDATION_ERROR,
+        message: '缺少帖子ID'
+      });
+    }
+
+    // 检查帖子是否存在并获取付费设置
+    const [postRows] = await pool.execute(
+      'SELECT id, user_id, title FROM posts WHERE id = ?',
+      [postId.toString()]
+    );
+
+    if (postRows.length === 0) {
+      console.log(`❌ [购买内容] 帖子 ${postId} 不存在`);
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        code: RESPONSE_CODES.NOT_FOUND,
+        message: '帖子不存在'
+      });
+    }
+
+    const post = postRows[0];
+
+    // 检查是否是自己的帖子
+    if (post.user_id.toString() === userId.toString()) {
+      console.log(`⚠️ [购买内容] 用户 ${userId} 尝试购买自己的帖子`);
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        code: RESPONSE_CODES.VALIDATION_ERROR,
+        message: '不能购买自己的内容'
+      });
+    }
+
+    // 获取帖子的付费设置
+    const [paymentRows] = await pool.execute(
+      'SELECT enabled, payment_type, price FROM post_payment_settings WHERE post_id = ?',
+      [postId.toString()]
+    );
+
+    if (paymentRows.length === 0 || !paymentRows[0].enabled) {
+      console.log(`⚠️ [购买内容] 帖子 ${postId} 不是付费内容`);
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        code: RESPONSE_CODES.VALIDATION_ERROR,
+        message: '该内容不是付费内容'
+      });
+    }
+
+    const paymentSettings = paymentRows[0];
+    const price = parseFloat(paymentSettings.price);
+
+    console.log(`💰 [购买内容] 帖子价格: ${price} 石榴点`);
+
+    // 检查是否已经购买过
+    const [purchaseRows] = await pool.execute(
+      'SELECT id FROM user_purchased_content WHERE user_id = ? AND post_id = ?',
+      [userId.toString(), postId.toString()]
+    );
+
+    if (purchaseRows.length > 0) {
+      console.log(`✅ [购买内容] 用户 ${userId} 已购买过帖子 ${postId}`);
+      return res.json({
+        code: RESPONSE_CODES.SUCCESS,
+        data: { alreadyPurchased: true },
+        message: '您已经购买过此内容'
+      });
+    }
+
+    // 检查用户石榴点是否足够
+    const currentPoints = await getOrCreateUserPoints(userId);
+    console.log(`💎 [购买内容] 用户当前石榴点: ${currentPoints}, 需要: ${price}`);
+
+    if (currentPoints < price) {
+      console.log(`❌ [购买内容] 用户 ${userId} 石榴点不足`);
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        code: RESPONSE_CODES.VALIDATION_ERROR,
+        message: `石榴点不足，当前: ${currentPoints.toFixed(2)}，需要: ${price}`
+      });
+    }
+
+    // 扣除石榴点
+    const newPoints = await updateUserPoints(
+      userId,
+      -price,
+      'purchase',
+      `购买付费内容: ${post.title} (ID: ${postId})`
+    );
+
+    console.log(`✅ [购买内容] 用户 ${userId} 扣除 ${price} 石榴点，剩余: ${newPoints}`);
+
+    // 给作者增加石榴点（扣除平台手续费后）
+    const authorEarnings = price * 0.9; // 作者获得90%
+    await updateUserPoints(
+      post.user_id,
+      authorEarnings,
+      'earning',
+      `付费内容收入: ${post.title} (ID: ${postId})`
+    );
+
+    console.log(`💵 [购买内容] 作者 ${post.user_id} 获得 ${authorEarnings} 石榴点`);
+
+    // 记录购买（包含author_id和purchase_type，同时设置created_at和purchased_at）
+    await pool.execute(
+      'INSERT INTO user_purchased_content (user_id, post_id, author_id, price, purchase_type, created_at, purchased_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
+      [userId.toString(), postId.toString(), post.user_id.toString(), price.toFixed(2), paymentSettings.payment_type || 'single']
+    );
+
+    console.log(`🎉 [购买内容] 购买记录已保存`);
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: {
+        postId: postId,
+        price: price,
+        newPoints: newPoints,
+        authorEarnings: authorEarnings
+      },
+      message: '购买成功！'
+    });
+  } catch (error) {
+    console.error('❌ [购买内容] 购买失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      code: RESPONSE_CODES.ERROR,
+      message: error.message || ERROR_MESSAGES.INTERNAL_SERVER_ERROR
+    });
+  }
+});
+
+// 检查用户是否已购买某个帖子
+router.get('/check-purchase/:postId', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { postId } = req.params;
+
+    console.log(`🔍 [检查购买] 用户 ${userId} 检查帖子 ${postId}`);
+
+    const [purchaseRows] = await pool.execute(
+      'SELECT id, purchased_at FROM user_purchased_content WHERE user_id = ? AND post_id = ?',
+      [userId.toString(), postId.toString()]
+    );
+
+    const hasPurchased = purchaseRows.length > 0;
+    console.log(`📋 [检查购买] 结果: ${hasPurchased ? '已购买' : '未购买'}`);
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: {
+        hasPurchased: hasPurchased,
+        purchasedAt: hasPurchased ? purchaseRows[0].purchased_at : null
+      },
+      message: 'success'
+    });
+  } catch (error) {
+    console.error('❌ [检查购买] 检查失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      code: RESPONSE_CODES.ERROR,
+      message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR
+    });
+  }
+});
+
 module.exports = router;

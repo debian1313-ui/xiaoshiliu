@@ -5,7 +5,9 @@
       <div v-for="(imageItem, index) in imageList" :key="imageItem.id" class="image-item" :class="{
         'dragging': dragIndex === index,
         'touch-dragging': isTouchDragging && touchStartIndex === index,
-        'long-pressing': isLongPressed && touchStartIndex === index && !isTouchDragging
+        'long-pressing': isLongPressed && touchStartIndex === index && !isTouchDragging,
+        'is-paid': props.paymentEnabled && !imageItem.isFreePreview,
+        'is-free': props.paymentEnabled && imageItem.isFreePreview
       }" draggable="true" @dragstart="handleDragStart(index, $event)" @dragenter.prevent="handleDragEnter(index)"
         @dragover.prevent @dragend="handleDragEnd" @touchstart="handleTouchStart(index, $event)"
         @touchmove="handleTouchMove($event)" @touchend="handleTouchEnd($event)">
@@ -19,6 +21,11 @@
               </button>
             </div>
             <div class="image-index">{{ index + 1 }}</div>
+          </div>
+          <!-- 付费/免费预览标识 -->
+          <div v-if="props.paymentEnabled" class="payment-badge" :class="{ 'free': imageItem.isFreePreview }" @click.stop="toggleFreePreview(index)">
+            <span v-if="imageItem.isFreePreview" class="badge-text">👁 免费</span>
+            <span v-else class="badge-text">🔒 付费</span>
           </div>
         </div>
       </div>
@@ -104,6 +111,10 @@ const props = defineProps({
   allowDeleteLast: {
     type: Boolean,
     default: false
+  },
+  paymentEnabled: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -158,7 +169,8 @@ const initializeImageList = (images) => {
         file: null,
         preview: image,
         uploaded: true,
-        url: image
+        url: image,
+        isFreePreview: index === 0 // 默认第一张为免费预览
       }
     } else if (image.file) {
       // 如果是文件对象
@@ -167,11 +179,25 @@ const initializeImageList = (images) => {
         file: image.file,
         preview: image.preview,
         uploaded: false,
-        url: null
+        url: null,
+        isFreePreview: image.isFreePreview !== undefined ? image.isFreePreview : index === 0
       }
     }
-    return image
+    // 保留已有的 isFreePreview 属性
+    return {
+      ...image,
+      isFreePreview: image.isFreePreview !== undefined ? image.isFreePreview : index === 0
+    }
   })
+}
+
+// 切换图片的免费预览状态
+const toggleFreePreview = (index) => {
+  if (imageList.value[index]) {
+    imageList.value[index].isFreePreview = !imageList.value[index].isFreePreview
+    updateModelValue()
+    showMessage(imageList.value[index].isFreePreview ? '已设为免费预览' : '已设为付费内容', 'success')
+  }
 }
 
 // 用于防止循环更新的标志
@@ -200,7 +226,8 @@ watch(imageList, (newValue) => {
     file: item.file,
     preview: item.preview,
     uploaded: item.uploaded,
-    url: item.url
+    url: item.url,
+    isFreePreview: item.isFreePreview
   }))
   emit('update:modelValue', externalValue)
 
@@ -209,6 +236,19 @@ watch(imageList, (newValue) => {
     isInternalUpdate = false
   })
 }, { deep: true, flush: 'post' })
+
+// 手动触发 model 更新
+const updateModelValue = () => {
+  const externalValue = imageList.value.map(item => ({
+    id: item.id,
+    file: item.file,
+    preview: item.preview,
+    uploaded: item.uploaded,
+    url: item.url,
+    isFreePreview: item.isFreePreview
+  }))
+  emit('update:modelValue', externalValue)
+}
 
 const triggerFileInput = () => {
   fileInput.value?.click()
@@ -806,6 +846,46 @@ defineExpose({
   transition: all 0.2s ease;
   cursor: move;
   user-select: none;
+}
+
+/* 付费/免费预览标识样式 */
+.payment-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(255, 71, 87, 0.9);
+  color: white;
+  border-radius: 12px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.payment-badge:hover {
+  transform: scale(1.05);
+}
+
+.payment-badge.free {
+  background: rgba(46, 204, 113, 0.9);
+}
+
+.badge-text {
+  white-space: nowrap;
+}
+
+/* 付费/免费图片边框样式 */
+.image-item.is-paid {
+  box-shadow: 0 0 0 2px rgba(255, 71, 87, 0.5);
+}
+
+.image-item.is-free {
+  box-shadow: 0 0 0 2px rgba(46, 204, 113, 0.5);
 }
 
 .image-item:hover {

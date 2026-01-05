@@ -5,6 +5,13 @@ import { hasViewedPost, markPostAsViewed } from '@/utils/viewTracker.js'
 
 // 转换后端数据格式为前端瀑布流需要的格式
 function transformPostData(backendPost) {
+  // 输出后端返回的付费设置数据（调试用）
+  if (backendPost.paymentSettings) {
+    console.log('🔄 [transformPostData] 后端付费设置:', {
+      postId: backendPost.id,
+      paymentSettings: backendPost.paymentSettings
+    })
+  }
 
   const likeCount = backendPost.like_count || 0
   const liked = backendPost.liked || false
@@ -43,6 +50,9 @@ function transformPostData(backendPost) {
     author_verified: backendPost.verified || 0,
     // 附件字段
     attachment: backendPost.attachment || null,
+    // 付费设置字段
+    paymentSettings: backendPost.paymentSettings || null,
+    hasPurchased: backendPost.hasPurchased || false,
     // 其他字段
     created_at: backendPost.created_at,
     path: `/post/${backendPost.id}`,
@@ -57,7 +67,8 @@ function transformPostData(backendPost) {
       images: backendPost.images || [],
       tags: backendPost.tags || [],
       createdAt: backendPost.created_at,
-      userId: backendPost.user_id
+      userId: backendPost.user_id,
+      paymentSettings: backendPost.paymentSettings || null
     }
   }
 

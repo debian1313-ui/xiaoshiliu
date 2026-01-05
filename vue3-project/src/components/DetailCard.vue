@@ -42,15 +42,23 @@
             </div>
           </div>
           <!-- 图片轮播（图文笔记） -->
-          <div v-else class="image-container">
-            <div class="image-slider" :style="{ transform: `translateX(-${currentImageIndex * 100}%)` }">
-              <img v-for="(image, index) in imageList" :key="index" 
+          <div v-else class="image-container" :class="{ 'has-payment-overlay': showPaymentOverlay }">
+            <!-- 当有图片可显示时 -->
+            <div v-if="displayImageList.length > 0" class="image-slider" :style="{ transform: `translateX(-${currentImageIndex * 100}%)` }">
+              <img v-for="(image, index) in displayImageList" :key="index" 
                 :src="showContent ? image : (index === 0 ? props.item.image : '')" 
                 :alt="props.item.title || '图片'"
                 @load="handleImageLoad($event, index)" :style="{ objectFit: 'contain' }"
-                class="slider-image image-zoomable" @click="openImageViewer" />
+                class="slider-image image-zoomable" :class="{ 'blurred': showPaymentOverlay }" @click="!showPaymentOverlay && openImageViewer()" />
             </div>
-            <div v-if="hasMultipleImages && showContent" class="image-controls" :class="{ 'visible': showImageControls }">
+            <!-- 当没有可显示的图片（全部付费）时，显示第一张图片作为背景模糊 -->
+            <div v-else-if="showPaymentOverlay && imageList.length > 0" class="image-slider">
+              <img :src="imageList[0]" 
+                :alt="props.item.title || '付费内容'"
+                :style="{ objectFit: 'contain' }"
+                class="slider-image blurred" />
+            </div>
+            <div v-if="hasMultipleDisplayImages && showContent && !showPaymentOverlay" class="image-controls" :class="{ 'visible': showImageControls }">
               <div class="nav-btn-container prev-btn-container" @click.stop>
                 <button class="nav-btn prev-btn" @click="prevImage" :disabled="currentImageIndex === 0"
                   v-show="currentImageIndex > 0">
@@ -60,15 +68,28 @@
 
               <div class="nav-btn-container next-btn-container" @click.stop>
                 <button class="nav-btn next-btn" @click="nextImage"
-                  :disabled="currentImageIndex === imageList.length - 1"
-                  v-show="currentImageIndex < imageList.length - 1">
+                  :disabled="currentImageIndex === displayImageList.length - 1"
+                  v-show="currentImageIndex < displayImageList.length - 1">
                   <SvgIcon name="right" width="20" height="20" />
                 </button>
               </div>
 
               <div class="image-counter">
-                {{ currentImageIndex + 1 }}/{{ imageList.length }}
+                {{ currentImageIndex + 1 }}/{{ displayImageList.length }}
               </div>
+            </div>
+            <!-- 付费内容图片区域遮罩 - 始终显示在付费内容上 -->
+            <div v-if="showPaymentOverlay" class="image-payment-overlay">
+              <div class="payment-lock-icon">🔒</div>
+              <div class="payment-text">付费内容</div>
+              <div class="payment-price-badge">
+                <span class="price-icon">🍒</span>
+                <span class="price-value">{{ paymentSettings?.price || 0 }}</span>
+                <span class="price-unit">石榴点解锁</span>
+              </div>
+              <button class="overlay-unlock-btn" @click="handleUnlockContent" :disabled="isUnlocking">
+                {{ isUnlocking ? '解锁中...' : '立即解锁' }}
+              </button>
             </div>
           </div>
         </div>
@@ -112,42 +133,65 @@
               </div>
             </div>
             <!-- 图片轮播（图文笔记） -->
-            <div v-else-if="imageList && imageList.length > 0" class="mobile-image-container">
-              <div class="mobile-image-slider" :style="{ transform: `translateX(-${currentImageIndex * 100}%)` }"
-                @touchstart="handleTouchStart" @touchmove="handleTouchMove" @touchend="handleTouchEnd">
-                <img v-for="(image, index) in imageList" :key="index" 
+            <div v-else-if="(displayImageList && displayImageList.length > 0) || (showPaymentOverlay && imageList.length > 0)" class="mobile-image-container" :class="{ 'has-payment-overlay': showPaymentOverlay }">
+              <!-- 当有可显示的图片时 -->
+              <div v-if="displayImageList.length > 0" class="mobile-image-slider" :style="{ transform: `translateX(-${currentImageIndex * 100}%)` }"
+                @touchstart="!showPaymentOverlay && handleTouchStart($event)" @touchmove="!showPaymentOverlay && handleTouchMove($event)" @touchend="!showPaymentOverlay && handleTouchEnd($event)">
+                <img v-for="(image, index) in displayImageList" :key="index" 
                   :src="showContent ? image : (index === 0 ? props.item.image : '')" 
                   :alt="`图片 ${index + 1}`"
-                  class="mobile-slider-image" @click="openImageViewer" @load="handleImageLoad($event, index)" />
+                  class="mobile-slider-image" :class="{ 'blurred': showPaymentOverlay }" @click="!showPaymentOverlay && openImageViewer()" @load="handleImageLoad($event, index)" />
+              </div>
+              <!-- 当没有可显示的图片（全部付费）时，显示第一张图片作为背景模糊 -->
+              <div v-else-if="showPaymentOverlay && imageList.length > 0" class="mobile-image-slider">
+                <img :src="imageList[0]" 
+                  :alt="props.item.title || '付费内容'"
+                  class="mobile-slider-image blurred" />
               </div>
 
+              <!-- 移动端付费遮罩 -->
+              <div v-if="showPaymentOverlay" class="image-payment-overlay">
+                <div class="payment-lock-icon">🔒</div>
+                <div class="payment-text">付费内容</div>
+                <div class="payment-price-badge">
+                  <span class="price-icon">🍒</span>
+                  <span class="price-value">{{ paymentSettings?.price || 0 }}</span>
+                  <span class="price-unit">石榴点解锁</span>
+                </div>
+                <button class="overlay-unlock-btn" @click="handleUnlockContent" :disabled="isUnlocking">
+                  {{ isUnlocking ? '解锁中...' : '立即解锁' }}
+                </button>
+              </div>
 
-              <div v-if="hasMultipleImages" class="mobile-image-controls">
+              <div v-if="hasMultipleDisplayImages && !showPaymentOverlay" class="mobile-image-controls">
                 <button class="mobile-nav-btn mobile-prev-btn" @click="prevImage" :disabled="currentImageIndex === 0">
                   <SvgIcon name="left" width="20" height="20" />
                 </button>
                 <button class="mobile-nav-btn mobile-next-btn" @click="nextImage"
-                  :disabled="currentImageIndex === imageList.length - 1">
+                  :disabled="currentImageIndex === displayImageList.length - 1">
                   <SvgIcon name="right" width="20" height="20" />
                 </button>
                 <div class="mobile-image-counter">
-                  {{ currentImageIndex + 1 }}/{{ imageList.length }}
+                  {{ currentImageIndex + 1 }}/{{ displayImageList.length }}
                 </div>
               </div>
             </div>
-            <div v-if="imageList.length > 1" class="mobile-dots-indicator">
+            <div v-if="displayImageList.length > 1 && !showPaymentOverlay" class="mobile-dots-indicator">
               <div class="mobile-dots">
-                <span v-for="(image, index) in imageList" :key="index" class="mobile-dot"
+                <span v-for="(image, index) in displayImageList" :key="index" class="mobile-dot"
                   :class="{ active: index === currentImageIndex }" @click="goToImage(index)"></span>
               </div>
             </div>
             <div class="post-content">
               <h2 class="post-title">{{ postData.title }}</h2>
               <p class="post-text">
-                <ContentRenderer :text="postData.content" />
+                <ContentRenderer :text="displayContent" />
+                <span v-if="showPaymentOverlay && postData.content.length > 50" class="content-locked-hint">
+                  （内容已隐藏，解锁后查看完整内容）
+                </span>
               </p>
-              <!-- 附件下载区域 -->
-              <div v-if="postData.attachment && postData.attachment.url" class="attachment-download">
+              <!-- 附件下载区域 - 付费内容时隐藏 -->
+              <div v-if="postData.attachment && postData.attachment.url && !showPaymentOverlay" class="attachment-download">
                 <a :href="postData.attachment.url" :download="postData.attachment.name" target="_blank" class="attachment-link">
                   <SvgIcon name="attachment" width="16" height="16" />
                   <span class="attachment-name">{{ postData.attachment.name || '附件' }}</span>
@@ -155,6 +199,34 @@
                   <SvgIcon name="download" width="16" height="16" class="download-icon" />
                 </a>
               </div>
+              
+              <!-- 付费内容解锁区域 -->
+              <div v-if="showPaymentOverlay" class="payment-overlay">
+                <div class="payment-overlay-content">
+                  <div class="payment-lock-icon">🔒</div>
+                  <div class="payment-info">
+                    <div class="payment-title">付费内容</div>
+                    <div class="payment-description">
+                      <template v-if="hiddenImageCount > 0">
+                        还有 {{ hiddenImageCount }} {{ props.item.type === 2 ? '个视频' : '张图片' }}需要解锁
+                      </template>
+                      <template v-else>
+                        解锁后查看完整内容
+                      </template>
+                    </div>
+                    <div class="payment-price">
+                      <span class="price-icon">🍒</span>
+                      <span class="price-value">{{ paymentSettings?.price || 0 }}</span>
+                      <span class="price-unit">石榴点</span>
+                    </div>
+                  </div>
+                  <button class="unlock-btn" @click="handleUnlockContent" :disabled="isUnlocking">
+                    <template v-if="isUnlocking">解锁中...</template>
+                    <template v-else>立即解锁</template>
+                  </button>
+                </div>
+              </div>
+              
               <div class="post-tags">
                 <span v-for="tag in postData.tags" :key="tag" class="tag clickable-tag" @click="handleTagClick(tag)">#{{
                   tag }}</span>
@@ -408,7 +480,7 @@
       @confirm="handleImageUploadConfirm" @update:model-value="handleImageUploadChange" />
 
     <!-- 帖子图片查看器 -->
-    <ImageViewer :visible="showImageViewer" :images="imageList" :initial-index="currentImageIndex" image-type="post"
+    <ImageViewer :visible="showImageViewer" :images="displayImageList" :initial-index="currentImageIndex" image-type="post"
       @close="closeImageViewer" @change="handleImageIndexChange" />
 
     <!-- 评论图片查看器 -->
@@ -440,7 +512,7 @@ import { useFollowStore } from '@/stores/follow.js'
 import { useAuthStore } from '@/stores/auth'
 import { useCommentStore } from '@/stores/comment'
 import { useCommentLikeStore } from '@/stores/commentLike'
-import { commentApi, userApi, postApi, imageUploadApi } from '@/api/index.js'
+import { commentApi, userApi, postApi, imageUploadApi, balanceApi } from '@/api/index.js'
 import { getPostDetail } from '@/api/posts.js'
 import { useScrollLock } from '@/composables/useScrollLock'
 import { formatTime } from '@/utils/timeFormat'
@@ -529,6 +601,86 @@ const isAnimating = ref(true)
 const showContent = ref(false) // 新增：控制内容显示
 const isClosing = ref(false) // 新增：控制关闭动画状态
 
+// 付费设置相关状态
+const isUnlocking = ref(false) // 解锁中状态
+
+// 检测是否有付费设置
+const paymentSettings = computed(() => {
+  return props.item.paymentSettings || props.item.originalData?.paymentSettings || null
+})
+
+// 是否为付费内容
+const isPaidContent = computed(() => {
+  return paymentSettings.value && paymentSettings.value.enabled && paymentSettings.value.price > 0
+})
+
+// 是否已购买（TODO: 从后端获取用户购买状态）
+const hasPurchased = computed(() => {
+  // 如果是作者自己，视为已购买
+  if (isCurrentUserPost.value) {
+    return true
+  }
+  // TODO: 实际应该从后端API获取用户是否已购买此内容
+  return props.item.hasPurchased || false
+})
+
+// 是否需要显示付费遮挡
+const showPaymentOverlay = computed(() => {
+  return isPaidContent.value && !hasPurchased.value
+})
+
+// 免费预览数量
+const freePreviewCount = computed(() => {
+  if (!paymentSettings.value) return 0
+  return paymentSettings.value.freePreviewCount || 0
+})
+
+// 可显示的图片列表（根据付费设置过滤）
+const visibleImageList = computed(() => {
+  const allImages = imageList.value
+  if (!showPaymentOverlay.value) {
+    return allImages
+  }
+  
+  // 检查图片是否有 isFreePreview 属性（新格式）
+  const imagesWithFreePreviewProp = props.item.images?.filter(img => typeof img === 'object' && img.isFreePreview !== undefined)
+  if (imagesWithFreePreviewProp && imagesWithFreePreviewProp.length > 0) {
+    // 使用 isFreePreview 属性过滤，只显示标记为免费的图片
+    return allImages.filter((url, index) => {
+      const imgData = props.item.images?.[index]
+      return imgData && typeof imgData === 'object' && imgData.isFreePreview
+    })
+  }
+  
+  // 旧格式：使用 freePreviewCount
+  return allImages.slice(0, freePreviewCount.value)
+})
+
+// 被隐藏的图片数量
+const hiddenImageCount = computed(() => {
+  if (!showPaymentOverlay.value) return 0
+  
+  // 检查图片是否有 isFreePreview 属性
+  const imagesWithFreePreviewProp = props.item.images?.filter(img => typeof img === 'object' && img.isFreePreview !== undefined)
+  if (imagesWithFreePreviewProp && imagesWithFreePreviewProp.length > 0) {
+    const paidCount = props.item.images.filter(img => typeof img === 'object' && !img.isFreePreview).length
+    return paidCount
+  }
+  
+  return Math.max(0, imageList.value.length - freePreviewCount.value)
+})
+
+// 实际显示的图片列表（付费内容时只显示免费预览的图片）
+const displayImageList = computed(() => {
+  if (showPaymentOverlay.value) {
+    return visibleImageList.value
+  }
+  return imageList.value
+})
+
+// 是否有多张可显示的图片
+const hasMultipleDisplayImages = computed(() => displayImageList.value.length > 1)
+
 // 移动端检测
 const isMobile = computed(() => windowWidth.value <= 768)
 
@@ -557,6 +709,23 @@ const handleAnimationEnd = (event) => {
 
 // 组件挂载时延迟显示内容
 onMounted(() => {
+  // 输出付费设置信息到控制台（调试用）
+  console.log('📦 [DetailCard] 笔记数据:', {
+    id: props.item.id,
+    title: props.item.title,
+    paymentSettings: props.item.paymentSettings,
+    originalDataPaymentSettings: props.item.originalData?.paymentSettings,
+    hasPurchased: props.item.hasPurchased,
+    isCurrentUserPost: isCurrentUserPost.value
+  })
+  console.log('💰 [DetailCard] 付费状态计算结果:', {
+    paymentSettings: paymentSettings.value,
+    isPaidContent: isPaidContent.value,
+    hasPurchased: hasPurchased.value,
+    showPaymentOverlay: showPaymentOverlay.value,
+    freePreviewCount: freePreviewCount.value
+  })
+  
   // 动画期间不显示复杂内容，减少渲染压力
   setTimeout(() => {
     if (!showContent.value) {
@@ -670,6 +839,19 @@ const postData = computed(() => {
     attachment: props.item.attachment || null
   }
   return data
+})
+
+// 付费内容时显示的截断内容
+const displayContent = computed(() => {
+  const fullContent = postData.value.content
+  if (!showPaymentOverlay.value) {
+    return fullContent
+  }
+  // 付费内容只显示前50个字符
+  if (fullContent.length > 50) {
+    return fullContent.substring(0, 50) + '...'
+  }
+  return fullContent
 })
 
 // 格式化附件大小
@@ -1182,6 +1364,65 @@ const toggleCollect = async () => {
   } catch (error) {
     console.error('收藏操作失败:', error)
     showMessage('操作失败，请重试', 'error')
+  }
+}
+
+// 解锁付费内容
+const handleUnlockContent = async () => {
+  console.log('🔓 [解锁内容] 开始解锁流程...')
+  console.log('📋 [解锁内容] 帖子ID:', props.item.id)
+  console.log('💰 [解锁内容] 付费设置:', paymentSettings.value)
+  
+  // 检查用户是否已登录
+  if (!userStore.isLoggedIn) {
+    console.log('⚠️ [解锁内容] 用户未登录，打开登录弹窗')
+    authStore.openLoginModal()
+    return
+  }
+
+  if (!isPaidContent.value || isUnlocking.value) {
+    console.log('⚠️ [解锁内容] 非付费内容或正在解锁中')
+    return
+  }
+
+  isUnlocking.value = true
+  console.log('🔄 [解锁内容] 正在处理...')
+
+  try {
+    // 调用后端API进行付费解锁
+    const result = await balanceApi.purchaseContent(props.item.id)
+    console.log('📦 [解锁内容] API返回结果:', result)
+    
+    if (result.success || result.code === 200) {
+      if (result.data?.alreadyPurchased) {
+        console.log('✅ [解锁内容] 已经购买过此内容')
+        showMessage('您已经购买过此内容，刷新页面查看', 'info')
+      } else {
+        console.log('🎉 [解锁内容] 购买成功！')
+        console.log('💎 [解锁内容] 剩余石榴点:', result.data?.newPoints)
+        showMessage(`购买成功！消费 ${result.data?.price || paymentSettings.value.price} 石榴点`, 'success')
+      }
+      
+      // 成功后刷新页面数据以获取完整内容
+      console.log('🔄 [解锁内容] 正在刷新帖子数据...')
+      const postData = await getPostDetail(props.item.id)
+      if (postData) {
+        console.log('✅ [解锁内容] 帖子数据已刷新:', postData.paymentSettings)
+        // 更新item的hasPurchased状态
+        props.item.hasPurchased = true
+        // 触发组件更新
+        Object.assign(props.item, postData)
+      }
+    } else {
+      console.log('❌ [解锁内容] 购买失败:', result.message)
+      showMessage(result.message || '购买失败，请重试', 'error')
+    }
+  } catch (error) {
+    console.error('❌ [解锁内容] 发生错误:', error)
+    showMessage(error.message || '解锁失败，请重试', 'error')
+  } finally {
+    isUnlocking.value = false
+    console.log('🏁 [解锁内容] 流程结束')
   }
 }
 
@@ -3119,6 +3360,189 @@ function handleAvatarError(event) {
 .attachment-link .download-icon {
   color: var(--primary-color);
   flex-shrink: 0;
+}
+
+/* 付费内容解锁区域样式 */
+.payment-overlay {
+  margin: 16px 0;
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(var(--primary-color-rgb), 0.05), rgba(var(--primary-color-rgb), 0.1));
+  border-radius: 12px;
+  border: 1px solid rgba(var(--primary-color-rgb), 0.2);
+}
+
+.payment-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.payment-lock-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.payment-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.payment-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-color-primary);
+}
+
+.payment-description {
+  font-size: 14px;
+  color: var(--text-color-secondary);
+}
+
+.content-locked-hint {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-color-tertiary);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.payment-price {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.price-icon {
+  font-size: 18px;
+}
+
+.price-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+.price-unit {
+  font-size: 14px;
+  color: var(--text-color-secondary);
+}
+
+.unlock-btn {
+  background: var(--primary-color);
+  border: none;
+  color: white;
+  padding: 12px 32px;
+  border-radius: 24px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 8px;
+}
+
+.unlock-btn:hover:not(:disabled) {
+  background: var(--primary-color-dark);
+  transform: translateY(-1px);
+}
+
+.unlock-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 图片区域付费遮罩 */
+.image-payment-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.85));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.image-payment-overlay .payment-lock-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.image-payment-overlay .payment-text {
+  color: white;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.image-payment-overlay .payment-price-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  color: white;
+}
+
+.image-payment-overlay .payment-price-badge .price-icon {
+  font-size: 16px;
+}
+
+.image-payment-overlay .payment-price-badge .price-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffd700;
+}
+
+.image-payment-overlay .payment-price-badge .price-unit {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.overlay-unlock-btn {
+  background: var(--primary-color);
+  border: none;
+  color: white;
+  padding: 10px 24px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 16px;
+}
+
+.overlay-unlock-btn:hover:not(:disabled) {
+  background: var(--primary-color-dark);
+  transform: scale(1.05);
+}
+
+.overlay-unlock-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 图片模糊效果 */
+.slider-image.blurred,
+.mobile-slider-image.blurred {
+  filter: blur(20px);
+  pointer-events: none;
+}
+
+.image-container.has-payment-overlay,
+.mobile-image-container.has-payment-overlay {
+  position: relative;
+}
+
+.mobile-payment-placeholder {
+  min-height: 200px;
+  background: var(--bg-color-secondary);
+  position: relative;
 }
 
 .post-tags {

@@ -814,5 +814,17 @@ export const balanceApi = {
   // 兑出余额（从本站转出到用户中心）
   exchangeOut(amount) {
     return request.post('/balance/exchange-out', { amount })
+  },
+
+  // 购买付费内容
+  purchaseContent(postId) {
+    console.log('🛒 [API] 调用购买接口, postId:', postId)
+    return request.post('/balance/purchase-content', { postId })
+  },
+
+  // 检查是否已购买
+  checkPurchase(postId) {
+    console.log('🔍 [API] 检查购买状态, postId:', postId)
+    return request.get(`/balance/check-purchase/${postId}`)
   }
 }

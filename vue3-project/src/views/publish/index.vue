@@ -56,6 +56,7 @@
               v-model="form.images" 
               :max-images="9" 
               :allow-delete-last="true"
+              :payment-enabled="form.paymentSettings.enabled"
               @error="handleUploadError" 
             />
             <VideoUpload 
@@ -111,6 +112,22 @@
             </button>
           </div>
 
+          <!-- 付费设置按钮 -->
+          <div class="payment-settings-section">
+            <button type="button" class="payment-settings-btn" :class="{ active: form.paymentSettings.enabled }" @click="openPaymentModal">
+              <span class="payment-icon">🍒</span>
+              <span class="payment-text">
+                <template v-if="form.paymentSettings.enabled">
+                  已设置付费：{{ form.paymentSettings.price }} 石榴点
+                </template>
+                <template v-else>
+                  设置付费内容
+                </template>
+              </span>
+              <SvgIcon name="right" width="16" height="16" class="payment-arrow" />
+            </button>
+          </div>
+
           <div v-if="showEmojiPanel" class="emoji-panel-overlay" v-click-outside="closeEmojiPanel">
             <div class="emoji-panel" @click.stop>
               <EmojiPicker @select="handleEmojiSelect" />
@@ -155,6 +172,18 @@
       @confirm="handleAttachmentConfirm"
       @close="closeAttachmentModal"
     />
+
+    <!-- 付费设置模态框 -->
+    <PaymentSettingsModal
+      v-model:visible="showPaymentModal"
+      v-model="form.paymentSettings"
+      :mediaCount="mediaCount"
+      :mediaType="uploadType"
+      :freeImagesCount="freeImagesCount"
+      :paidImagesCount="paidImagesCount"
+      @confirm="handlePaymentConfirm"
+      @close="closePaymentModal"
+    />
   </div>
 </template>
 
@@ -180,6 +209,7 @@ import MentionModal from '@/components/mention/MentionModal.vue'
 import ContentEditableInput from '@/components/ContentEditableInput.vue'
 import TextImageModal from '@/views/publish/components/TextImageModal.vue'
 import AttachmentUploadModal from '@/components/AttachmentUploadModal.vue'
+import PaymentSettingsModal from '@/components/PaymentSettingsModal.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -202,6 +232,7 @@ const showMentionPanel = ref(false)
 const isContentFocused = ref(false)
 const showTextImageModal = ref(false)
 const showAttachmentModal = ref(false)
+const showPaymentModal = ref(false)
 
 const showToast = ref(false)
 const toastMessage = ref('')
@@ -214,7 +245,13 @@ const form = reactive({
   video: null,
   tags: [],
   category_id: null,
-  attachment: null
+  attachment: null,
+  paymentSettings: {
+    enabled: false,
+    paymentType: 'single',
+    price: 0,
+    freePreviewCount: 0
+  }
 })
 
 // 草稿相关状态
@@ -268,6 +305,39 @@ const canSaveDraft = computed(() => {
 
 // 登录状态检查
 const isLoggedIn = computed(() => userStore.isLoggedIn)
+
+// 媒体数量计算
+const mediaCount = computed(() => {
+  if (uploadType.value === 'image') {
+    if (multiImageUploadRef.value) {
+      return multiImageUploadRef.value.getImageCount()
+    }
+    return form.images.length
+  } else if (uploadType.value === 'video') {
+    if (videoUploadRef.value) {
+      const videoData = videoUploadRef.value.getVideoData()
+      return videoData && (videoData.uploaded || videoData.file) ? 1 : 0
+    }
+    return form.video ? 1 : 0
+  }
+  return 0
+})
+
+// 免费预览图片数量
+const freeImagesCount = computed(() => {
+  if (uploadType.value === 'image' && form.images && form.images.length > 0) {
+    return form.images.filter(img => img.isFreePreview).length
+  }
+  return 0
+})
+
+// 付费图片数量
+const paidImagesCount = computed(() => {
+  if (uploadType.value === 'image' && form.images && form.images.length > 0) {
+    return form.images.filter(img => !img.isFreePreview).length
+  }
+  return 0
+})
 
 // 打开登录模态框
 const openLoginModal = () => {
@@ -406,6 +476,22 @@ const handleAttachmentConfirm = (attachmentData) => {
 
 const removeAttachment = () => {
   form.attachment = null
+}
+
+// 付费设置相关函数
+const openPaymentModal = () => {
+  showPaymentModal.value = true
+  lock()
+}
+
+const closePaymentModal = () => {
+  showPaymentModal.value = false
+  unlock()
+}
+
+const handlePaymentConfirm = (paymentData) => {
+  form.paymentSettings = paymentData
+  closePaymentModal()
 }
 
 const formatAttachmentSize = (bytes) => {
@@ -662,7 +748,8 @@ const handlePublish = async () => {
       category_id: form.category_id,
       type: uploadType.value === 'image' ? 1 : 2, // 1: 图文, 2: 视频
       is_draft: false, // 发布状态
-      attachment: form.attachment || null
+      attachment: form.attachment || null,
+      paymentSettings: form.paymentSettings.enabled ? form.paymentSettings : null
     }
 
 
@@ -713,6 +800,12 @@ const resetForm = () => {
   form.tags = []
   form.category_id = null
   form.attachment = null
+  form.paymentSettings = {
+    enabled: false,
+    paymentType: 'single',
+    price: 0,
+    freePreviewCount: 0
+  }
   
   if (multiImageUploadRef.value) {
     multiImageUploadRef.value.reset()
@@ -754,6 +847,18 @@ const loadDraftData = async (draftId) => {
         form.attachment = fullData.attachment
       } else {
         form.attachment = null
+      }
+
+      // 设置付费设置数据
+      if (fullData.paymentSettings) {
+        form.paymentSettings = fullData.paymentSettings
+      } else {
+        form.paymentSettings = {
+          enabled: false,
+          paymentType: 'single',
+          price: 0,
+          freePreviewCount: 0
+        }
       }
 
       // 处理标签数据：确保转换为字符串数组
@@ -916,7 +1021,8 @@ const handleSaveDraft = async () => {
       category_id: form.category_id || null,
       type: uploadType.value === 'image' ? 1 : 2, // 1: 图文, 2: 视频
       is_draft: true,
-      attachment: form.attachment || null
+      attachment: form.attachment || null,
+      paymentSettings: form.paymentSettings.enabled ? form.paymentSettings : null
     }
 
     showMessage('正在保存草稿...', 'info')
@@ -1320,6 +1426,55 @@ const handleSaveDraft = async () => {
 .remove-attachment-btn:hover {
   background: var(--danger-color);
   color: white;
+}
+
+/* 付费设置按钮样式 */
+.payment-settings-section {
+  margin-top: 12px;
+}
+
+.payment-settings-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--bg-color-secondary);
+  border: 1px solid var(--border-color-primary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-color-secondary);
+}
+
+.payment-settings-btn:hover {
+  border-color: var(--primary-color);
+  background: var(--bg-color-primary);
+}
+
+.payment-settings-btn.active {
+  border-color: var(--primary-color);
+  background: rgba(var(--primary-color-rgb), 0.05);
+  color: var(--primary-color);
+}
+
+.payment-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.payment-text {
+  flex: 1;
+  text-align: left;
+  font-size: 14px;
+}
+
+.payment-arrow {
+  color: var(--text-color-tertiary);
+}
+
+.payment-settings-btn.active .payment-arrow {
+  color: var(--primary-color);
 }
 
 .emoji-panel-overlay {
