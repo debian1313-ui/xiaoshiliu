@@ -44,8 +44,14 @@ const ERROR_MESSAGES = {
   REQUEST_CONFIG_ERROR: '请求配置错误'
 };
 
+// 付费内容相关常量
+const PAID_CONTENT = {
+  CONTENT_PREVIEW_LENGTH: 100 // 付费内容预览的文本长度限制
+};
+
 module.exports = {
   HTTP_STATUS,
   RESPONSE_CODES,
-  ERROR_MESSAGES
+  ERROR_MESSAGES,
+  PAID_CONTENT
 };
