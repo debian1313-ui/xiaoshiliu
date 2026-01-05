@@ -1070,8 +1070,20 @@ const handleDeleteReply = async (reply, commentId) => {
   }
 }
 
+// Pause all video players helper function
+const pauseVideoPlayers = () => {
+  if (videoPlayer.value) {
+    videoPlayer.value.pause()
+  }
+  if (mobileVideoPlayer.value) {
+    mobileVideoPlayer.value.pause()
+  }
+}
+
 const closeModal = () => {
   if (isClosing.value) return // 防止重复触发
+  
+  pauseVideoPlayers()
   
   isClosing.value = true
   showContent.value = false // 立即隐藏内容

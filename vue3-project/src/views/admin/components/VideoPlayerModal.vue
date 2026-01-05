@@ -10,6 +10,7 @@
       <div class="video-modal-body">
         <ShakaVideoPlayer
           v-if="videoUrl"
+          ref="videoPlayerRef"
           :src="videoUrl"
           :poster-url="posterUrl"
           :autoplay="true"
@@ -27,7 +28,7 @@
 </template>
 
 <script setup>
-import { watch } from 'vue'
+import { ref, watch } from 'vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import ShakaVideoPlayer from '@/components/ShakaVideoPlayer.vue'
 
@@ -48,7 +49,18 @@ const props = defineProps({
 
 const emit = defineEmits(['update:visible', 'close'])
 
+// Video player ref
+const videoPlayerRef = ref(null)
+
+// Pause video helper function
+const pauseVideo = () => {
+  if (videoPlayerRef.value) {
+    videoPlayerRef.value.pause()
+  }
+}
+
 const closeModal = () => {
+  pauseVideo()
   emit('update:visible', false)
   emit('close')
 }
@@ -66,6 +78,7 @@ watch(() => props.visible, (newVisible) => {
     document.addEventListener('keydown', handleKeydown)
   } else {
     document.removeEventListener('keydown', handleKeydown)
+    pauseVideo()
   }
 })
 </script>
