@@ -733,14 +733,21 @@ router.post('/', authenticateToken, async (req, res) => {
 
     // 处理付费设置
     if (paymentSettings && paymentSettings.enabled) {
+      // 验证价格必须大于0
+      const price = parseFloat(paymentSettings.price) || 0;
+      if (price <= 0) {
+        console.log('❌ 验证失败: 付费设置的价格必须大于0');
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '付费设置的价格必须大于0' });
+      }
+      
       console.log('💰 开始处理付费设置...');
       console.log('付费类型:', paymentSettings.paymentType);
-      console.log('价格:', paymentSettings.price);
+      console.log('价格:', price);
       console.log('免费预览数量:', paymentSettings.freePreviewCount);
 
       await pool.execute(
         'INSERT INTO post_payment_settings (post_id, enabled, payment_type, price, free_preview_count) VALUES (?, ?, ?, ?, ?)',
-        [postId.toString(), 1, paymentSettings.paymentType || 'single', paymentSettings.price || 0, paymentSettings.freePreviewCount || 0]
+        [postId.toString(), 1, paymentSettings.paymentType || 'single', price, paymentSettings.freePreviewCount || 0]
       );
       console.log('✅ 付费设置记录插入成功');
     }
@@ -1183,10 +1190,17 @@ router.put('/:id', authenticateToken, async (req, res) => {
       
       // 如果启用了付费设置，插入记录
       if (paymentSettings && paymentSettings.enabled) {
+        // 验证价格必须大于0
+        const price = parseFloat(paymentSettings.price) || 0;
+        if (price <= 0) {
+          console.log('❌ 验证失败: 付费设置的价格必须大于0');
+          return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '付费设置的价格必须大于0' });
+        }
+        
         console.log('💰 更新付费设置...');
         await pool.execute(
           'INSERT INTO post_payment_settings (post_id, enabled, payment_type, price, free_preview_count) VALUES (?, ?, ?, ?, ?)',
-          [postId.toString(), 1, paymentSettings.paymentType || 'single', paymentSettings.price || 0, paymentSettings.freePreviewCount || 0]
+          [postId.toString(), 1, paymentSettings.paymentType || 'single', price, paymentSettings.freePreviewCount || 0]
         );
         console.log('✅ 付费设置更新成功');
       }

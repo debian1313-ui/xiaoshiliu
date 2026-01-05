@@ -98,6 +98,12 @@
               </template>
             </span>
           </div>
+
+          <!-- 验证错误提示 -->
+          <div v-if="validationError" class="validation-error">
+            <SvgIcon name="warning" width="16" height="16" />
+            <span>{{ validationError }}</span>
+          </div>
         </template>
       </div>
 
@@ -168,14 +174,19 @@ watch(() => props.modelValue, (newValue) => {
   }
 }, { deep: true })
 
+// 验证错误信息
+const validationError = ref('')
+
 const toggleEnabled = () => {
   localSettings.enabled = !localSettings.enabled
+  validationError.value = ''
   if (localSettings.enabled && localSettings.price === 0) {
     localSettings.price = 10 // 默认价格
   }
 }
 
 const handleClose = () => {
+  validationError.value = ''
   emit('update:visible', false)
   emit('close')
 }
@@ -183,6 +194,7 @@ const handleClose = () => {
 const handleConfirm = () => {
   // 验证价格
   if (localSettings.enabled && (!localSettings.price || localSettings.price <= 0)) {
+    validationError.value = '请设置有效的价格（必须大于0）'
     return
   }
   
@@ -191,6 +203,7 @@ const handleConfirm = () => {
     localSettings.freePreviewCount = props.mediaCount
   }
   
+  validationError.value = ''
   emit('update:modelValue', { ...localSettings })
   emit('confirm', { ...localSettings })
   handleClose()
@@ -423,6 +436,23 @@ const handleConfirm = () => {
 .payment-note svg {
   flex-shrink: 0;
   margin-top: 2px;
+}
+
+/* Validation Error */
+.validation-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(255, 59, 48, 0.1);
+  border-radius: 8px;
+  color: #ff3b30;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.validation-error svg {
+  flex-shrink: 0;
 }
 
 /* Modal Footer */
