@@ -179,6 +179,21 @@ function protectPostListItem(post, options) {
   }
   
   post.isPaidContent = paid;
+  
+  // 添加paymentSettings到post对象，让前端可以访问
+  if (paymentSetting) {
+    post.paymentSettings = {
+      enabled: paymentSetting.enabled === 1 || paymentSetting.enabled === true,
+      freePreviewCount: paymentSetting.free_preview_count || 0,
+      previewDuration: paymentSetting.preview_duration || 0,
+      price: paymentSetting.price || 0
+    };
+  } else {
+    post.paymentSettings = null;
+  }
+  
+  // 添加购买状态
+  post.hasPurchased = hasPurchased || false;
 }
 
 /**

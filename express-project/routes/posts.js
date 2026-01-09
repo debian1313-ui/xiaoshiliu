@@ -257,7 +257,7 @@ router.get('/', optionalAuth, async (req, res) => {
       
       // 批量获取付费设置
       const [allPaymentSettings] = await pool.execute(
-        `SELECT post_id, enabled, free_preview_count, preview_duration FROM post_payment_settings WHERE post_id IN (${placeholders})`,
+        `SELECT post_id, enabled, price, free_preview_count, preview_duration FROM post_payment_settings WHERE post_id IN (${placeholders})`,
         postIds
       );
       const paymentSettingsByPostId = {};
@@ -528,7 +528,7 @@ router.get('/following', authenticateToken, async (req, res) => {
       
       // 批量获取付费设置
       const [allPaymentSettings] = await pool.execute(
-        `SELECT post_id, enabled, free_preview_count, preview_duration FROM post_payment_settings WHERE post_id IN (${placeholders})`,
+        `SELECT post_id, enabled, price, free_preview_count, preview_duration FROM post_payment_settings WHERE post_id IN (${placeholders})`,
         postIds
       );
       const paymentSettingsByPostId = {};
@@ -1047,7 +1047,7 @@ router.get('/search', optionalAuth, async (req, res) => {
       
       // 批量获取付费设置
       const [allPaymentSettings] = await pool.execute(
-        `SELECT post_id, enabled, free_preview_count, preview_duration FROM post_payment_settings WHERE post_id IN (${placeholders})`,
+        `SELECT post_id, enabled, price, free_preview_count, preview_duration FROM post_payment_settings WHERE post_id IN (${placeholders})`,
         postIds
       );
       const paymentSettingsByPostId = {};
