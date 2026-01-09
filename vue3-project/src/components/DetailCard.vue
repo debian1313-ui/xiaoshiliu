@@ -36,7 +36,7 @@
                 :show-controls="true"
                 :show-play-button="true"
                 :muted="false"
-                :preview-duration="0"
+                :preview-duration="paymentSettings?.previewDuration || 0"
                 :is-paid-content="true"
                 :is-preview-video="!!props.item.preview_video_url"
                 class="video-player"
@@ -186,7 +186,7 @@
                   :show-controls="true"
                   :show-play-button="true"
                   :muted="false"
-                  :preview-duration="0"
+                  :preview-duration="paymentSettings?.previewDuration || 0"
                   :is-paid-content="true"
                   :is-preview-video="!!props.item.preview_video_url"
                   class="mobile-video-player"
@@ -725,6 +725,14 @@ const hasPurchased = computed(() => {
 
 // 是否为付费视频且有预览视频或预览时长设置
 const isPaidVideoWithPreview = computed(() => {
+  // 先打印视频URL状态，帮助调试
+  console.log('🎬 [DetailCard] 视频URL状态:', {
+    type: props.item.type,
+    video_url: props.item.video_url,
+    preview_video_url: props.item.preview_video_url,
+    cover_url: props.item.cover_url
+  })
+  
   // 是付费内容、未购买、且是视频类型
   if (!isPaidContent.value || hasPurchased.value || props.item.type !== 2) {
     console.log('🎬 [DetailCard] isPaidVideoWithPreview: false (非付费/已购买/非视频类型)', {
