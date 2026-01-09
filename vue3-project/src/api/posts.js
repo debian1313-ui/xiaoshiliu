@@ -9,7 +9,9 @@ function transformPostData(backendPost) {
   if (backendPost.paymentSettings) {
     console.log('🔄 [transformPostData] 后端付费设置:', {
       postId: backendPost.id,
-      paymentSettings: backendPost.paymentSettings
+      paymentSettings: backendPost.paymentSettings,
+      preview_video_url: backendPost.preview_video_url,
+      video_url: backendPost.video_url
     })
   }
 
@@ -35,6 +37,7 @@ function transformPostData(backendPost) {
     images: backendPost.images || [],
     // 视频相关字段
     video_url: backendPost.video_url,
+    preview_video_url: backendPost.preview_video_url,
     cover_url: backendPost.cover_url,
     videos: backendPost.videos || [],
     avatar: backendPost.user_avatar || new URL('@/assets/imgs/avatar.png', import.meta.url).href,
