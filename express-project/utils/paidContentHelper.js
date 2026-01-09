@@ -99,6 +99,15 @@ function protectPostListItem(post, options) {
     const previewDuration = paymentSetting?.preview_duration || 0;
     const hasPreviewVideoUrl = videoData && videoData.preview_video_url;
     
+    console.log('🎬 [protectPostListItem] 视频保护逻辑:', {
+      postId: post.id,
+      protect,
+      previewDuration,
+      hasPreviewVideoUrl: !!hasPreviewVideoUrl,
+      video_url_from_videoData: videoData?.video_url,
+      preview_video_url_from_videoData: videoData?.preview_video_url
+    });
+    
     // 保护付费视频逻辑：
     // 1. 如果有 preview_video_url，返回它用于预览播放
     // 2. 如果没有 preview_video_url 但有 previewDuration，返回 video_url 用于前端限时播放
@@ -108,19 +117,23 @@ function protectPostListItem(post, options) {
         // 有预览视频，返回预览视频URL，不返回完整视频URL
         post.video_url = null;
         post.preview_video_url = videoData.preview_video_url;
+        console.log('🎬 [protectPostListItem] 返回preview_video_url');
       } else if (previewDuration > 0) {
         // 有预览时长但没有预览视频，返回完整视频URL让前端限时播放
         post.video_url = videoData ? videoData.video_url : null;
         post.preview_video_url = null;
+        console.log('🎬 [protectPostListItem] 有预览时长，返回video_url:', post.video_url);
       } else {
         // 没有预览设置，完全保护视频
         post.video_url = null;
         post.preview_video_url = null;
+        console.log('🎬 [protectPostListItem] 完全隐藏视频URL');
       }
     } else {
       // 不需要保护，返回完整视频
       post.video_url = videoData ? videoData.video_url : null;
       post.preview_video_url = null;
+      console.log('🎬 [protectPostListItem] 不需要保护，返回完整视频');
     }
     
     post.image = videoData && videoData.cover_url ? videoData.cover_url : null;
@@ -214,6 +227,15 @@ function protectPostDetail(post, options = {}) {
     const previewDuration = options.previewDuration || 0;
     const hasPreviewVideoUrl = post.preview_video_url;
     
+    console.log('🎬 [protectPostDetail] 视频保护逻辑:', {
+      postId: post.id,
+      type: post.type,
+      previewDuration,
+      hasPreviewVideoUrl: !!hasPreviewVideoUrl,
+      video_url_before: post.video_url,
+      preview_video_url: post.preview_video_url
+    });
+    
     if (hasPreviewVideoUrl) {
       // 有预览视频，返回预览视频URL，不返回完整视频URL
       post.video_url = null;
@@ -225,16 +247,19 @@ function protectPostDetail(post, options = {}) {
           preview_video_url: v.preview_video_url 
         }));
       }
+      console.log('🎬 [protectPostDetail] 返回预览视频URL');
     } else if (previewDuration > 0) {
       // 有预览时长但没有预览视频，返回完整视频URL让前端限时播放
       // video_url 保持不变
       // videos 保持不变
+      console.log('🎬 [protectPostDetail] 有预览时长，保留video_url:', post.video_url);
     } else {
       // 没有预览设置，完全保护视频
       post.video_url = null;
       if (post.videos) {
         post.videos = post.videos.map(v => ({ cover_url: v.cover_url, video_url: null }));
       }
+      console.log('🎬 [protectPostDetail] 完全隐藏视频URL');
     }
   }
   
