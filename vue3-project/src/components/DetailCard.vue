@@ -58,8 +58,8 @@
                 @loaded="handleVideoLoad"
               />
             </template>
-            <!-- 付费视频且无video_url也无preview_video_url且无previewDuration：显示解锁遮罩 -->
-            <div v-else-if="isPaidContent && !hasPurchased && !isPaidVideoWithPreview" class="video-payment-overlay">
+            <!-- 付费视频且无video_url也无preview_video_url：显示解锁遮罩 -->
+            <div v-else-if="isPaidContent && !hasPurchased" class="video-payment-overlay">
               <div class="video-cover-blur" v-if="props.item.cover_url || (props.item.images && props.item.images[0])">
                 <img :src="props.item.cover_url || (props.item.images && props.item.images[0])" alt="视频封面" class="blur-cover-image" />
               </div>
@@ -208,8 +208,8 @@
                   @loaded="handleVideoLoad"
                 />
               </template>
-              <!-- 付费视频且无video_url也无preview_video_url且无previewDuration：显示解锁遮罩 -->
-              <div v-else-if="isPaidContent && !hasPurchased && !isPaidVideoWithPreview" class="video-payment-overlay">
+              <!-- 付费视频且无video_url也无preview_video_url：显示解锁遮罩 -->
+              <div v-else-if="isPaidContent && !hasPurchased" class="video-payment-overlay">
                 <div class="video-cover-blur" v-if="props.item.cover_url || (props.item.images && props.item.images[0])">
                   <img :src="props.item.cover_url || (props.item.images && props.item.images[0])" alt="视频封面" class="blur-cover-image" />
                 </div>
