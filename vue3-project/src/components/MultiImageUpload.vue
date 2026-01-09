@@ -126,6 +126,24 @@ const error = ref('')
 const isDragOver = ref(false)
 const isUploading = ref(false)
 
+// 调试：监听paymentEnabled变化
+watch(() => props.paymentEnabled, (newValue) => {
+  console.log('🔧 [MultiImageUpload] paymentEnabled 变化:', newValue)
+  console.log('🔧 [MultiImageUpload] 当前图片列表:', imageList.value.map(img => ({ 
+    id: img.id, 
+    isFreePreview: img.isFreePreview,
+    preview: img.preview?.substring(0, 50) + '...'
+  })))
+}, { immediate: true })
+
+// 调试：监听imageList变化
+watch(imageList, (newValue) => {
+  console.log('🔧 [MultiImageUpload] imageList 变化:', newValue.length, '张图片')
+  newValue.forEach((img, index) => {
+    console.log(`🔧 [MultiImageUpload] 图片${index + 1}: isFreePreview=${img.isFreePreview}`)
+  })
+}, { deep: true })
+
 // 水印选项（默认关闭，用户勾选后才添加水印）
 const enableWatermark = ref(false)
 // 水印透明度（默认50%）
@@ -193,8 +211,12 @@ const initializeImageList = (images) => {
 
 // 切换图片的免费预览状态
 const toggleFreePreview = (index) => {
+  console.log('🔧 [MultiImageUpload] toggleFreePreview 被调用, index:', index)
+  console.log('🔧 [MultiImageUpload] paymentEnabled:', props.paymentEnabled)
   if (imageList.value[index]) {
+    const oldValue = imageList.value[index].isFreePreview
     imageList.value[index].isFreePreview = !imageList.value[index].isFreePreview
+    console.log(`🔧 [MultiImageUpload] 图片${index + 1} isFreePreview: ${oldValue} -> ${imageList.value[index].isFreePreview}`)
     updateModelValue()
     showMessage(imageList.value[index].isFreePreview ? '已设为免费预览' : '已设为付费内容', 'success')
   }
@@ -529,12 +551,15 @@ const uploadAllImages = async () => {
   // 找出需要上传的图片（有file但还没上传的）
   const unuploadedImages = imageList.value.filter(item => !item.uploaded && item.file)
 
-  // 如果没有需要上传的新图片，收集所有已有的URL并返回
+  // 如果没有需要上传的新图片，收集所有已有的图片数据并返回
   if (unuploadedImages.length === 0) {
-    const existingUrls = imageList.value
+    const existingImages = imageList.value
       .filter(item => item.uploaded && item.url && !item.url.startsWith('data:'))
-      .map(item => item.url)
-    return existingUrls
+      .map(item => ({
+        url: item.url,
+        isFreePreview: item.isFreePreview !== undefined ? item.isFreePreview : true
+      }))
+    return existingImages
   }
 
   isUploading.value = true
@@ -565,11 +590,14 @@ const uploadAllImages = async () => {
         }
       }
 
-      // 收集所有图片URL（按照imageList的顺序）
-      const allUrls = imageList.value
+      // 收集所有图片数据（包含url和isFreePreview属性）
+      const allImages = imageList.value
         .filter(item => item.uploaded && item.url && !item.url.startsWith('data:'))
-        .map(item => item.url)
-      return allUrls
+        .map(item => ({
+          url: item.url,
+          isFreePreview: item.isFreePreview !== undefined ? item.isFreePreview : true
+        }))
+      return allImages
     } else {
       const errorMsg = result.message || '上传失败，没有成功上传的图片'
       console.error('上传失败:', errorMsg, result)
@@ -598,12 +626,12 @@ const reset = () => {
   }
 }
 
-// 根据URL列表同步更新图片列表
-const syncWithUrls = (urls) => {
+// 根据URL列表或图片对象列表同步更新图片列表
+const syncWithUrls = (images) => {
   // 设置标志，防止触发外部更新
   isInternalUpdate = true
 
-  if (!Array.isArray(urls)) {
+  if (!Array.isArray(images)) {
     imageList.value = []
     nextTick(() => {
       isInternalUpdate = false
@@ -611,8 +639,8 @@ const syncWithUrls = (urls) => {
     return
   }
 
-  // 如果URL数组为空，清空图片列表
-  if (urls.length === 0) {
+  // 如果数组为空，清空图片列表
+  if (images.length === 0) {
     imageList.value = []
     nextTick(() => {
       isInternalUpdate = false
@@ -620,24 +648,36 @@ const syncWithUrls = (urls) => {
     return
   }
 
-  // 去重处理，确保URL数组中没有重复项
-  const uniqueUrls = [...new Set(urls.filter(url => url && url.trim()))]
-
-  // 重新构建图片列表，确保与URL数组完全一致
+  // 重新构建图片列表
   const newImageList = []
 
-  for (let i = 0; i < uniqueUrls.length; i++) {
-    const url = uniqueUrls[i]
+  for (let i = 0; i < images.length; i++) {
+    const image = images[i]
+    let url = null
+    // 业务规则：新图片默认第一张为免费预览，其余为付费内容
+    // 用户可以通过点击图片的付费/免费标签来切换状态
+    let isFreePreview = i === 0
+    
+    // 处理字符串URL格式
+    if (typeof image === 'string') {
+      url = image
+    } else if (image && typeof image === 'object') {
+      // 处理对象格式（包含url和isFreePreview属性）
+      url = image.url || image.preview || image
+      // 如果对象中已有isFreePreview属性，使用该值；否则使用默认规则
+      isFreePreview = image.isFreePreview !== undefined ? image.isFreePreview : (i === 0)
+    }
 
     // 只处理有效的URL，不处理任何占位符
-    if (url && !url.startsWith('[待上传:')) {
+    if (url && typeof url === 'string' && url.trim() && !url.startsWith('[待上传:')) {
       // 有效的URL，先检查是否已存在相同URL的图片项
       const existingImageWithSameUrl = imageList.value.find(item =>
         item.uploaded && item.url === url
       )
 
       if (existingImageWithSameUrl) {
-        // 如果已存在相同URL的图片项，直接使用它
+        // 如果已存在相同URL的图片项，更新isFreePreview并复用它
+        existingImageWithSameUrl.isFreePreview = isFreePreview
         newImageList.push(existingImageWithSameUrl)
       } else {
         // 如果不存在，创建新的已上传图片项
@@ -646,7 +686,8 @@ const syncWithUrls = (urls) => {
           file: null,
           preview: url,
           uploaded: true,
-          url: url
+          url: url,
+          isFreePreview: isFreePreview
         })
       }
     }
@@ -851,8 +892,8 @@ defineExpose({
 /* 付费/免费预览标识样式 */
 .payment-badge {
   position: absolute;
-  bottom: 8px;
-  left: 8px;
+  top: 8px;
+  right: 8px;
   background: rgba(255, 71, 87, 0.9);
   color: white;
   border-radius: 12px;

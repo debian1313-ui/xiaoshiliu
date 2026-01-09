@@ -20,9 +20,16 @@ function transformPostData(backendPost) {
   const collectCount = backendPost.collect_count || 0
   const commentCount = backendPost.comment_count || 0
 
+  // 处理图片数据：提取封面图片URL（兼容字符串和对象格式）
+  let coverImage = new URL('@/assets/imgs/未加载.png', import.meta.url).href
+  if (backendPost.images && backendPost.images.length > 0) {
+    const firstImage = backendPost.images[0]
+    coverImage = typeof firstImage === 'object' ? firstImage.url : firstImage
+  }
+
   const transformedData = {
     id: backendPost.id,
-    image: (backendPost.images && backendPost.images[0]) || new URL('@/assets/imgs/未加载.png', import.meta.url).href,
+    image: coverImage,
     title: backendPost.title,
     content: backendPost.content,
     images: backendPost.images || [],
@@ -61,6 +68,9 @@ function transformPostData(backendPost) {
     author_auto_id: backendPost.author_auto_id,
     author_account: backendPost.author_account,
     user_id: backendPost.user_id,
+    // 付费图片相关信息（后端过滤后返回的隐藏付费图片数量）
+    hiddenPaidImagesCount: backendPost.hiddenPaidImagesCount || 0,
+    totalImagesCount: backendPost.totalImagesCount || (backendPost.images ? backendPost.images.length : 0),
     // 保留原始数据以备需要
     originalData: {
       content: backendPost.content,
@@ -68,7 +78,9 @@ function transformPostData(backendPost) {
       tags: backendPost.tags || [],
       createdAt: backendPost.created_at,
       userId: backendPost.user_id,
-      paymentSettings: backendPost.paymentSettings || null
+      paymentSettings: backendPost.paymentSettings || null,
+      hiddenPaidImagesCount: backendPost.hiddenPaidImagesCount || 0,
+      totalImagesCount: backendPost.totalImagesCount || (backendPost.images ? backendPost.images.length : 0)
     }
   }
 

@@ -194,8 +194,10 @@ CREATE TABLE `post_images`  (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '图片ID',
   `post_id` bigint NOT NULL COMMENT '笔记ID',
   `image_url` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '图片URL',
+  `is_free_preview` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否免费预览：1-免费预览，0-付费内容',
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_post_id`(`post_id` ASC) USING BTREE,
+  INDEX `idx_is_free_preview`(`is_free_preview` ASC) USING BTREE,
   CONSTRAINT `post_images_ibfk_1` FOREIGN KEY (`post_id`) REFERENCES `posts` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
 ) ENGINE = InnoDB AUTO_INCREMENT = 588 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '笔记图片表' ROW_FORMAT = Dynamic;
 
