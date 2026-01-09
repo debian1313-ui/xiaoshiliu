@@ -18,7 +18,23 @@
           @touchend="handleTouchEnd">
           <div class="image-slider" :style="{ transform: `translateX(-${currentIndex * 100}%)` }">
             <div v-for="(image, index) in images" :key="index" class="image-slide">
-              <img :src="getImageSrc(image)" :alt="getImageAlt(image, index)" class="viewer-image"
+              <!-- 解锁占位图 -->
+              <div v-if="isUnlockPlaceholder(image)" class="viewer-unlock-slide" @click.stop>
+                <div class="unlock-slide-content">
+                  <div class="unlock-icon">🔒</div>
+                  <div class="unlock-text">还有 {{ hiddenImageCount }} 张付费图片</div>
+                  <div class="unlock-price">
+                    <span class="price-icon">🍒</span>
+                    <span class="price-value">{{ paymentSettings?.price || 0 }}</span>
+                    <span class="price-unit">石榴点</span>
+                  </div>
+                  <button class="unlock-btn" @click.stop="emit('unlock')" :disabled="isUnlocking">
+                    {{ isUnlocking ? '解锁中...' : '立即解锁查看全部' }}
+                  </button>
+                </div>
+              </div>
+              <!-- 正常图片 -->
+              <img v-else :src="getImageSrc(image)" :alt="getImageAlt(image, index)" class="viewer-image"
                 @load="preloadAdjacentImages(index)" @error="handleImageError(index)" />
             </div>
           </div>
@@ -77,10 +93,30 @@ const props = defineProps({
   closeOnOverlay: {
     type: Boolean,
     default: true
+  },
+  // 隐藏的付费图片数量（用于解锁占位图显示）
+  hiddenImageCount: {
+    type: Number,
+    default: 0
+  },
+  // 付费设置（用于解锁占位图显示价格）
+  paymentSettings: {
+    type: Object,
+    default: null
+  },
+  // 是否正在解锁中
+  isUnlocking: {
+    type: Boolean,
+    default: false
   }
 })
 
-const emit = defineEmits(['close', 'change'])
+// 检查是否为解锁占位图
+const isUnlockPlaceholder = (image) => {
+  return image === '__UNLOCK_PLACEHOLDER__'
+}
+
+const emit = defineEmits(['close', 'change', 'unlock'])
 
 const { lock, unlock } = useScrollLock()
 const currentIndex = ref(0)
@@ -494,5 +530,80 @@ onUnmounted(() => {
   .next-btn {
     right: 10px;
   }
+}
+
+/* 解锁占位图样式 */
+.viewer-unlock-slide {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.viewer-unlock-slide .unlock-slide-content {
+  text-align: center;
+  color: white;
+  padding: 20px;
+  max-width: 90%;
+}
+
+.viewer-unlock-slide .unlock-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+
+.viewer-unlock-slide .unlock-text {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.viewer-unlock-slide .unlock-price {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 18px;
+  margin-bottom: 24px;
+}
+
+.viewer-unlock-slide .unlock-price .price-icon {
+  font-size: 24px;
+}
+
+.viewer-unlock-slide .unlock-price .price-value {
+  font-weight: 700;
+  font-size: 28px;
+}
+
+.viewer-unlock-slide .unlock-price .price-unit {
+  font-size: 16px;
+  opacity: 0.9;
+}
+
+.viewer-unlock-slide .unlock-btn {
+  background: white;
+  color: #764ba2;
+  border: none;
+  padding: 14px 36px;
+  border-radius: 25px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.viewer-unlock-slide .unlock-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.viewer-unlock-slide .unlock-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
 }
 </style>

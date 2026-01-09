@@ -489,8 +489,9 @@
       @confirm="handleImageUploadConfirm" @update:model-value="handleImageUploadChange" />
 
     <!-- 帖子图片查看器 -->
-    <ImageViewer :visible="showImageViewer" :images="displayImageList" :initial-index="currentImageIndex" image-type="post"
-      @close="closeImageViewer" @change="handleImageIndexChange" />
+    <ImageViewer :visible="showImageViewer" :images="displayImageListWithUnlock" :initial-index="currentImageIndex" image-type="post"
+      :hidden-image-count="hiddenImageCount" :payment-settings="paymentSettings" :is-unlocking="isUnlocking"
+      @close="closeImageViewer" @change="handleImageIndexChange" @unlock="handleUnlockContent" />
 
     <!-- 评论图片查看器 -->
     <ImageViewer :visible="showCommentImageViewer" :images="commentImages" :initial-index="currentCommentImageIndex"
@@ -5094,6 +5095,47 @@ function handleAvatarError(event) {
 }
 
 .mobile-unlock-slide {
-  min-height: 300px;
+  min-height: 200px;
+  max-height: 100%;
+}
+
+/* 移动端横屏模式下解锁占位图样式 */
+@media (max-width: 768px) and (orientation: landscape) {
+  .mobile-unlock-slide {
+    min-height: 150px;
+  }
+  
+  .mobile-unlock-slide .unlock-slide-content {
+    padding: 12px;
+  }
+  
+  .mobile-unlock-slide .unlock-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+  }
+  
+  .mobile-unlock-slide .unlock-text {
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+  
+  .mobile-unlock-slide .unlock-price {
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+  
+  .mobile-unlock-slide .unlock-price .price-icon {
+    font-size: 14px;
+  }
+  
+  .mobile-unlock-slide .unlock-price .price-value {
+    font-size: 18px;
+  }
+  
+  .mobile-unlock-slide .unlock-btn {
+    padding: 8px 20px;
+    font-size: 12px;
+    border-radius: 18px;
+  }
 }
 </style>
