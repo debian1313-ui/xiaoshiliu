@@ -998,9 +998,11 @@ const setupVideoListeners = () => {
     isPlaying.value = false
     // 如果是预览视频，播放完毕后显示解锁覆盖层
     if (props.isPreviewVideo && props.isPaidContent) {
+      console.log('🎬 [ShakaVideoPlayer] 预览视频播放完毕，显示解锁覆盖层')
       showPreviewEndedOverlay.value = true
       emit('preview-ended')
     } else {
+      console.log('🎬 [ShakaVideoPlayer] 视频播放完毕')
       emit('ended')
     }
   })
@@ -1017,6 +1019,7 @@ const setupVideoListeners = () => {
     if (props.previewDuration > 0 && props.isPaidContent && !showPreviewEndedOverlay.value) {
       if (currentTime.value >= props.previewDuration) {
         // 预览时间到，暂停视频并显示解锁覆盖层
+        console.log('🎬 [ShakaVideoPlayer] 预览时长到达限制:', props.previewDuration, '秒，显示解锁覆盖层')
         videoElement.value.pause()
         showPreviewEndedOverlay.value = true
         emit('preview-ended')
@@ -1133,6 +1136,12 @@ watch(() => props.src, (newSrc) => {
 
 // 组件挂载
 onMounted(() => {
+  console.log('🎬 [ShakaVideoPlayer] 组件挂载', {
+    src: props.src,
+    isPaidContent: props.isPaidContent,
+    isPreviewVideo: props.isPreviewVideo,
+    previewDuration: props.previewDuration
+  })
   setupVideoListeners()
   if (props.src) {
     initPlayer()

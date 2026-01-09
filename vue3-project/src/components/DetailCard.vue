@@ -727,12 +727,23 @@ const hasPurchased = computed(() => {
 const isPaidVideoWithPreview = computed(() => {
   // 是付费内容、未购买、且是视频类型
   if (!isPaidContent.value || hasPurchased.value || props.item.type !== 2) {
+    console.log('🎬 [DetailCard] isPaidVideoWithPreview: false (非付费/已购买/非视频类型)', {
+      isPaidContent: isPaidContent.value,
+      hasPurchased: hasPurchased.value,
+      type: props.item.type
+    })
     return false
   }
   // 检查是否有预览视频URL或预览时长设置
   const hasPreviewVideo = !!props.item.preview_video_url
   const previewDuration = paymentSettings.value?.previewDuration || 0
-  return hasPreviewVideo || previewDuration > 0
+  const result = hasPreviewVideo || previewDuration > 0
+  console.log('🎬 [DetailCard] isPaidVideoWithPreview:', result, {
+    hasPreviewVideo,
+    previewDuration,
+    preview_video_url: props.item.preview_video_url
+  })
+  return result
 })
 
 // 是否需要显示付费遮挡
