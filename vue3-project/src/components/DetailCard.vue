@@ -2341,7 +2341,8 @@ const prevImage = () => {
 }
 
 const nextImage = () => {
-  if (currentImageIndex.value < imageList.value.length - 1) {
+  // 使用 displayImageListWithUnlock 而不是 imageList，这样可以滑动到解锁占位图
+  if (currentImageIndex.value < displayImageListWithUnlock.value.length - 1) {
     currentImageIndex.value++
   }
 }
@@ -2988,7 +2989,8 @@ const handleTouchEnd = (e) => {
 
 
 const goToImage = (index) => {
-  if (index >= 0 && index < imageList.value.length) {
+  // 使用 displayImageListWithUnlock 而不是 imageList，这样可以点击到解锁占位图
+  if (index >= 0 && index < displayImageListWithUnlock.value.length) {
     currentImageIndex.value = index
   }
 }
