@@ -870,8 +870,8 @@ defineExpose({
 /* 付费/免费预览标识样式 */
 .payment-badge {
   position: absolute;
-  bottom: 8px;
-  left: 8px;
+  top: 8px;
+  right: 8px;
   background: rgba(255, 71, 87, 0.9);
   color: white;
   border-radius: 12px;
