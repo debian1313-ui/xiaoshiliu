@@ -900,18 +900,8 @@ const loadDraftData = async (draftId) => {
       await nextTick()
       // 初始化图片组件
       if (uploadType.value === 'image' && form.images.length > 0 && multiImageUploadRef.value) {
-        // 将图片数据转换为URL字符串数组
-        const imageUrls = form.images.map(img => {
-          if (typeof img === 'string') {
-            return img
-          } else if (img && img.url) {
-            return img.url
-          } else if (img && img.preview) {
-            return img.preview
-          }
-          return null
-        }).filter(url => url)
-        multiImageUploadRef.value.syncWithUrls(imageUrls)
+        // 传递完整的图片数据（包含isFreePreview属性）
+        multiImageUploadRef.value.syncWithUrls(form.images)
       }
 
       // 初始化视频组件

@@ -57,6 +57,25 @@ function safeUnicodeTruncate(text, maxLength) {
 }
 
 /**
+ * 对图片进行排序，免费图片优先
+ * @param {Array} images - 图片数组
+ * @returns {Array} 排序后的图片数组
+ */
+function sortImagesByFreeFirst(images) {
+  if (!Array.isArray(images) || images.length === 0) {
+    return images;
+  }
+  
+  return [...images].sort((a, b) => {
+    const aIsFree = typeof a === 'object' && a.isFreePreview === true;
+    const bIsFree = typeof b === 'object' && b.isFreePreview === true;
+    if (aIsFree && !bIsFree) return -1;
+    if (!aIsFree && bIsFree) return 1;
+    return 0;
+  });
+}
+
+/**
  * 保护帖子列表项中的付费内容
  * @param {Object} post - 帖子对象
  * @param {Object} options - 选项
@@ -71,7 +90,6 @@ function protectPostListItem(post, options) {
   
   const paid = isPaidContent(paymentSetting);
   const protect = shouldProtectContent(paymentSetting, isAuthor, hasPurchased);
-  const freeCount = getFreePreviewCount(paymentSetting);
   
   if (post.type === 2) {
     // 视频笔记
@@ -82,18 +100,41 @@ function protectPostListItem(post, options) {
   } else {
     // 图文笔记
     let images = imageUrls || [];
-    let coverImage = images.length > 0 ? images[0] : null;
     
-    // 保护付费图片：限制为免费预览数量
-    // 但始终至少显示1张图片作为封面（用户体验更好）
+    // 对图片进行排序：免费图片优先显示
+    images = sortImagesByFreeFirst(images);
+    
+    // 获取第一张图片作为封面（排序后免费图片优先）
+    let coverImage = null;
+    if (images.length > 0) {
+      const firstImg = images[0];
+      coverImage = typeof firstImg === 'object' ? firstImg.url : firstImg;
+    }
+    
+    // 保护付费图片
     if (protect) {
-      const minPreview = Math.max(1, freeCount);
-      if (images.length > minPreview) {
-        images = images.slice(0, minPreview);
+      // 优先使用isFreePreview属性过滤，如果图片是对象格式
+      const hasIsFreePreviewProp = images.some(img => typeof img === 'object' && img.isFreePreview !== undefined);
+      
+      if (hasIsFreePreviewProp) {
+        // 使用isFreePreview属性过滤，只保留标记为免费的图片
+        images = images.filter(img => typeof img === 'object' && img.isFreePreview === true);
+        // 如果所有图片都是付费的，返回空数组
+        // 前端会根据paymentOverlay显示模糊封面图作为预览
+        if (images.length === 0) {
+          images = [];
+        }
+      } else {
+        // 旧格式：使用freePreviewCount
+        const freeCount = getFreePreviewCount(paymentSetting);
+        const minPreview = Math.max(1, freeCount);
+        if (images.length > minPreview) {
+          images = images.slice(0, minPreview);
+        }
       }
     }
     post.images = images;
-    // 封面图始终显示第一张（即使是付费内容也显示封面）
+    // 封面图始终显示第一张（排序后的免费图片优先）
     post.image = coverImage;
   }
   
@@ -104,14 +145,40 @@ function protectPostListItem(post, options) {
  * 保护帖子详情中的付费内容
  * @param {Object} post - 帖子对象
  * @param {Object} options - 选项
- * @param {number} options.freePreviewCount - 免费预览数量
+ * @param {number} options.freePreviewCount - 免费预览数量（旧格式兼容）
  */
 function protectPostDetail(post, options = {}) {
-  const freePreviewCount = options.freePreviewCount || 0;
-  
-  // 限制图片数量为免费预览数量
-  if (post.images && post.images.length > freePreviewCount) {
-    post.images = post.images.slice(0, freePreviewCount);
+  // 处理图片：优先使用isFreePreview属性，否则使用freePreviewCount
+  if (post.images && post.images.length > 0) {
+    // 首先对图片进行排序：免费图片优先显示
+    post.images = sortImagesByFreeFirst(post.images);
+    
+    const hasIsFreePreviewProp = post.images.some(img => typeof img === 'object' && img.isFreePreview !== undefined);
+    
+    if (hasIsFreePreviewProp) {
+      // 计算付费图片数量（需要在过滤前计算）
+      const paidImagesCount = post.images.filter(img => typeof img === 'object' && img.isFreePreview === false).length;
+      const totalImagesCount = post.images.length;
+      
+      // 保存总图片数和付费图片数，供前端显示解锁提示
+      post.totalImagesCount = totalImagesCount;
+      post.hiddenPaidImagesCount = paidImagesCount;
+      
+      console.log(`🔧 [paidContentHelper] protectPostDetail - 总图片: ${totalImagesCount}, 付费图片: ${paidImagesCount}`);
+      
+      // 使用isFreePreview属性过滤，只保留标记为免费的图片
+      post.images = post.images.filter(img => typeof img === 'object' && img.isFreePreview === true);
+    } else {
+      // 旧格式：限制图片数量为免费预览数量
+      const freePreviewCount = options.freePreviewCount || 0;
+      const totalImagesCount = post.images.length;
+      post.totalImagesCount = totalImagesCount;
+      post.hiddenPaidImagesCount = Math.max(0, totalImagesCount - freePreviewCount);
+      
+      if (post.images.length > freePreviewCount) {
+        post.images = post.images.slice(0, freePreviewCount);
+      }
+    }
   }
   
   // 隐藏视频URL（只保留封面图用于预览）
