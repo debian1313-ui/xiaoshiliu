@@ -553,19 +553,24 @@ router.post('/register', async (req, res) => {
     }
 
     // 审核昵称（如果启用了内容审核）
-    let nicknameAuditResult = null;
     if (isAuditEnabled()) {
-      nicknameAuditResult = await auditNickname(nickname, user_id);
-      
-      if (!nicknameAuditResult.passed) {
-        // 昵称审核不通过，拒绝注册
-        return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
-          code: RESPONSE_CODES.VALIDATION_ERROR, 
-          message: '昵称包含敏感内容，请修改后重试',
-          data: {
-            reason: nicknameAuditResult.reason || '昵称不符合社区规范'
-          }
-        });
+      try {
+        const nicknameAuditResult = await auditNickname(nickname, user_id);
+        
+        // 确保审核结果存在并且不通过
+        if (nicknameAuditResult && nicknameAuditResult.passed === false) {
+          // 昵称审核不通过，拒绝注册
+          return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
+            code: RESPONSE_CODES.VALIDATION_ERROR, 
+            message: '昵称包含敏感内容，请修改后重试',
+            data: {
+              reason: nicknameAuditResult.reason || '昵称不符合社区规范'
+            }
+          });
+        }
+      } catch (auditError) {
+        console.error('昵称审核异常:', auditError);
+        // 审核异常时不阻塞注册，继续流程
       }
     }
 

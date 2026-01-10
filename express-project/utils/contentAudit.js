@@ -4,7 +4,26 @@
  * @description 使用Dify API对评论、用户名称等内容进行审核
  */
 
-const { contentAudit: auditConfig } = require('../config/config');
+const config = require('../config/config');
+const auditConfig = config.contentAudit || { enabled: false, apiUrl: '', apiKey: '' };
+
+/**
+ * 默认的审核通过结果
+ * @returns {Object} 默认通过结果
+ */
+function getDefaultPassResult(reason = '审核通过') {
+  return {
+    passed: true,
+    risk_level: 'low',
+    score: 0,
+    main_category: '',
+    categories: [],
+    matched_keywords: [],
+    problem_sentences: [],
+    suggestion: 'pass',
+    reason
+  };
+}
 
 /**
  * 审核结果类型
@@ -28,18 +47,8 @@ const { contentAudit: auditConfig } = require('../config/config');
  */
 async function auditContent(content, userId = 'system') {
   // 如果未启用内容审核或未配置API密钥，直接返回通过
-  if (!auditConfig.enabled || !auditConfig.apiKey) {
-    return {
-      passed: true,
-      risk_level: 'low',
-      score: 0,
-      main_category: '',
-      categories: [],
-      matched_keywords: [],
-      problem_sentences: [],
-      suggestion: 'pass',
-      reason: '内容审核未启用'
-    };
+  if (!auditConfig || !auditConfig.enabled || !auditConfig.apiKey) {
+    return getDefaultPassResult('内容审核未启用');
   }
 
   try {
@@ -62,17 +71,7 @@ async function auditContent(content, userId = 'system') {
     if (!response.ok) {
       console.error('Dify API请求失败:', response.status, response.statusText);
       // API调用失败时，默认通过以避免阻塞正常功能
-      return {
-        passed: true,
-        risk_level: 'low',
-        score: 0,
-        main_category: '',
-        categories: [],
-        matched_keywords: [],
-        problem_sentences: [],
-        suggestion: 'pass',
-        reason: 'API请求失败，默认通过'
-      };
+      return getDefaultPassResult('API请求失败，默认通过');
     }
 
     const data = await response.json();
@@ -91,17 +90,7 @@ async function auditContent(content, userId = 'system') {
     } catch (parseError) {
       console.error('解析Dify返回结果失败:', parseError);
       // 解析失败时，默认通过
-      return {
-        passed: true,
-        risk_level: 'low',
-        score: 0,
-        main_category: '',
-        categories: [],
-        matched_keywords: [],
-        problem_sentences: [],
-        suggestion: 'pass',
-        reason: '返回结果解析失败，默认通过'
-      };
+      return getDefaultPassResult('返回结果解析失败，默认通过');
     }
 
     // 返回标准化的审核结果
@@ -119,17 +108,7 @@ async function auditContent(content, userId = 'system') {
   } catch (error) {
     console.error('内容审核服务异常:', error);
     // 异常情况下默认通过
-    return {
-      passed: true,
-      risk_level: 'low',
-      score: 0,
-      main_category: '',
-      categories: [],
-      matched_keywords: [],
-      problem_sentences: [],
-      suggestion: 'pass',
-      reason: '审核服务异常，默认通过'
-    };
+    return getDefaultPassResult('审核服务异常，默认通过');
   }
 }
 

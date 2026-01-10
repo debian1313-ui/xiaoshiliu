@@ -169,31 +169,35 @@ router.post('/', authenticateToken, async (req, res) => {
     let auditResult = null;
 
     if (isAuditEnabled()) {
-      // 调用审核API
-      auditResult = await auditComment(sanitizedContent, userId);
-      
-      if (auditResult.passed) {
-        // 审核通过
-        auditStatus = 1;
-        isPublic = 1;
-      } else {
-        // 审核不通过，待人工审核
-        auditStatus = 0;
-        isPublic = 0; // 仅自己可见
+      try {
+        // 调用审核API
+        auditResult = await auditComment(sanitizedContent, userId);
         
-        // 记录审核事件到audit表
-        await pool.execute(
-          `INSERT INTO audit (user_id, type, target_id, content, audit_result, risk_level, categories, reason, status) 
-           VALUES (?, 3, NULL, ?, ?, ?, ?, ?, 0)`,
-          [
-            userId.toString(),
-            sanitizedContent,
-            JSON.stringify(auditResult),
-            auditResult.risk_level || 'medium',
-            JSON.stringify(auditResult.categories || []),
-            auditResult.reason || ''
-          ]
-        );
+        // 确保审核结果存在
+        if (auditResult && auditResult.passed === false) {
+          // 审核不通过，待人工审核
+          auditStatus = 0;
+          isPublic = 0; // 仅自己可见
+          
+          // 记录审核事件到audit表
+          await pool.execute(
+            `INSERT INTO audit (user_id, type, target_id, content, audit_result, risk_level, categories, reason, status) 
+             VALUES (?, 3, NULL, ?, ?, ?, ?, ?, 0)`,
+            [
+              userId.toString(),
+              sanitizedContent,
+              JSON.stringify(auditResult),
+              auditResult.risk_level || 'medium',
+              JSON.stringify(auditResult.categories || []),
+              auditResult.reason || ''
+            ]
+          );
+        }
+        // 如果审核通过或审核结果为null，保持默认值
+      } catch (auditError) {
+        console.error('评论审核异常:', auditError);
+        // 审核异常时默认通过，不阻塞用户发表评论
+        auditResult = null;
       }
     }
 
