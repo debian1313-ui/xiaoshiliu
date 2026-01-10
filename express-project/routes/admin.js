@@ -1781,14 +1781,14 @@ const auditCrudConfig = {
   allowedSortFields: ['id', 'created_at', 'audit_time', 'status'],
   defaultOrderBy: 'created_at DESC',
 
-  // 自定义查询，关联用户信息
+  // 自定义查询，关联用户信息，只查询认证类型(1=官方认证, 2=个人认证)
   customQueries: {
     getList: async (req) => {
       const { page = 1, limit = 10, sortBy = 'created_at', sortOrder = 'DESC', ...filters } = req.query
       const offset = (page - 1) * limit
 
-      // 构建查询条件
-      let whereClause = 'WHERE 1=1'
+      // 构建查询条件 - 只查询认证类型 (1=官方认证, 2=个人认证)
+      let whereClause = 'WHERE a.type IN (1, 2)'
       const queryParams = []
       let paramIndex = 1
 
@@ -1887,7 +1887,7 @@ const auditCrudConfig = {
           u.avatar
         FROM audit a
         LEFT JOIN users u ON a.user_id = u.id
-        WHERE a.id = ?
+        WHERE a.id = ? AND a.type IN (1, 2)
       `
 
       const result = await pool.query(query, [id])
