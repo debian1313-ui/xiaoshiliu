@@ -128,6 +128,9 @@
             </button>
           </div>
 
+          <!-- 可见性设置 -->
+          <VisibilitySelector v-model="form.visibility" />
+
           <div v-if="showEmojiPanel" class="emoji-panel-overlay" v-click-outside="closeEmojiPanel">
             <div class="emoji-panel" @click.stop>
               <EmojiPicker @select="handleEmojiSelect" />
@@ -210,6 +213,7 @@ import ContentEditableInput from '@/components/ContentEditableInput.vue'
 import TextImageModal from '@/views/publish/components/TextImageModal.vue'
 import AttachmentUploadModal from '@/components/AttachmentUploadModal.vue'
 import PaymentSettingsModal from '@/components/PaymentSettingsModal.vue'
+import VisibilitySelector from '@/components/VisibilitySelector.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -246,6 +250,7 @@ const form = reactive({
   tags: [],
   category_id: null,
   attachment: null,
+  visibility: 'public',
   paymentSettings: {
     enabled: false,
     paymentType: 'single',
@@ -751,6 +756,7 @@ const handlePublish = async () => {
       type: uploadType.value === 'image' ? 1 : 2, // 1: 图文, 2: 视频
       is_draft: false, // 发布状态
       attachment: form.attachment || null,
+      visibility: form.visibility || 'public',
       paymentSettings: form.paymentSettings.enabled ? form.paymentSettings : null
     }
 
@@ -802,6 +808,7 @@ const resetForm = () => {
   form.tags = []
   form.category_id = null
   form.attachment = null
+  form.visibility = 'public'
   form.paymentSettings = {
     enabled: false,
     paymentType: 'single',
@@ -866,6 +873,9 @@ const loadDraftData = async (draftId) => {
           hideAll: false
         }
       }
+
+      // 设置可见性数据
+      form.visibility = fullData.visibility || 'public'
 
       // 处理标签数据：确保转换为字符串数组
       if (draft.tags && Array.isArray(draft.tags)) {
@@ -1018,6 +1028,7 @@ const handleSaveDraft = async () => {
       type: uploadType.value === 'image' ? 1 : 2, // 1: 图文, 2: 视频
       is_draft: true,
       attachment: form.attachment || null,
+      visibility: form.visibility || 'public',
       paymentSettings: form.paymentSettings.enabled ? form.paymentSettings : null
     }
 

@@ -305,12 +305,14 @@ CREATE TABLE `posts`  (
   `comment_count` int NOT NULL DEFAULT 0,
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `is_draft` tinyint(1) NOT NULL DEFAULT 1,
+  `visibility` enum('public','private','friends_only') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'public',
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_user_id`(`user_id` ASC) USING BTREE,
   INDEX `idx_category_id`(`category_id` ASC) USING BTREE,
   INDEX `idx_created_at`(`created_at` ASC) USING BTREE,
   INDEX `idx_like_count`(`like_count` ASC) USING BTREE,
   INDEX `idx_category_id_created_at`(`category_id` ASC, `created_at` ASC) USING BTREE,
+  INDEX `idx_visibility`(`visibility` ASC) USING BTREE,
   CONSTRAINT `posts_category_id_fkey` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `posts_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE = InnoDB AUTO_INCREMENT = 10 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci ROW_FORMAT = Dynamic;

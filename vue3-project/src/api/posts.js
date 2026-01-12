@@ -63,6 +63,8 @@ function transformPostData(backendPost) {
     // 付费设置字段
     paymentSettings: backendPost.paymentSettings || null,
     hasPurchased: backendPost.hasPurchased || false,
+    // 可见性字段
+    visibility: backendPost.visibility || 'public',
     // 其他字段
     created_at: backendPost.created_at,
     path: `/post/${backendPost.id}`,
@@ -82,6 +84,7 @@ function transformPostData(backendPost) {
       createdAt: backendPost.created_at,
       userId: backendPost.user_id,
       paymentSettings: backendPost.paymentSettings || null,
+      visibility: backendPost.visibility || 'public',
       hiddenPaidImagesCount: backendPost.hiddenPaidImagesCount || 0,
       totalImagesCount: backendPost.totalImagesCount || (backendPost.images ? backendPost.images.length : 0)
     }
