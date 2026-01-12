@@ -72,18 +72,18 @@ const config = {
     // 连接池优化配置
     pool: {
       // 连接池最大连接数
-      size: parseInt(process.env.DB_POOL_SIZE) || 10,
+      size: parseInt(process.env.DB_POOL_SIZE, 10) || 10,
       // 连接获取超时时间 (毫秒)
-      connectionTimeout: parseInt(process.env.DB_CONNECTION_TIMEOUT) || 10000,
+      connectionTimeout: parseInt(process.env.DB_CONNECTION_TIMEOUT, 10) || 10000,
       // 连接空闲超时时间 (毫秒)
-      idleTimeout: parseInt(process.env.DB_IDLE_TIMEOUT) || 60000
+      idleTimeout: parseInt(process.env.DB_IDLE_TIMEOUT, 10) || 60000
     },
     // PostgreSQL 特定配置
     postgresql: {
       schema: process.env.DB_SCHEMA || 'public',
       sslMode: process.env.DB_SSL_MODE || 'disable',
-      statementTimeout: parseInt(process.env.DB_STATEMENT_TIMEOUT) || 0,
-      lockTimeout: parseInt(process.env.DB_LOCK_TIMEOUT) || 0
+      statementTimeout: parseInt(process.env.DB_STATEMENT_TIMEOUT, 10) || 0,
+      lockTimeout: parseInt(process.env.DB_LOCK_TIMEOUT, 10) || 0
     }
   },
 
