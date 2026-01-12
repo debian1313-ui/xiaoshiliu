@@ -2022,8 +2022,7 @@ router.put('/audit/:id/approve', adminAuth, async (req, res) => {
     })
 
     if (audit.type === 1 || audit.type === 2) {
-      const verifiedValue = audit.type === 1 ? 1 : 2
-      await prisma.user.update({ where: { id: audit.user_id }, data: { verified: verifiedValue } })
+      await prisma.user.update({ where: { id: audit.user_id }, data: { verified: true } })
     } else if (audit.type === 3 && audit.target_id) {
       await prisma.comment.update({ where: { id: audit.target_id }, data: { audit_status: 1, is_public: true } })
     }
