@@ -759,4 +759,73 @@ router.get('/:id/likes', optionalAuth, async (req, res) => {
   }
 });
 
+// 获取用户统计信息
+router.get('/:id/stats', async (req, res) => {
+  try {
+    const userIdParam = req.params.id;
+
+    // Handle both numeric IDs and string usernames
+    let userId;
+    if (/^\d+$/.test(userIdParam)) {
+      userId = BigInt(userIdParam);
+    } else {
+      const user = await prisma.user.findUnique({ where: { user_id: userIdParam }, select: { id: true } });
+      if (!user) return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '用户不存在' });
+      userId = user.id;
+    }
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, follow_count: true, fans_count: true }
+    });
+
+    if (!user) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '用户不存在' });
+    }
+
+    // Get posts count (non-draft only)
+    const postsCount = await prisma.post.count({
+      where: { user_id: userId, is_draft: false }
+    });
+
+    // Get total likes count (likes received on user's posts)
+    const userPosts = await prisma.post.findMany({
+      where: { user_id: userId, is_draft: false },
+      select: { id: true, like_count: true, view_count: true }
+    });
+    const likesCount = userPosts.reduce((sum, post) => sum + post.like_count, 0);
+
+    // Get total views count
+    const viewsCount = userPosts.reduce((sum, post) => sum + Number(post.view_count), 0);
+
+    // Get collections count (collections received on user's posts)
+    const collectionsCount = await prisma.collection.count({
+      where: { post: { user_id: userId, is_draft: false } }
+    });
+
+    // Get comments count (comments on user's posts)
+    const commentsCount = await prisma.comment.count({
+      where: { post: { user_id: userId, is_draft: false } }
+    });
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      message: 'success',
+      data: {
+        posts_count: postsCount,
+        likes_count: likesCount,
+        collections_count: collectionsCount,
+        comments_count: commentsCount,
+        followers_count: user.fans_count,
+        following_count: user.follow_count,
+        views_count: viewsCount
+      }
+    });
+  } catch (error) {
+    console.error('获取用户统计信息失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR });
+  }
+});
+
 module.exports = router;
