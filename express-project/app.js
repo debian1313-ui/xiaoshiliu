@@ -150,16 +150,14 @@ async function ensureDefaultAdmin() {
     if (adminCount === 0) {
       console.log('● 未检测到管理员账户，正在创建默认管理员...');
       
-      await prisma.admin.upsert({
-        where: { username: DEFAULT_ADMIN.username },
-        update: {},
-        create: {
+      await prisma.admin.create({
+        data: {
           username: DEFAULT_ADMIN.username,
           password: DEFAULT_ADMIN.passwordHash
         }
       });
       
-      console.log(`● 默认管理员账户创建成功 (用户名: ${DEFAULT_ADMIN.username}, 密码: 123456)`);
+      console.log(`● 默认管理员账户创建成功 (用户名: ${DEFAULT_ADMIN.username})`);
     }
   } catch (error) {
     console.error('● 创建默认管理员失败:', error.message);
