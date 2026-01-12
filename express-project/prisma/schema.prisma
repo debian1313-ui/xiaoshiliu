@@ -2,13 +2,9 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 //
 // 当前配置: MySQL
-// 
-// 如需切换到 PostgreSQL，请运行: npm run db:switch
-// 该脚本会自动检测 DATABASE_URL 环境变量并切换到对应的 schema 文件
-//
-// 手动切换方法:
-// 1. 将 schema.postgresql.prisma 内容复制到此文件
-// 2. 或将 provider 改为 "postgresql" 并将 @db.TinyInt 替换为 @db.SmallInt
+// 系统会根据 .env 中的 DATABASE_URL 自动选择对应的 schema
+// - MySQL: mysql://...
+// - PostgreSQL: postgresql://...
 
 generator client {
   provider = "prisma-client-js"

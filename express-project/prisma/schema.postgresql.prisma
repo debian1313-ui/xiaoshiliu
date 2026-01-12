@@ -1,10 +1,9 @@
 // This is your Prisma schema file for PostgreSQL,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 //
-// 使用说明：
-// 1. 将此文件重命名为 schema.prisma (备份原有的 schema.prisma 为 schema.mysql.prisma)
-// 2. 设置 DATABASE_URL 为 PostgreSQL 连接字符串
-// 3. 运行 npx prisma db push 或 npx prisma migrate dev
+// 当前配置: PostgreSQL
+// 系统会根据 .env 中的 DATABASE_URL 自动选择此 schema
+// DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DATABASE?schema=public
 
 generator client {
   provider = "prisma-client-js"

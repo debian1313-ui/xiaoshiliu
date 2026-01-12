@@ -9,7 +9,6 @@
         "dev": "nodemon app.js",
         "generate-data": "node scripts/generate-data.js",
         "init-db": "node scripts/init-database.js",
-        "db:switch": "node scripts/switch-db-schema.js",
         "db:generate": "npx prisma generate",
         "db:push": "npx prisma db push",
         "db:migrate": "npx prisma migrate dev"
