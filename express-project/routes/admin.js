@@ -1557,7 +1557,7 @@ router.post('/users', adminAuth, async (req, res) => {
         mbti: mbti || null,
         education: education || null,
         major: major || null,
-        interests: interests ? (Array.isArray(interests) ? interests : interests) : null,
+        interests: interests || null,
         verified: verified || false
       }
     })
@@ -1591,7 +1591,7 @@ router.put('/users/:id', adminAuth, async (req, res) => {
     if (mbti !== undefined) updateData.mbti = mbti
     if (education !== undefined) updateData.education = education
     if (major !== undefined) updateData.major = major
-    if (interests !== undefined) updateData.interests = Array.isArray(interests) ? interests : interests
+    if (interests !== undefined) updateData.interests = interests
     if (verified !== undefined) updateData.verified = Boolean(verified)
 
     await prisma.user.update({ where: { id: userId }, data: updateData })
@@ -2578,9 +2578,6 @@ router.get('/stats/overview', adminAuth, async (req, res) => {
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取失败' })
   }
 })
-
-// Export the AI review status function
-router.isAiAutoReviewEnabled = isAiAutoReviewEnabled
 
 module.exports = router
 module.exports.isAiAutoReviewEnabled = isAiAutoReviewEnabled
