@@ -67,8 +67,24 @@ const config = {
     password: process.env.DB_PASSWORD || '123456',
     database: process.env.DB_NAME || 'xiaoshiliu',
     port: process.env.DB_PORT || 3306,
-    charset: 'utf8mb4',
-    timezone: '+08:00'
+    charset: process.env.DB_CHARSET || 'utf8mb4',
+    timezone: process.env.DB_TIMEZONE || '+08:00',
+    // 连接池优化配置
+    pool: {
+      // 连接池最大连接数
+      size: parseInt(process.env.DB_POOL_SIZE) || 10,
+      // 连接获取超时时间 (毫秒)
+      connectionTimeout: parseInt(process.env.DB_CONNECTION_TIMEOUT) || 10000,
+      // 连接空闲超时时间 (毫秒)
+      idleTimeout: parseInt(process.env.DB_IDLE_TIMEOUT) || 60000
+    },
+    // PostgreSQL 特定配置
+    postgresql: {
+      schema: process.env.DB_SCHEMA || 'public',
+      sslMode: process.env.DB_SSL_MODE || 'disable',
+      statementTimeout: parseInt(process.env.DB_STATEMENT_TIMEOUT) || 0,
+      lockTimeout: parseInt(process.env.DB_LOCK_TIMEOUT) || 0
+    }
   },
 
   // 上传配置
@@ -400,8 +416,9 @@ const config = {
 const dbConfig = {
   ...config.database,
   waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
+  connectionLimit: config.database.pool.size,
+  queueLimit: 0,
+  connectTimeout: config.database.pool.connectionTimeout
 };
 
 // 创建连接池
