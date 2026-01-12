@@ -482,6 +482,7 @@ router.get('/:id/posts', optionalAuth, async (req, res) => {
       where: { user_id: targetUserId, is_draft: false },
       include: {
         user: { select: { id: true, user_id: true, nickname: true, avatar: true, location: true } },
+        category: { select: { name: true } },
         images: { select: { image_url: true, is_free_preview: true } },
         videos: { select: { video_url: true, cover_url: true }, take: 1 },
         tags: { include: { tag: { select: { id: true, name: true } } } },
@@ -512,6 +513,7 @@ router.get('/:id/posts', optionalAuth, async (req, res) => {
         title: post.title,
         content: post.content,
         category_id: post.category_id,
+        category: post.category?.name,
         type: post.type,
         view_count: Number(post.view_count),
         like_count: post.like_count,
@@ -583,6 +585,7 @@ router.get('/:id/collections', optionalAuth, async (req, res) => {
         post: {
           include: {
             user: { select: { id: true, user_id: true, nickname: true, avatar: true, location: true } },
+            category: { select: { name: true } },
             images: { select: { image_url: true, is_free_preview: true } },
             videos: { select: { video_url: true, cover_url: true }, take: 1 },
             tags: { include: { tag: { select: { id: true, name: true } } } },
@@ -613,6 +616,7 @@ router.get('/:id/collections', optionalAuth, async (req, res) => {
         title: post.title,
         content: post.content,
         category_id: post.category_id,
+        category: post.category?.name,
         type: post.type,
         view_count: Number(post.view_count),
         like_count: post.like_count,
@@ -690,6 +694,7 @@ router.get('/:id/likes', optionalAuth, async (req, res) => {
       where: { id: { in: postIds } },
       include: {
         user: { select: { id: true, user_id: true, nickname: true, avatar: true, location: true } },
+        category: { select: { name: true } },
         images: { select: { image_url: true, is_free_preview: true } },
         videos: { select: { video_url: true, cover_url: true }, take: 1 },
         tags: { include: { tag: { select: { id: true, name: true } } } },
@@ -713,6 +718,7 @@ router.get('/:id/likes', optionalAuth, async (req, res) => {
         title: post.title,
         content: post.content,
         category_id: post.category_id,
+        category: post.category?.name,
         type: post.type,
         view_count: Number(post.view_count),
         like_count: post.like_count,
