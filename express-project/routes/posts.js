@@ -506,11 +506,11 @@ router.post('/', authenticateToken, async (req, res) => {
       // Generate preview video if needed
       if (parseInt(type) === POST_TYPE_VIDEO && video && video.url && normalized.previewDuration > 0) {
         try {
-          const previewUrl = await generatePreviewVideo(video.url, normalized.previewDuration, Number(postId));
-          if (previewUrl) {
+          const previewResult = await generatePreviewVideo(video.url, normalized.previewDuration, Number(postId));
+          if (previewResult.success && previewResult.previewUrl) {
             await prisma.postVideo.updateMany({
               where: { post_id: postId },
-              data: { preview_video_url: previewUrl }
+              data: { preview_video_url: previewResult.previewUrl }
             });
           }
         } catch (previewError) {
