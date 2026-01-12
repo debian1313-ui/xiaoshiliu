@@ -54,6 +54,9 @@ class DatabaseInitializer {
       // 创建笔记视频表
       await this.createPostVideosTable(connection);
 
+      // 创建笔记附件表
+      await this.createPostAttachmentsTable(connection);
+
       // 创建标签表
       await this.createTagsTable(connection);
 
@@ -251,6 +254,24 @@ class DatabaseInitializer {
     `;
     await connection.execute(sql);
     console.log('✓ post_videos 表创建成功');
+  }
+
+  async createPostAttachmentsTable(connection) {
+    const sql = `
+      CREATE TABLE IF NOT EXISTS \`post_attachments\` (
+        \`id\` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '附件ID',
+        \`post_id\` bigint(20) NOT NULL COMMENT '笔记ID',
+        \`attachment_url\` varchar(500) NOT NULL COMMENT '附件URL',
+        \`filename\` varchar(255) NOT NULL COMMENT '原始文件名',
+        \`filesize\` bigint(20) NOT NULL DEFAULT 0 COMMENT '文件大小(字节)',
+        \`created_at\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+        PRIMARY KEY (\`id\`),
+        KEY \`idx_post_id\` (\`post_id\`),
+        CONSTRAINT \`post_attachments_ibfk_1\` FOREIGN KEY (\`post_id\`) REFERENCES \`posts\` (\`id\`) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='笔记附件表';
+    `;
+    await connection.execute(sql);
+    console.log('✓ post_attachments 表创建成功');
   }
 
   async createTagsTable(connection) {
