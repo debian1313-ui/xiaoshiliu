@@ -106,11 +106,72 @@ app.use('*', (req, res) => {
 });
 
 /**
+ * 执行 Prisma db push 命令同步数据库表结构
+ * 当环境变量 AUTO_DB_PUSH=true 时自动执行
+ */
+async function runPrismaDbPush() {
+  if (process.env.AUTO_DB_PUSH !== 'true') {
+    return;
+  }
+
+  console.log('● 自动执行 Prisma db push...');
+  const { execSync } = require('child_process');
+  
+  try {
+    execSync('npx prisma db push --skip-generate', {
+      cwd: __dirname,
+      stdio: 'inherit'
+    });
+    console.log('● Prisma db push 完成');
+  } catch (error) {
+    console.error('● Prisma db push 失败:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * 检查并创建默认管理员账户
+ * 如果管理员表为空，则创建默认管理员
+ * 用户名: admin
+ * 密码: 123456 (SHA-256加密后的值)
+ */
+async function ensureDefaultAdmin() {
+  try {
+    // 检查管理员表是否有数据
+    const adminCount = await prisma.admin.count();
+    
+    if (adminCount === 0) {
+      console.log('● 未检测到管理员账户，正在创建默认管理员...');
+      
+      // 默认管理员账户信息
+      // 用户名: admin
+      // 密码: 123456 (SHA-256加密后的值)
+      await prisma.admin.upsert({
+        where: { username: 'admin' },
+        update: {},
+        create: {
+          username: 'admin',
+          password: '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92'
+        }
+      });
+      
+      console.log('● 默认管理员账户创建成功 (用户名: admin, 密码: 123456)');
+    }
+  } catch (error) {
+    console.error('● 创建默认管理员失败:', error.message);
+    // 不抛出错误，允许应用继续启动
+  }
+}
+
+/**
  * Prisma 数据库连接验证和表结构检查
  * 在程序启动时自动验证数据库连接和表结构
  */
 async function validatePrismaConnection() {
   try {
+    // 如果启用了自动 db push，先执行
+    await runPrismaDbPush();
+
     // 测试数据库连接
     await prisma.$connect();
     console.log('● Prisma ORM 数据库连接成功');
@@ -140,6 +201,9 @@ async function validatePrismaConnection() {
       console.warn(`● Prisma 表结构部分验证 (${validTables}/${tables.length} 核心表)`);
       console.log('  提示: 运行 "npx prisma db push" 同步表结构');
     }
+    
+    // 检查并创建默认管理员
+    await ensureDefaultAdmin();
     
     return true;
   } catch (error) {
