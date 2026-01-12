@@ -3,11 +3,7 @@
     <!-- 上半部分：缩略图、标题内容、操作按钮 -->
     <div class="post-upper">
       <div class="post-thumbnail" @click="goToPostDetail">
-        <img v-if="post.type === 2 && post.images && post.images.length > 0" :src="post.images[0]"
-          :alt="post.title" @error="handleImageError" />
-        <img
-          v-else-if="post.type !== 2 && ((post.originalData?.images && post.originalData.images.length > 0) || (post.images && post.images.length > 0))"
-          :src="(post.originalData?.images && post.originalData.images[0]) || (post.images && post.images[0]) || post.image"
+        <img v-if="thumbnailUrl" :src="thumbnailUrl"
           :alt="post.title" @error="handleImageError" />
         <div v-else-if="post.type === 2" class="video-thumbnail">
           <span>视频</span>
@@ -65,6 +61,7 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import SvgIcon from './SvgIcon.vue'
 
 // Props定义
@@ -78,6 +75,39 @@ const props = defineProps({
 
 // 事件定义
 const emit = defineEmits(['edit', 'delete', 'view'])
+
+// 从图片数据中提取URL（兼容字符串和对象格式）
+const getImageUrl = (img) => {
+  if (!img) return null
+  if (typeof img === 'string') return img
+  if (typeof img === 'object') {
+    return img.url || img.image_url || null
+  }
+  return null
+}
+
+// 计算缩略图URL
+const thumbnailUrl = computed(() => {
+  const post = props.post
+  
+  // 视频笔记：优先使用封面图，其次使用第一张图片
+  if (post.type === 2) {
+    if (post.cover_url) return post.cover_url
+    if (post.images && post.images.length > 0) {
+      return getImageUrl(post.images[0])
+    }
+    return null
+  }
+  
+  // 图文笔记：优先使用 originalData.images，其次使用 images，最后使用 image
+  if (post.originalData?.images && post.originalData.images.length > 0) {
+    return getImageUrl(post.originalData.images[0])
+  }
+  if (post.images && post.images.length > 0) {
+    return getImageUrl(post.images[0])
+  }
+  return post.image || null
+})
 
 // 获取分类名称
 const getCategoryName = (category) => {

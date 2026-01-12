@@ -15,7 +15,12 @@ const categories = ref([])
 const loadCategories = async () => {
   try {
     const response = await getCategories()
-    categories.value = response.data
+    if (response.success && response.data) {
+      categories.value = response.data
+    } else if (response.data) {
+      // 兼容直接返回data的情况
+      categories.value = response.data
+    }
   } catch (error) {
     console.error('加载分类失败:', error)
   }
