@@ -1,9 +1,8 @@
-// This is your Prisma schema file for PostgreSQL,
+// Prisma schema for PostgreSQL
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 //
-// 当前配置: PostgreSQL
-// 系统会根据 .env 中的 DATABASE_URL 自动选择此 schema
-// DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DATABASE?schema=public
+// 此文件用于 PostgreSQL 数据库
+// 系统会根据 .env 中的 DATABASE_URL 自动选择此文件或 schema.mysql.prisma
 
 generator client {
   provider = "prisma-client-js"
