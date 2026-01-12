@@ -764,40 +764,36 @@ router.get('/:id/stats', async (req, res) => {
   try {
     const userIdParam = req.params.id;
 
-    // Handle both numeric IDs and string usernames
-    let userId;
+    // Handle both numeric IDs and string usernames, and get user data in one query
+    let user;
     if (/^\d+$/.test(userIdParam)) {
-      userId = BigInt(userIdParam);
+      user = await prisma.user.findUnique({
+        where: { id: BigInt(userIdParam) },
+        select: { id: true, follow_count: true, fans_count: true }
+      });
     } else {
-      const user = await prisma.user.findUnique({ where: { user_id: userIdParam }, select: { id: true } });
-      if (!user) return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '用户不存在' });
-      userId = user.id;
+      user = await prisma.user.findUnique({
+        where: { user_id: userIdParam },
+        select: { id: true, follow_count: true, fans_count: true }
+      });
     }
-
-    // Check if user exists
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, follow_count: true, fans_count: true }
-    });
 
     if (!user) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '用户不存在' });
     }
 
-    // Get posts count (non-draft only)
-    const postsCount = await prisma.post.count({
-      where: { user_id: userId, is_draft: false }
-    });
+    const userId = user.id;
 
-    // Get total likes count (likes received on user's posts)
-    const userPosts = await prisma.post.findMany({
+    // Use aggregation to get posts count and sums in one query
+    const postStats = await prisma.post.aggregate({
       where: { user_id: userId, is_draft: false },
-      select: { id: true, like_count: true, view_count: true }
+      _count: { id: true },
+      _sum: { like_count: true, view_count: true }
     });
-    const likesCount = userPosts.reduce((sum, post) => sum + post.like_count, 0);
 
-    // Get total views count
-    const viewsCount = userPosts.reduce((sum, post) => sum + Number(post.view_count), 0);
+    const postsCount = postStats._count.id;
+    const likesCount = postStats._sum.like_count || 0;
+    const viewsCount = Number(postStats._sum.view_count || 0);
 
     // Get collections count (collections received on user's posts)
     const collectionsCount = await prisma.collection.count({
