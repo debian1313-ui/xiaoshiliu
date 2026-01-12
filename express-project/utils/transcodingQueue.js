@@ -7,7 +7,7 @@
  */
 
 const { convertToDash } = require('./videoTranscoder');
-const { pool } = require('../config/config');
+const { prisma } = require('../config/config');
 const config = require('../config/config');
 
 class TranscodingQueue {
@@ -100,13 +100,13 @@ class TranscodingQueue {
 
         // 更新数据库中的视频URL
         try {
-          const [updateResult] = await pool.query(
-            'UPDATE post_videos SET video_url = ? WHERE video_url = ?',
-            [result.manifestUrl, task.originalVideoUrl]
-          );
+          const updateResult = await prisma.postVideo.updateMany({
+            where: { video_url: task.originalVideoUrl },
+            data: { video_url: result.manifestUrl }
+          });
 
-          if (updateResult.affectedRows > 0) {
-            console.log(`✅ 已更新 ${updateResult.affectedRows} 条视频记录为DASH URL [ID: ${task.id}]`);
+          if (updateResult.count > 0) {
+            console.log(`✅ 已更新 ${updateResult.count} 条视频记录为DASH URL [ID: ${task.id}]`);
           } else {
             console.log(`⚠️ 未找到需要更新的视频记录 [ID: ${task.id}]（视频可能还未关联到帖子）`);
           }
