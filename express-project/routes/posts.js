@@ -72,9 +72,23 @@ router.get('/', optionalAuth, async (req, res) => {
     const skip = (page - 1) * limit;
     const category = req.query.category ? parseInt(req.query.category) : null;
     const isDraft = req.query.is_draft !== undefined ? parseInt(req.query.is_draft) === 1 : false;
-    const userId = req.query.user_id ? BigInt(req.query.user_id) : null;
     const type = req.query.type ? parseInt(req.query.type) : null;
     const currentUserId = req.user ? BigInt(req.user.id) : null;
+
+    // Handle user_id which can be a numeric ID or a string username
+    let userId = null;
+    if (req.query.user_id) {
+      if (/^\d+$/.test(req.query.user_id)) {
+        // user_id is a numeric string, convert directly to BigInt
+        userId = BigInt(req.query.user_id);
+      } else {
+        // user_id is a string username, look up the numeric ID
+        const user = await prisma.user.findUnique({ where: { user_id: req.query.user_id }, select: { id: true } });
+        if (user) {
+          userId = user.id;
+        }
+      }
+    }
 
     const where = {};
     where.is_draft = isDraft;
