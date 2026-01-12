@@ -23,19 +23,74 @@ const MYSQL_SCHEMA = path.join(PRISMA_DIR, 'schema.mysql.prisma');
 const POSTGRES_SCHEMA = path.join(PRISMA_DIR, 'schema.postgresql.prisma');
 
 /**
+ * 安全地解析 DATABASE_URL 并提取协议
+ * @param {string} databaseUrl 
+ * @returns {string|null} 数据库协议 (mysql, postgresql, postgres) 或 null
+ */
+function parseDbProtocol(databaseUrl) {
+  if (!databaseUrl || typeof databaseUrl !== 'string') {
+    return null;
+  }
+  
+  // 清理字符串：去除前后空白
+  const cleanUrl = databaseUrl.trim();
+  
+  try {
+    // 使用 URL 构造器解析
+    const url = new URL(cleanUrl);
+    // 协议包含冒号，如 "mysql:"，需要去掉
+    return url.protocol.replace(':', '').toLowerCase();
+  } catch {
+    // 如果 URL 构造器失败，尝试简单的协议提取
+    const protocolMatch = cleanUrl.match(/^([a-z][a-z0-9+.-]*):\/\//i);
+    if (protocolMatch) {
+      return protocolMatch[1].toLowerCase();
+    }
+    return null;
+  }
+}
+
+/**
  * 检测数据库类型
  * @returns {'mysql' | 'postgresql' | 'unknown'}
  */
 function detectDatabaseType() {
   const databaseUrl = process.env.DATABASE_URL || '';
+  const protocol = parseDbProtocol(databaseUrl);
   
-  if (databaseUrl.startsWith('mysql://')) {
+  if (protocol === 'mysql') {
     return 'mysql';
-  } else if (databaseUrl.startsWith('postgresql://') || databaseUrl.startsWith('postgres://')) {
+  } else if (protocol === 'postgresql' || protocol === 'postgres') {
     return 'postgresql';
   }
   
   return 'unknown';
+}
+
+/**
+ * 安全地遮蔽 DATABASE_URL 中的敏感信息
+ * @param {string} databaseUrl 
+ * @returns {string} 遮蔽后的 URL
+ */
+function maskDatabaseUrl(databaseUrl) {
+  if (!databaseUrl || typeof databaseUrl !== 'string') {
+    return '(empty)';
+  }
+  
+  try {
+    const url = new URL(databaseUrl.trim());
+    // 遮蔽用户名和密码
+    if (url.username) {
+      url.username = '***';
+    }
+    if (url.password) {
+      url.password = '***';
+    }
+    return url.toString();
+  } catch {
+    // 如果 URL 解析失败，使用正则表达式遮蔽
+    return databaseUrl.replace(/\/\/[^:]*:[^@]*@/, '//***:***@');
+  }
 }
 
 /**
@@ -45,13 +100,13 @@ function detectDatabaseType() {
 function getCurrentSchemaType() {
   try {
     const content = fs.readFileSync(SCHEMA_FILE, 'utf-8');
-    if (content.includes('provider = "mysql"')) {
-      return 'mysql';
-    } else if (content.includes('provider = "postgresql"')) {
-      return 'postgresql';
+    // 使用正则表达式匹配 provider 字段
+    const providerMatch = content.match(/provider\s*=\s*"(mysql|postgresql)"/i);
+    if (providerMatch) {
+      return providerMatch[1].toLowerCase();
     }
-  } catch (error) {
-    // schema.prisma 不存在
+  } catch {
+    // schema.prisma 不存在或读取失败
   }
   return 'unknown';
 }
@@ -125,7 +180,7 @@ function main() {
   
   // 检测目标数据库类型
   const targetDbType = detectDatabaseType();
-  console.log('DATABASE_URL:', databaseUrl.replace(/\/\/[^:]+:[^@]+@/, '//***:***@')); // 隐藏密码
+  console.log('DATABASE_URL:', maskDatabaseUrl(databaseUrl));
   console.log('检测到数据库类型:', targetDbType === 'mysql' ? 'MySQL' : targetDbType === 'postgresql' ? 'PostgreSQL' : '未知');
   
   if (targetDbType === 'unknown') {
