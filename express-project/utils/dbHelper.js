@@ -4,6 +4,39 @@
  */
 const prisma = require('./prisma')
 
+// Mapping from SQL table names to Prisma model names
+const tableToModel = {
+  'users': 'user',
+  'posts': 'post',
+  'comments': 'comment',
+  'likes': 'like',
+  'notifications': 'notification',
+  'follows': 'follow',
+  'collections': 'collection',
+  'tags': 'tag',
+  'categories': 'category',
+  'audit': 'audit',
+  'admin': 'admin',
+  'post_images': 'postImage',
+  'post_videos': 'postVideo',
+  'post_tags': 'postTag',
+  'post_attachments': 'postAttachment',
+  'post_payment_settings': 'postPaymentSetting',
+  'user_sessions': 'userSession',
+  'user_points': 'userPoints',
+  'user_purchased_content': 'userPurchasedContent',
+  'points_log': 'pointsLog'
+};
+
+/**
+ * Get the Prisma model name for a given table name
+ * @param {string} table - Table name
+ * @returns {string} Prisma model name
+ */
+function getModelName(table) {
+  return tableToModel[table] || table;
+}
+
 /**
  * 检查记录是否存在
  * @param {string} table - 表名 (对应 Prisma model 名称)
@@ -12,7 +45,8 @@ const prisma = require('./prisma')
  * @returns {Promise<boolean>} 是否存在
  */
 async function recordExists(table, field, value) {
-  const count = await prisma[table].count({
+  const modelName = getModelName(table);
+  const count = await prisma[modelName].count({
     where: { [field]: value }
   })
   return count > 0
@@ -30,7 +64,8 @@ async function recordsExist(table, field, values) {
     return { existingCount: 0, missingValues: [] }
   }
 
-  const result = await prisma[table].findMany({
+  const modelName = getModelName(table);
+  const result = await prisma[modelName].findMany({
     where: { [field]: { in: values } },
     select: { [field]: true }
   })
@@ -53,13 +88,14 @@ async function recordsExist(table, field, values) {
  * @returns {Promise<boolean>} 是否唯一
  */
 async function isUnique(table, field, value, excludeId = null) {
+  const modelName = getModelName(table);
   const where = { [field]: value }
   
   if (excludeId) {
     where.id = { not: BigInt(excludeId) }
   }
 
-  const count = await prisma[table].count({ where })
+  const count = await prisma[modelName].count({ where })
   return count === 0
 }
 
@@ -70,7 +106,8 @@ async function isUnique(table, field, value, excludeId = null) {
  * @returns {Promise<number>} 插入的ID
  */
 async function createRecord(table, data) {
-  const result = await prisma[table].create({ data })
+  const modelName = getModelName(table);
+  const result = await prisma[modelName].create({ data })
   return Number(result.id)
 }
 
@@ -82,8 +119,9 @@ async function createRecord(table, data) {
  * @returns {Promise<number>} 影响的行数
  */
 async function updateRecord(table, id, data) {
+  const modelName = getModelName(table);
   try {
-    await prisma[table].update({
+    await prisma[modelName].update({
       where: { id: BigInt(id) },
       data
     })
@@ -103,8 +141,9 @@ async function updateRecord(table, id, data) {
  * @returns {Promise<number>} 影响的行数
  */
 async function deleteRecord(table, id) {
+  const modelName = getModelName(table);
   try {
-    await prisma[table].delete({
+    await prisma[modelName].delete({
       where: { id: BigInt(id) }
     })
     return 1
@@ -127,7 +166,8 @@ async function deleteRecords(table, ids) {
     return 0
   }
 
-  const result = await prisma[table].deleteMany({
+  const modelName = getModelName(table);
+  const result = await prisma[modelName].deleteMany({
     where: { id: { in: ids.map(id => BigInt(id)) } }
   })
 
@@ -142,7 +182,8 @@ async function deleteRecords(table, ids) {
  * @returns {Promise<Object|null>} 记录对象或null
  */
 async function getRecord(table, id, fields = '*') {
-  const result = await prisma[table].findUnique({
+  const modelName = getModelName(table);
+  const result = await prisma[modelName].findUnique({
     where: { id: BigInt(id) }
   })
 
@@ -169,13 +210,14 @@ async function getRecords(table, options = {}) {
     select = undefined
   } = options
 
+  const modelName = getModelName(table);
   const skip = (page - 1) * limit
 
   // 获取总数
-  const total = await prisma[table].count({ where })
+  const total = await prisma[modelName].count({ where })
 
   // 获取数据
-  const data = await prisma[table].findMany({
+  const data = await prisma[modelName].findMany({
     where,
     orderBy,
     skip,
