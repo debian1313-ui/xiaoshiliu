@@ -16,6 +16,22 @@ const {
   protectPostDetail 
 } = require('../utils/paidContentHelper');
 
+// Post type constants
+const POST_TYPE_IMAGE = 1;
+const POST_TYPE_VIDEO = 2;
+
+// Helper to normalize payment settings (support both camelCase and snake_case)
+function normalizePaymentSettings(settings) {
+  if (!settings) return null;
+  return {
+    paymentType: settings.paymentType || settings.payment_type || 'single',
+    price: settings.price || 0,
+    freePreviewCount: settings.freePreviewCount || settings.free_preview_count || 0,
+    previewDuration: settings.previewDuration || settings.preview_duration || 0,
+    hideAll: settings.hideAll || settings.hide_all || false
+  };
+}
+
 // Helper to format post for response
 async function formatPost(post, currentUserId, prisma, options = {}) {
   const { includeTags = true, checkLikeCollect = true } = options;
@@ -337,8 +353,8 @@ router.get('/:id', optionalAuth, async (req, res) => {
       tags: post.tags.map(pt => ({ id: pt.tag.id, name: pt.tag.name }))
     };
 
-    // Add flattened video fields for video posts (type === 2)
-    if (post.type === 2 && post.videos.length > 0) {
+    // Add flattened video fields for video posts
+    if (post.type === POST_TYPE_VIDEO && post.videos.length > 0) {
       const firstVideo = post.videos[0];
       formatted.video_url = firstVideo.video_url;
       formatted.cover_url = firstVideo.cover_url;
@@ -473,28 +489,24 @@ router.post('/', authenticateToken, async (req, res) => {
 
     // Handle payment settings
     if (paymentSettings && paymentSettings.enabled) {
-      // Support both camelCase (from frontend) and snake_case (legacy)
-      const paymentType = paymentSettings.paymentType || paymentSettings.payment_type || 'single';
-      const freePreviewCount = paymentSettings.freePreviewCount || paymentSettings.free_preview_count || 0;
-      const previewDuration = paymentSettings.previewDuration || paymentSettings.preview_duration || 0;
-      const hideAll = paymentSettings.hideAll || paymentSettings.hide_all || false;
+      const normalized = normalizePaymentSettings(paymentSettings);
 
       await prisma.postPaymentSetting.create({
         data: {
           post_id: postId,
           enabled: true,
-          payment_type: paymentType,
-          price: paymentSettings.price || 0,
-          free_preview_count: freePreviewCount,
-          preview_duration: previewDuration,
-          hide_all: hideAll
+          payment_type: normalized.paymentType,
+          price: normalized.price,
+          free_preview_count: normalized.freePreviewCount,
+          preview_duration: normalized.previewDuration,
+          hide_all: normalized.hideAll
         }
       });
 
       // Generate preview video if needed
-      if (parseInt(type) === 2 && video && video.url && previewDuration > 0) {
+      if (parseInt(type) === POST_TYPE_VIDEO && video && video.url && normalized.previewDuration > 0) {
         try {
-          const previewUrl = await generatePreviewVideo(video.url, previewDuration, Number(postId));
+          const previewUrl = await generatePreviewVideo(video.url, normalized.previewDuration, Number(postId));
           if (previewUrl) {
             await prisma.postVideo.updateMany({
               where: { post_id: postId },
@@ -618,21 +630,17 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (paymentSettings !== undefined) {
       await prisma.postPaymentSetting.deleteMany({ where: { post_id: postId } });
       if (paymentSettings && paymentSettings.enabled) {
-        // Support both camelCase (from frontend) and snake_case (legacy)
-        const paymentType = paymentSettings.paymentType || paymentSettings.payment_type || 'single';
-        const freePreviewCount = paymentSettings.freePreviewCount || paymentSettings.free_preview_count || 0;
-        const previewDuration = paymentSettings.previewDuration || paymentSettings.preview_duration || 0;
-        const hideAll = paymentSettings.hideAll || paymentSettings.hide_all || false;
+        const normalized = normalizePaymentSettings(paymentSettings);
 
         await prisma.postPaymentSetting.create({
           data: {
             post_id: postId,
             enabled: true,
-            payment_type: paymentType,
-            price: paymentSettings.price || 0,
-            free_preview_count: freePreviewCount,
-            preview_duration: previewDuration,
-            hide_all: hideAll
+            payment_type: normalized.paymentType,
+            price: normalized.price,
+            free_preview_count: normalized.freePreviewCount,
+            preview_duration: normalized.previewDuration,
+            hide_all: normalized.hideAll
           }
         });
       }
