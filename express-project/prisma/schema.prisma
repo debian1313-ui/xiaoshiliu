@@ -1,10 +1,5 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
-//
-// 当前配置: MySQL
-// 系统会根据 .env 中的 DATABASE_URL 自动选择对应的 schema
-// - MySQL: mysql://...
-// - PostgreSQL: postgresql://...
 
 generator client {
   provider = "prisma-client-js"
@@ -44,11 +39,11 @@ model Audit {
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@index([user_id], name: "idx_audit_user_id")
-  @@index([type], name: "idx_audit_type")
-  @@index([status], name: "idx_audit_status")
-  @@index([created_at], name: "idx_audit_created_at")
-  @@index([target_id], name: "idx_audit_target_id")
+  @@index([user_id], name: "idx_user_id")
+  @@index([type], name: "idx_type")
+  @@index([status], name: "idx_status")
+  @@index([created_at], name: "idx_created_at")
+  @@index([target_id], name: "idx_target_id")
   @@map("audit")
 }
 
@@ -74,9 +69,9 @@ model Collection {
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
   post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
 
-  @@unique([user_id, post_id], name: "uk_collections_user_post")
-  @@index([user_id], name: "idx_collections_user_id")
-  @@index([post_id], name: "idx_collections_post_id")
+  @@unique([user_id, post_id], name: "uk_user_post")
+  @@index([user_id], name: "idx_user_id")
+  @@index([post_id], name: "idx_post_id")
   @@map("collections")
 }
 
@@ -99,12 +94,12 @@ model Comment {
   replies  Comment[] @relation("CommentReplies")
   notifications Notification[]
 
-  @@index([post_id], name: "idx_comments_post_id")
-  @@index([user_id], name: "idx_comments_user_id")
-  @@index([parent_id], name: "idx_comments_parent_id")
-  @@index([created_at], name: "idx_comments_created_at")
-  @@index([audit_status], name: "idx_comments_audit_status")
-  @@index([is_public], name: "idx_comments_is_public")
+  @@index([post_id], name: "idx_post_id")
+  @@index([user_id], name: "idx_user_id")
+  @@index([parent_id], name: "idx_parent_id")
+  @@index([created_at], name: "idx_created_at")
+  @@index([audit_status], name: "idx_audit_status")
+  @@index([is_public], name: "idx_is_public")
   @@map("comments")
 }
 
@@ -118,10 +113,10 @@ model Follow {
   follower  User @relation("Followers", fields: [follower_id], references: [id], onDelete: Cascade)
   following User @relation("Following", fields: [following_id], references: [id], onDelete: Cascade)
 
-  @@unique([follower_id, following_id], name: "uk_follows_follow")
-  @@index([follower_id], name: "idx_follows_follower_id")
-  @@index([following_id], name: "idx_follows_following_id")
-  @@index([follower_id, following_id], name: "idx_follows_follower_following")
+  @@unique([follower_id, following_id], name: "uk_follow")
+  @@index([follower_id], name: "idx_follower_id")
+  @@index([following_id], name: "idx_following_id")
+  @@index([follower_id, following_id], name: "idx_follower_following")
   @@map("follows")
 }
 
@@ -135,10 +130,10 @@ model Like {
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@unique([user_id, target_type, target_id], name: "uk_likes_user_target")
-  @@index([user_id], name: "idx_likes_user_id")
-  @@index([target_type, target_id], name: "idx_likes_target")
-  @@index([user_id, target_type, target_id], name: "idx_likes_user_target_type")
+  @@unique([user_id, target_type, target_id], name: "uk_user_target")
+  @@index([user_id], name: "idx_user_id")
+  @@index([target_type, target_id], name: "idx_target")
+  @@index([user_id, target_type, target_id], name: "idx_user_target_type")
   @@map("likes")
 }
 
@@ -158,12 +153,12 @@ model Notification {
   sender  User     @relation("NotificationSender", fields: [sender_id], references: [id], onDelete: Cascade)
   comment Comment? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
 
-  @@index([user_id], name: "idx_notifications_user_id")
-  @@index([sender_id], name: "idx_notifications_sender_id")
-  @@index([type], name: "idx_notifications_type")
-  @@index([is_read], name: "idx_notifications_is_read")
-  @@index([user_id, is_read], name: "idx_notifications_user_read")
-  @@index([created_at], name: "idx_notifications_created_at")
+  @@index([user_id], name: "idx_user_id")
+  @@index([sender_id], name: "idx_sender_id")
+  @@index([type], name: "idx_type")
+  @@index([is_read], name: "idx_is_read")
+  @@index([user_id, is_read], name: "idx_user_read")
+  @@index([created_at], name: "idx_created_at")
   @@index([comment_id], name: "idx_notifications_comment_id")
   @@map("notifications")
 }
@@ -180,9 +175,9 @@ model PointsLog {
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@index([user_id], name: "idx_points_log_user_id")
-  @@index([type], name: "idx_points_log_type")
-  @@index([created_at], name: "idx_points_log_created_at")
+  @@index([user_id], name: "idx_user_id")
+  @@index([type], name: "idx_type")
+  @@index([created_at], name: "idx_created_at")
   @@map("points_log")
 }
 
@@ -197,7 +192,7 @@ model PostAttachment {
 
   post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
 
-  @@index([post_id], name: "idx_post_attachments_post_id")
+  @@index([post_id], name: "idx_post_id")
   @@map("post_attachments")
 }
 
@@ -210,8 +205,8 @@ model PostImage {
 
   post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
 
-  @@index([post_id], name: "idx_post_images_post_id")
-  @@index([is_free_preview], name: "idx_post_images_is_free_preview")
+  @@index([post_id], name: "idx_post_id")
+  @@index([is_free_preview], name: "idx_is_free_preview")
   @@map("post_images")
 }
 
@@ -230,7 +225,7 @@ model PostPaymentSetting {
 
   post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
 
-  @@index([post_id], name: "idx_post_payment_settings_post_id")
+  @@index([post_id], name: "idx_post_id")
   @@map("post_payment_settings")
 }
 
@@ -244,9 +239,9 @@ model PostTag {
   post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
   tag  Tag  @relation(fields: [tag_id], references: [id], onDelete: Cascade)
 
-  @@unique([post_id, tag_id], name: "uk_post_tags_post_tag")
-  @@index([post_id], name: "idx_post_tags_post_id")
-  @@index([tag_id], name: "idx_post_tags_tag_id")
+  @@unique([post_id, tag_id], name: "uk_post_tag")
+  @@index([post_id], name: "idx_post_id")
+  @@index([tag_id], name: "idx_tag_id")
   @@map("post_tags")
 }
 
@@ -264,9 +259,9 @@ model PostVideo {
 
   post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
 
-  @@index([post_id], name: "idx_post_videos_post_id")
-  @@index([transcode_status], name: "idx_post_videos_transcode_status")
-  @@index([dash_url], name: "idx_post_videos_dash_url")
+  @@index([post_id], name: "idx_post_id")
+  @@index([transcode_status], name: "idx_transcode_status")
+  @@index([dash_url], name: "idx_dash_url")
   @@map("post_videos")
 }
 
@@ -312,12 +307,12 @@ model Post {
   paymentSettings PostPaymentSetting?
   purchasedBy     UserPurchasedContent[]
 
-  @@index([user_id], name: "idx_posts_user_id")
-  @@index([category_id], name: "idx_posts_category_id")
-  @@index([created_at], name: "idx_posts_created_at")
-  @@index([like_count], name: "idx_posts_like_count")
-  @@index([category_id, created_at], name: "idx_posts_category_id_created_at")
-  @@index([visibility], name: "idx_posts_visibility")
+  @@index([user_id], name: "idx_user_id")
+  @@index([category_id], name: "idx_category_id")
+  @@index([created_at], name: "idx_created_at")
+  @@index([like_count], name: "idx_like_count")
+  @@index([category_id, created_at], name: "idx_category_id_created_at")
+  @@index([visibility], name: "idx_visibility")
   @@map("posts")
 }
 
@@ -331,7 +326,7 @@ model SystemSetting {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  @@index([setting_group], name: "idx_system_settings_setting_group")
+  @@index([setting_group], name: "idx_setting_group")
   @@map("system_settings")
 }
 
@@ -344,8 +339,8 @@ model Tag {
 
   posts PostTag[]
 
-  @@index([name], name: "idx_tags_name")
-  @@index([use_count], name: "idx_tags_use_count")
+  @@index([name], name: "idx_name")
+  @@index([use_count], name: "idx_use_count")
   @@map("tags")
 }
 
@@ -360,9 +355,9 @@ model UserAuthorSubscription {
   user   User @relation("SubscriptionUser", fields: [user_id], references: [id], onDelete: Cascade)
   author User @relation("SubscriptionAuthor", fields: [author_id], references: [id], onDelete: Cascade)
 
-  @@unique([user_id, author_id], name: "uk_user_author_subscriptions_user_author")
-  @@index([user_id], name: "idx_user_author_subscriptions_user_id")
-  @@index([author_id], name: "idx_user_author_subscriptions_author_id")
+  @@unique([user_id, author_id], name: "uk_user_author")
+  @@index([user_id], name: "idx_user_id")
+  @@index([author_id], name: "idx_author_id")
   @@map("user_author_subscriptions")
 }
 
@@ -376,7 +371,7 @@ model UserPoints {
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@index([user_id], name: "idx_user_points_user_id")
+  @@index([user_id], name: "idx_user_id")
   @@map("user_points")
 }
 
@@ -395,10 +390,10 @@ model UserPurchasedContent {
   post   Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
   author User @relation("PurchasedContentAuthor", fields: [author_id], references: [id], onDelete: Cascade)
 
-  @@unique([user_id, post_id], name: "uk_user_purchased_content_user_post")
-  @@index([user_id], name: "idx_user_purchased_content_user_id")
-  @@index([post_id], name: "idx_user_purchased_content_post_id")
-  @@index([author_id], name: "idx_user_purchased_content_author_id")
+  @@unique([user_id, post_id], name: "uk_user_post")
+  @@index([user_id], name: "idx_user_id")
+  @@index([post_id], name: "idx_post_id")
+  @@index([author_id], name: "idx_author_id")
   @@map("user_purchased_content")
 }
 
@@ -416,9 +411,9 @@ model UserSession {
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@index([user_id], name: "idx_user_sessions_user_id")
-  @@index([token], name: "idx_user_sessions_token")
-  @@index([expires_at], name: "idx_user_sessions_expires_at")
+  @@index([user_id], name: "idx_user_id")
+  @@index([token], name: "idx_token")
+  @@index([expires_at], name: "idx_expires_at")
   @@map("user_sessions")
 }
 
@@ -466,9 +461,9 @@ model User {
   purchasedContentAsUser  UserPurchasedContent[] @relation("PurchasedContentUser")
   purchasedContentAsAuthor UserPurchasedContent[] @relation("PurchasedContentAuthor")
 
-  @@index([user_id], name: "idx_users_user_id")
-  @@index([email], name: "idx_users_email")
-  @@index([created_at], name: "idx_users_created_at")
-  @@index([oauth2_id], name: "idx_users_oauth2_id")
+  @@index([user_id], name: "idx_user_id")
+  @@index([email], name: "idx_email")
+  @@index([created_at], name: "idx_created_at")
+  @@index([oauth2_id], name: "idx_oauth2_id")
   @@map("users")
 }
