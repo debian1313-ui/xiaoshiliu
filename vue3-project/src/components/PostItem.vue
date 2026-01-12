@@ -82,8 +82,8 @@ const emit = defineEmits(['edit', 'delete', 'view'])
 // 获取图片URL（兼容对象和字符串格式）
 const getImageUrl = (image) => {
   if (!image) return ''
-  if (typeof image === 'object' && image.url) {
-    return image.url
+  if (typeof image === 'object') {
+    return image.url || ''
   }
   return image
 }
