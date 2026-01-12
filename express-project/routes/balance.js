@@ -6,30 +6,34 @@
 const express = require('express');
 const router = express.Router();
 const { HTTP_STATUS, RESPONSE_CODES, ERROR_MESSAGES } = require('../constants');
-const { pool, balanceCenter: balanceCenterConfig } = require('../config/config');
+const { prisma, balanceCenter: balanceCenterConfig } = require('../config/config');
 const { authenticateToken } = require('../middleware/auth');
 
 // 获取或初始化用户石榴点
 const getOrCreateUserPoints = async (userId) => {
-  const [rows] = await pool.execute(
-    'SELECT points FROM user_points WHERE user_id = ?',
-    [userId.toString()]
-  );
+  const userIdBigInt = BigInt(userId);
   
-  if (rows.length === 0) {
+  const userPoints = await prisma.userPoints.findUnique({
+    where: { user_id: userIdBigInt }
+  });
+  
+  if (!userPoints) {
     // 用户没有积分记录，创建一个
-    await pool.execute(
-      'INSERT INTO user_points (user_id, points) VALUES (?, 0.00)',
-      [userId.toString()]
-    );
+    await prisma.userPoints.create({
+      data: {
+        user_id: userIdBigInt,
+        points: 0.00
+      }
+    });
     return 0.00;
   }
   
-  return parseFloat(rows[0].points);
+  return parseFloat(userPoints.points);
 };
 
 // 更新用户石榴点并记录日志
 const updateUserPoints = async (userId, amount, type, reason) => {
+  const userIdBigInt = BigInt(userId);
   const currentPoints = await getOrCreateUserPoints(userId);
   const newPoints = currentPoints + amount;
   
@@ -38,16 +42,21 @@ const updateUserPoints = async (userId, amount, type, reason) => {
   }
   
   // 更新积分
-  await pool.execute(
-    'UPDATE user_points SET points = ? WHERE user_id = ?',
-    [newPoints.toFixed(2), userId.toString()]
-  );
+  await prisma.userPoints.update({
+    where: { user_id: userIdBigInt },
+    data: { points: newPoints }
+  });
   
   // 记录日志
-  await pool.execute(
-    'INSERT INTO points_log (user_id, amount, balance_after, type, reason) VALUES (?, ?, ?, ?, ?)',
-    [userId.toString(), amount.toFixed(2), newPoints.toFixed(2), type, reason]
-  );
+  await prisma.pointsLog.create({
+    data: {
+      user_id: userIdBigInt,
+      amount: amount,
+      balance_after: newPoints,
+      type: type,
+      reason: reason
+    }
+  });
   
   return newPoints;
 };
@@ -101,19 +110,19 @@ router.get('/user-balance', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     // 获取用户的oauth2_id和本地石榴点
-    const [userRows] = await pool.execute(
-      'SELECT oauth2_id FROM users WHERE id = ?',
-      [userId.toString()]
-    );
+    const user = await prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+      select: { oauth2_id: true }
+    });
 
-    if (userRows.length === 0) {
+    if (!user) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         code: RESPONSE_CODES.NOT_FOUND,
         message: '用户不存在'
       });
     }
 
-    const oauth2Id = userRows[0].oauth2_id;
+    const oauth2Id = user.oauth2_id;
     if (!oauth2Id) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         code: RESPONSE_CODES.VALIDATION_ERROR,
@@ -184,19 +193,19 @@ router.post('/exchange-in', authenticateToken, async (req, res) => {
     }
 
     // 获取用户的oauth2_id
-    const [userRows] = await pool.execute(
-      'SELECT oauth2_id FROM users WHERE id = ?',
-      [userId.toString()]
-    );
+    const user = await prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+      select: { oauth2_id: true }
+    });
 
-    if (userRows.length === 0) {
+    if (!user) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         code: RESPONSE_CODES.NOT_FOUND,
         message: '用户不存在'
       });
     }
 
-    const oauth2Id = userRows[0].oauth2_id;
+    const oauth2Id = user.oauth2_id;
     if (!oauth2Id) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         code: RESPONSE_CODES.VALIDATION_ERROR,
@@ -287,19 +296,19 @@ router.post('/exchange-out', authenticateToken, async (req, res) => {
     }
 
     // 获取用户的oauth2_id
-    const [userRows] = await pool.execute(
-      'SELECT oauth2_id FROM users WHERE id = ?',
-      [userId.toString()]
-    );
+    const user = await prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+      select: { oauth2_id: true }
+    });
 
-    if (userRows.length === 0) {
+    if (!user) {
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         code: RESPONSE_CODES.NOT_FOUND,
         message: '用户不存在'
       });
     }
 
-    const oauth2Id = userRows[0].oauth2_id;
+    const oauth2Id = user.oauth2_id;
     if (!oauth2Id) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         code: RESPONSE_CODES.VALIDATION_ERROR,
@@ -375,7 +384,7 @@ router.post('/exchange-out', authenticateToken, async (req, res) => {
 // 购买付费内容
 router.post('/purchase-content', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = BigInt(req.user.id);
     const { postId } = req.body;
 
     console.log(`🔓 [购买内容] 用户 ${userId} 尝试购买帖子 ${postId}`);
@@ -387,13 +396,15 @@ router.post('/purchase-content', authenticateToken, async (req, res) => {
       });
     }
 
-    // 检查帖子是否存在并获取付费设置
-    const [postRows] = await pool.execute(
-      'SELECT id, user_id, title FROM posts WHERE id = ?',
-      [postId.toString()]
-    );
+    const postIdBigInt = BigInt(postId);
 
-    if (postRows.length === 0) {
+    // 检查帖子是否存在并获取付费设置
+    const post = await prisma.post.findUnique({
+      where: { id: postIdBigInt },
+      select: { id: true, user_id: true, title: true }
+    });
+
+    if (!post) {
       console.log(`❌ [购买内容] 帖子 ${postId} 不存在`);
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         code: RESPONSE_CODES.NOT_FOUND,
@@ -401,10 +412,8 @@ router.post('/purchase-content', authenticateToken, async (req, res) => {
       });
     }
 
-    const post = postRows[0];
-
     // 检查是否是自己的帖子
-    if (post.user_id.toString() === userId.toString()) {
+    if (post.user_id === userId) {
       console.log(`⚠️ [购买内容] 用户 ${userId} 尝试购买自己的帖子`);
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         code: RESPONSE_CODES.VALIDATION_ERROR,
@@ -413,12 +422,11 @@ router.post('/purchase-content', authenticateToken, async (req, res) => {
     }
 
     // 获取帖子的付费设置
-    const [paymentRows] = await pool.execute(
-      'SELECT enabled, payment_type, price FROM post_payment_settings WHERE post_id = ?',
-      [postId.toString()]
-    );
+    const paymentSettings = await prisma.postPaymentSetting.findUnique({
+      where: { post_id: postIdBigInt }
+    });
 
-    if (paymentRows.length === 0 || !paymentRows[0].enabled) {
+    if (!paymentSettings || !paymentSettings.enabled) {
       console.log(`⚠️ [购买内容] 帖子 ${postId} 不是付费内容`);
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         code: RESPONSE_CODES.VALIDATION_ERROR,
@@ -426,18 +434,21 @@ router.post('/purchase-content', authenticateToken, async (req, res) => {
       });
     }
 
-    const paymentSettings = paymentRows[0];
     const price = parseFloat(paymentSettings.price);
 
     console.log(`💰 [购买内容] 帖子价格: ${price} 石榴点`);
 
     // 检查是否已经购买过
-    const [purchaseRows] = await pool.execute(
-      'SELECT id FROM user_purchased_content WHERE user_id = ? AND post_id = ?',
-      [userId.toString(), postId.toString()]
-    );
+    const existingPurchase = await prisma.userPurchasedContent.findUnique({
+      where: {
+        uk_user_post: {
+          user_id: userId,
+          post_id: postIdBigInt
+        }
+      }
+    });
 
-    if (purchaseRows.length > 0) {
+    if (existingPurchase) {
       console.log(`✅ [购买内容] 用户 ${userId} 已购买过帖子 ${postId}`);
       return res.json({
         code: RESPONSE_CODES.SUCCESS,
@@ -447,7 +458,7 @@ router.post('/purchase-content', authenticateToken, async (req, res) => {
     }
 
     // 检查用户石榴点是否足够
-    const currentPoints = await getOrCreateUserPoints(userId);
+    const currentPoints = await getOrCreateUserPoints(Number(userId));
     console.log(`💎 [购买内容] 用户当前石榴点: ${currentPoints}, 需要: ${price}`);
 
     if (currentPoints < price) {
@@ -460,7 +471,7 @@ router.post('/purchase-content', authenticateToken, async (req, res) => {
 
     // 扣除石榴点
     const newPoints = await updateUserPoints(
-      userId,
+      Number(userId),
       -price,
       'purchase',
       `购买付费内容: ${post.title} (ID: ${postId})`
@@ -471,7 +482,7 @@ router.post('/purchase-content', authenticateToken, async (req, res) => {
     // 给作者增加石榴点（扣除平台手续费后）
     const authorEarnings = price * 0.9; // 作者获得90%
     await updateUserPoints(
-      post.user_id,
+      Number(post.user_id),
       authorEarnings,
       'earning',
       `付费内容收入: ${post.title} (ID: ${postId})`
@@ -479,11 +490,16 @@ router.post('/purchase-content', authenticateToken, async (req, res) => {
 
     console.log(`💵 [购买内容] 作者 ${post.user_id} 获得 ${authorEarnings} 石榴点`);
 
-    // 记录购买（包含author_id和purchase_type，同时设置created_at和purchased_at）
-    await pool.execute(
-      'INSERT INTO user_purchased_content (user_id, post_id, author_id, price, purchase_type, created_at, purchased_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
-      [userId.toString(), postId.toString(), post.user_id.toString(), price.toFixed(2), paymentSettings.payment_type || 'single']
-    );
+    // 记录购买
+    await prisma.userPurchasedContent.create({
+      data: {
+        user_id: userId,
+        post_id: postIdBigInt,
+        author_id: post.user_id,
+        price: price,
+        purchase_type: paymentSettings.payment_type || 'single'
+      }
+    });
 
     console.log(`🎉 [购买内容] 购买记录已保存`);
 
@@ -509,24 +525,29 @@ router.post('/purchase-content', authenticateToken, async (req, res) => {
 // 检查用户是否已购买某个帖子
 router.get('/check-purchase/:postId', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = BigInt(req.user.id);
     const { postId } = req.params;
 
     console.log(`🔍 [检查购买] 用户 ${userId} 检查帖子 ${postId}`);
 
-    const [purchaseRows] = await pool.execute(
-      'SELECT id, purchased_at FROM user_purchased_content WHERE user_id = ? AND post_id = ?',
-      [userId.toString(), postId.toString()]
-    );
+    const purchase = await prisma.userPurchasedContent.findUnique({
+      where: {
+        uk_user_post: {
+          user_id: userId,
+          post_id: BigInt(postId)
+        }
+      },
+      select: { id: true, purchased_at: true }
+    });
 
-    const hasPurchased = purchaseRows.length > 0;
+    const hasPurchased = !!purchase;
     console.log(`📋 [检查购买] 结果: ${hasPurchased ? '已购买' : '未购买'}`);
 
     res.json({
       code: RESPONSE_CODES.SUCCESS,
       data: {
         hasPurchased: hasPurchased,
-        purchasedAt: hasPurchased ? purchaseRows[0].purchased_at : null
+        purchasedAt: hasPurchased ? purchase.purchased_at : null
       },
       message: 'success'
     });

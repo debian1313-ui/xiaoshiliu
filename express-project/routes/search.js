@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { HTTP_STATUS, RESPONSE_CODES, ERROR_MESSAGES } = require('../constants');
-const { pool } = require('../config/config');
+const { prisma } = require('../config/config');
 const { optionalAuth } = require('../middleware/auth');
 const { protectPostListItem } = require('../utils/paidContentHelper');
 
@@ -13,8 +13,8 @@ router.get('/', optionalAuth, async (req, res) => {
     const type = req.query.type || 'all'; // all, posts, videos, users
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
-    const offset = (page - 1) * limit;
-    const currentUserId = req.user ? req.user.id : null;
+    const skip = (page - 1) * limit;
+    const currentUserId = req.user ? BigInt(req.user.id) : null;
 
     // 如果既没有关键词也没有标签，返回空结果
     if (!keyword.trim() && !tag.trim()) {
@@ -41,224 +41,216 @@ router.get('/', optionalAuth, async (req, res) => {
 
     // all、posts、videos都返回笔记内容，但根据type过滤不同类型
     if (type === 'all' || type === 'posts' || type === 'videos') {
-      // 构建搜索条件
-      let whereConditions = [];
-      let queryParams = [];
+      // 构建Prisma查询条件
+      const where = {
+        is_draft: false
+      };
 
-      // 关键词搜索条件 - 匹配汐社号、昵称、标题、正文内容、标签名称中的任意一种
+      // 关键词搜索条件
       if (keyword.trim()) {
-        whereConditions.push('(p.title LIKE ? OR p.content LIKE ? OR u.nickname LIKE ? OR u.user_id LIKE ? OR EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON pt.tag_id = t.id WHERE pt.post_id = p.id AND t.name LIKE ?))');
-        queryParams.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+        where.OR = [
+          { title: { contains: keyword } },
+          { content: { contains: keyword } },
+          { user: { nickname: { contains: keyword } } },
+          { user: { user_id: { contains: keyword } } },
+          { tags: { some: { tag: { name: { contains: keyword } } } } }
+        ];
       }
 
-      // 标签搜索条件 - 如果有keyword，则在keyword结果基础上筛选；如果没有keyword，则直接按tag搜索
+      // 标签搜索条件
       if (tag.trim()) {
-        if (keyword.trim()) {
-          // 有keyword时，在keyword搜索结果基础上进行tag筛选（AND关系）
-          whereConditions.push('EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON pt.tag_id = t.id WHERE pt.post_id = p.id AND t.name = ?)');
-          queryParams.push(tag);
+        if (where.OR) {
+          // 有keyword时，添加AND条件
+          where.AND = [
+            { tags: { some: { tag: { name: tag } } } }
+          ];
         } else {
           // 没有keyword时，直接按tag搜索
-          whereConditions.push('EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON pt.tag_id = t.id WHERE pt.post_id = p.id AND t.name = ?)');
-          queryParams.push(tag);
+          where.tags = { some: { tag: { name: tag } } };
         }
       }
-
-      // 添加is_draft条件，确保只搜索已发布的笔记
-      whereConditions.push('p.is_draft = 0');
 
       // 根据type添加内容类型过滤
       if (type === 'posts') {
-        // 图文tab：只显示图片笔记（type=1），过滤掉视频
-        whereConditions.push('p.type = 1');
+        where.type = 1;
       } else if (type === 'videos') {
-        // 视频tab：只显示视频笔记（type=2）
-        whereConditions.push('p.type = 2');
+        where.type = 2;
       }
-      // all类型不添加type过滤，显示所有类型
-
-      // 构建WHERE子句
-      let whereClause = '';
-      if (whereConditions.length > 0) {
-        // 所有条件都用AND连接（keyword和tag是筛选关系）
-        whereClause = `WHERE ${whereConditions.join(' AND ')}`;
-      }
-
-
 
       // 搜索笔记
-      const [postRows] = await pool.execute(
-        `SELECT p.*, u.nickname, u.avatar as user_avatar, u.user_id as author_account, u.location
-         FROM posts p
-         LEFT JOIN users u ON p.user_id = u.id
-         ${whereClause}
-         ORDER BY p.created_at DESC
-         LIMIT ? OFFSET ?`,
-        [...queryParams, limit.toString(), offset.toString()]
-      );
+      const posts = await prisma.post.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              user_id: true,
+              nickname: true,
+              avatar: true,
+              location: true
+            }
+          },
+          images: {
+            select: { image_url: true, is_free_preview: true }
+          },
+          videos: {
+            select: { video_url: true, cover_url: true },
+            take: 1
+          },
+          tags: {
+            include: {
+              tag: { select: { id: true, name: true } }
+            }
+          },
+          paymentSettings: {
+            select: { enabled: true, free_preview_count: true, preview_duration: true, price: true, hide_all: true }
+          }
+        },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: skip
+      });
 
-      // 使用批量查询优化性能，避免N+1查询问题
-      if (postRows.length > 0) {
-        const postIds = postRows.map(post => post.id);
-        const placeholders = postIds.map(() => '?').join(',');
-        
-        // 批量获取所有图片
-        const [allImages] = await pool.execute(
-          `SELECT post_id, image_url FROM post_images WHERE post_id IN (${placeholders})`,
-          postIds
-        );
-        const imagesByPostId = {};
-        allImages.forEach(img => {
-          if (!imagesByPostId[img.post_id]) {
-            imagesByPostId[img.post_id] = [];
-          }
-          imagesByPostId[img.post_id].push(img.image_url);
+      // 获取用户购买记录
+      let purchasedPostIds = new Set();
+      if (currentUserId && posts.length > 0) {
+        const postIds = posts.map(p => p.id);
+        const purchases = await prisma.userPurchasedContent.findMany({
+          where: { user_id: currentUserId, post_id: { in: postIds } },
+          select: { post_id: true }
         });
-        
-        // 批量获取所有视频
-        const [allVideos] = await pool.execute(
-          `SELECT post_id, video_url, cover_url FROM post_videos WHERE post_id IN (${placeholders})`,
-          postIds
-        );
-        const videosByPostId = {};
-        allVideos.forEach(video => {
-          videosByPostId[video.post_id] = video;
-        });
-        
-        // 批量获取所有标签
-        const [allTags] = await pool.execute(
-          `SELECT pt.post_id, t.id, t.name FROM tags t 
-           JOIN post_tags pt ON t.id = pt.tag_id 
-           WHERE pt.post_id IN (${placeholders})`,
-          postIds
-        );
-        const tagsByPostId = {};
-        allTags.forEach(tag => {
-          if (!tagsByPostId[tag.post_id]) {
-            tagsByPostId[tag.post_id] = [];
-          }
-          tagsByPostId[tag.post_id].push({ id: tag.id, name: tag.name });
-        });
-        
-        // 批量获取付费设置
-        const [allPaymentSettings] = await pool.execute(
-          `SELECT post_id, enabled, free_preview_count, preview_duration FROM post_payment_settings WHERE post_id IN (${placeholders})`,
-          postIds
-        );
-        const paymentSettingsByPostId = {};
-        allPaymentSettings.forEach(ps => {
-          paymentSettingsByPostId[ps.post_id] = ps;
-        });
-        
-        // 批量获取用户已购买的内容（仅在用户登录时）
-        let purchasedPostIds = new Set();
-        if (currentUserId) {
-          const [allPurchases] = await pool.execute(
-            `SELECT post_id FROM user_purchased_content WHERE user_id = ? AND post_id IN (${placeholders})`,
-            [currentUserId, ...postIds]
-          );
-          purchasedPostIds = new Set(allPurchases.map(p => p.post_id));
-        }
-        
-        // 批量获取点赞和收藏状态（仅在用户登录时）
-        let likedPostIds = new Set();
-        let collectedPostIds = new Set();
-        if (currentUserId) {
-          const [allLikes] = await pool.execute(
-            `SELECT target_id FROM likes WHERE user_id = ? AND target_type = 1 AND target_id IN (${placeholders})`,
-            [currentUserId, ...postIds]
-          );
-          likedPostIds = new Set(allLikes.map(like => like.target_id));
-          
-          const [allCollections] = await pool.execute(
-            `SELECT post_id FROM collections WHERE user_id = ? AND post_id IN (${placeholders})`,
-            [currentUserId, ...postIds]
-          );
-          collectedPostIds = new Set(allCollections.map(c => c.post_id));
-        }
-        
-        // 为每个笔记填充数据
-        for (let post of postRows) {
-          // 修复头像字段映射问题
-          post.avatar = post.user_avatar;
-          post.author = post.nickname;
-          
-          // 使用助手函数处理付费内容保护
-          const paymentSetting = paymentSettingsByPostId[post.id];
-          const isAuthor = currentUserId && post.user_id === currentUserId;
-          const hasPurchased = purchasedPostIds.has(post.id);
-          
-          protectPostListItem(post, {
-            paymentSetting,
-            isAuthor,
-            hasPurchased,
-            videoData: videosByPostId[post.id],
-            imageUrls: imagesByPostId[post.id]
-          });
-          
-          post.tags = tagsByPostId[post.id] || [];
-          post.liked = likedPostIds.has(post.id);
-          post.collected = collectedPostIds.has(post.id);
-        }
+        purchasedPostIds = new Set(purchases.map(p => p.post_id));
       }
 
-      // 获取笔记总数 - 使用相同的搜索条件
-      const [postCountResult] = await pool.execute(
-        `SELECT COUNT(*) as total FROM posts p
-         LEFT JOIN users u ON p.user_id = u.id
-         ${whereClause}`,
-        queryParams
-      );
+      // 获取点赞和收藏状态
+      let likedPostIds = new Set();
+      let collectedPostIds = new Set();
+      if (currentUserId && posts.length > 0) {
+        const postIds = posts.map(p => p.id);
+        const likes = await prisma.like.findMany({
+          where: { user_id: currentUserId, target_type: 1, target_id: { in: postIds } },
+          select: { target_id: true }
+        });
+        likedPostIds = new Set(likes.map(l => l.target_id));
 
-      // 统计标签频率 - 始终基于keyword搜索结果，不受当前tag筛选影响
+        const collections = await prisma.collection.findMany({
+          where: { user_id: currentUserId, post_id: { in: postIds } },
+          select: { post_id: true }
+        });
+        collectedPostIds = new Set(collections.map(c => c.post_id));
+      }
+
+      // 格式化帖子
+      const formattedPosts = posts.map(post => {
+        const formatted = {
+          id: Number(post.id),
+          user_id: Number(post.user_id),
+          title: post.title,
+          content: post.content,
+          category_id: post.category_id,
+          type: post.type,
+          view_count: Number(post.view_count),
+          like_count: post.like_count,
+          collect_count: post.collect_count,
+          comment_count: post.comment_count,
+          created_at: post.created_at,
+          is_draft: post.is_draft,
+          nickname: post.user?.nickname,
+          user_avatar: post.user?.avatar,
+          author_account: post.user?.user_id,
+          avatar: post.user?.avatar,
+          author: post.user?.nickname,
+          location: post.user?.location
+        };
+
+        const isAuthor = currentUserId && post.user_id === currentUserId;
+        const hasPurchased = purchasedPostIds.has(post.id);
+        const paymentSetting = post.paymentSettings;
+
+        // 获取图片URLs
+        const imageUrls = post.images.map(img => ({
+          url: img.image_url,
+          isFreePreview: img.is_free_preview
+        }));
+
+        // 获取视频数据
+        const videoData = post.videos[0] || null;
+
+        protectPostListItem(formatted, {
+          paymentSetting: paymentSetting ? {
+            enabled: paymentSetting.enabled ? 1 : 0,
+            free_preview_count: paymentSetting.free_preview_count,
+            preview_duration: paymentSetting.preview_duration,
+            price: paymentSetting.price,
+            hide_all: paymentSetting.hide_all
+          } : null,
+          isAuthor,
+          hasPurchased,
+          videoData: videoData ? {
+            video_url: videoData.video_url,
+            cover_url: videoData.cover_url
+          } : null,
+          imageUrls
+        });
+
+        formatted.tags = post.tags.map(pt => ({ id: pt.tag.id, name: pt.tag.name }));
+        formatted.liked = likedPostIds.has(post.id);
+        formatted.collected = collectedPostIds.has(post.id);
+
+        return formatted;
+      });
+
+      // 获取总数
+      const total = await prisma.post.count({ where });
+
+      // 统计标签频率
       let tagStats = [];
       if (keyword.trim()) {
-        // 构建仅基于keyword的搜索条件（包括标题、内容、用户名、汐社号、标签名称），并确保只统计已激活的笔记
-        const keywordWhereClause = 'WHERE p.is_draft = 0 AND (p.title LIKE ? OR p.content LIKE ? OR u.nickname LIKE ? OR u.user_id LIKE ? OR EXISTS (SELECT 1 FROM post_tags pt2 JOIN tags t2 ON pt2.tag_id = t2.id WHERE pt2.post_id = p.id AND t2.name LIKE ?))';
-        const keywordParams = [`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`];
+        const tagStatsQuery = await prisma.$queryRaw`
+          SELECT t.name, COUNT(*) as count
+          FROM tags t
+          JOIN post_tags pt ON t.id = pt.tag_id
+          JOIN posts p ON pt.post_id = p.id
+          LEFT JOIN users u ON p.user_id = u.id
+          WHERE p.is_draft = 0 AND (
+            p.title LIKE ${`%${keyword}%`} 
+            OR p.content LIKE ${`%${keyword}%`}
+            OR u.nickname LIKE ${`%${keyword}%`}
+            OR u.user_id LIKE ${`%${keyword}%`}
+            OR EXISTS (SELECT 1 FROM post_tags pt2 JOIN tags t2 ON pt2.tag_id = t2.id WHERE pt2.post_id = p.id AND t2.name LIKE ${`%${keyword}%`})
+          )
+          GROUP BY t.id, t.name
+          ORDER BY t.name ASC
+          LIMIT 10
+        `;
 
-        // 获取keyword搜索结果中的标签统计
-        const [tagStatsResult] = await pool.execute(
-          `SELECT t.name, COUNT(*) as count
-           FROM tags t
-           JOIN post_tags pt ON t.id = pt.tag_id
-           JOIN posts p ON pt.post_id = p.id
-           LEFT JOIN users u ON p.user_id = u.id
-           ${keywordWhereClause}
-           GROUP BY t.id, t.name
-           ORDER BY t.name ASC
-           LIMIT 10`,
-          keywordParams
-        );
-
-        tagStats = tagStatsResult.map(item => ({
+        tagStats = tagStatsQuery.map(item => ({
           id: item.name,
           label: item.name,
-          count: item.count
+          count: Number(item.count)
         }));
       }
 
-      // all模式直接返回数据，posts模式和videos模式返回posts结构
       if (type === 'all') {
         result = {
-          data: postRows,
+          data: formattedPosts,
           tagStats: tagStats,
           pagination: {
             page,
             limit,
-            total: postCountResult[0].total,
-            pages: Math.ceil(postCountResult[0].total / limit)
+            total,
+            pages: Math.ceil(total / limit)
           }
         };
       } else if (type === 'posts' || type === 'videos') {
         result.posts = {
-          data: postRows,
+          data: formattedPosts,
           tagStats: tagStats,
           pagination: {
             page,
             limit,
-            total: postCountResult[0].total,
-            pages: Math.ceil(postCountResult[0].total / limit)
+            total,
+            pages: Math.ceil(total / limit)
           }
         };
       }
@@ -266,70 +258,110 @@ router.get('/', optionalAuth, async (req, res) => {
 
     // 只有当type为'users'时才搜索用户
     if (type === 'users') {
-      // 搜索用户
-      const [userRows] = await pool.execute(
-        `SELECT u.id, u.user_id, u.nickname, u.avatar, u.bio, u.location, u.follow_count, u.fans_count, u.like_count, u.created_at, u.verified,
-                (SELECT COUNT(*) FROM posts WHERE user_id = u.id AND is_draft = 0) as post_count
-         FROM users u
-         WHERE u.nickname LIKE ? OR u.user_id LIKE ? 
-         ORDER BY u.created_at DESC 
-         LIMIT ? OFFSET ?`,
-        [`%${keyword}%`, `%${keyword}%`, limit.toString(), offset.toString()]
-      );
+      const users = await prisma.user.findMany({
+        where: {
+          OR: [
+            { nickname: { contains: keyword } },
+            { user_id: { contains: keyword } }
+          ]
+        },
+        select: {
+          id: true,
+          user_id: true,
+          nickname: true,
+          avatar: true,
+          bio: true,
+          location: true,
+          follow_count: true,
+          fans_count: true,
+          like_count: true,
+          created_at: true,
+          verified: true,
+          _count: {
+            select: { posts: { where: { is_draft: false } } }
+          }
+        },
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        skip: skip
+      });
 
-      // 检查关注状态（仅在用户已登录时）
+      // 获取关注状态
+      let formattedUsers = users.map(user => ({
+        id: Number(user.id),
+        user_id: user.user_id,
+        nickname: user.nickname,
+        avatar: user.avatar,
+        bio: user.bio,
+        location: user.location,
+        follow_count: user.follow_count,
+        fans_count: user.fans_count,
+        like_count: user.like_count,
+        created_at: user.created_at,
+        verified: user.verified,
+        post_count: user._count.posts,
+        isFollowing: false,
+        isMutual: false,
+        buttonType: 'follow'
+      }));
+
       if (currentUserId) {
-        for (let user of userRows) {
-          // 检查是否已关注
-          const [followResult] = await pool.execute(
-            'SELECT id FROM follows WHERE follower_id = ? AND following_id = ?',
-            [currentUserId.toString(), user.id.toString()]
-          );
-          user.isFollowing = followResult.length > 0;
+        const userIds = users.map(u => u.id);
+        
+        // 检查我关注的用户
+        const following = await prisma.follow.findMany({
+          where: { follower_id: currentUserId, following_id: { in: userIds } },
+          select: { following_id: true }
+        });
+        const followingSet = new Set(following.map(f => f.following_id));
 
-          // 检查是否互相关注
-          const [mutualResult] = await pool.execute(
-            'SELECT id FROM follows WHERE follower_id = ? AND following_id = ?',
-            [user.id.toString(), currentUserId.toString()]
-          );
-          user.isMutual = user.isFollowing && mutualResult.length > 0;
+        // 检查关注我的用户
+        const followers = await prisma.follow.findMany({
+          where: { follower_id: { in: userIds }, following_id: currentUserId },
+          select: { follower_id: true }
+        });
+        const followersSet = new Set(followers.map(f => f.follower_id));
 
-          // 设置按钮类型
-          if (user.id.toString() === currentUserId.toString()) {
+        formattedUsers = formattedUsers.map(user => {
+          const userId = BigInt(user.id);
+          const isFollowing = followingSet.has(userId);
+          const isFollower = followersSet.has(userId);
+
+          if (userId === currentUserId) {
             user.buttonType = 'self';
-          } else if (user.isMutual) {
+          } else if (isFollowing && isFollower) {
             user.buttonType = 'mutual';
-          } else if (user.isFollowing) {
+            user.isMutual = true;
+          } else if (isFollowing) {
             user.buttonType = 'unfollow';
-          } else if (mutualResult.length > 0) {
+          } else if (isFollower) {
             user.buttonType = 'back';
           } else {
             user.buttonType = 'follow';
           }
-        }
-      } else {
-        // 未登录用户，所有用户都显示为未关注状态
-        for (let user of userRows) {
-          user.isFollowing = false;
-          user.isMutual = false;
-          user.buttonType = 'follow';
-        }
+          user.isFollowing = isFollowing;
+
+          return user;
+        });
       }
 
       // 获取用户总数
-      const [userCountResult] = await pool.execute(
-        `SELECT COUNT(*) as total FROM users 
-         WHERE nickname LIKE ? OR user_id LIKE ?`,
-        [`%${keyword}%`, `%${keyword}%`]
-      );
+      const userTotal = await prisma.user.count({
+        where: {
+          OR: [
+            { nickname: { contains: keyword } },
+            { user_id: { contains: keyword } }
+          ]
+        }
+      });
 
       result.users = {
-        data: userRows,
+        data: formattedUsers,
         pagination: {
           page,
           limit,
-          total: userCountResult[0].total,
-          pages: Math.ceil(userCountResult[0].total / limit)
+          total: userTotal,
+          pages: Math.ceil(userTotal / limit)
         }
       };
     }
@@ -340,7 +372,7 @@ router.get('/', optionalAuth, async (req, res) => {
       data: {
         keyword,
         tag,
-        type: type, // 确保返回正确的type值
+        type: type,
         ...result
       }
     });
