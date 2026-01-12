@@ -152,6 +152,80 @@ docker-compose up -d --build
 .\deploy.ps1 -Clean
 ```
 
+## 🐘 PostgreSQL 数据库部署
+
+本项目支持 MySQL 和 PostgreSQL 两种数据库。默认使用 MySQL，如需使用 PostgreSQL，请按以下步骤配置。
+
+### 切换到 PostgreSQL
+
+#### 1. 切换 Prisma Schema 文件
+
+```bash
+cd express-project/prisma
+cp schema.postgres.prisma schema.prisma
+```
+
+#### 2. 修改环境配置
+
+编辑 `.env` 文件：
+
+```env
+# 数据库类型
+DATABASE_PROVIDER=postgresql
+
+# PostgreSQL 数据库配置
+DB_HOST=localhost
+DB_USER=postgres
+DB_PASSWORD=123456
+DB_NAME=xiaoshiliu
+DB_PORT=5432
+
+# Prisma 数据库连接URL (PostgreSQL格式)
+DATABASE_URL=postgresql://postgres:123456@localhost:5432/xiaoshiliu?schema=public
+```
+
+#### 3. 重新生成 Prisma Client
+
+```bash
+cd express-project
+npx prisma generate
+```
+
+#### 4. 同步数据库结构
+
+```bash
+npx prisma db push
+```
+
+### Docker PostgreSQL 部署
+
+使用 PostgreSQL 版本的 Docker Compose 配置：
+
+```bash
+# 启动 PostgreSQL 版本
+docker-compose -f docker-compose.postgres.yml up -d
+
+# 重新构建并启动
+docker-compose -f docker-compose.postgres.yml up -d --build
+
+# 查看日志
+docker-compose -f docker-compose.postgres.yml logs
+
+# 停止服务
+docker-compose -f docker-compose.postgres.yml down
+```
+
+### MySQL 与 PostgreSQL 区别
+
+| 特性 | MySQL | PostgreSQL |
+|------|-------|------------|
+| 默认端口 | 3306 | 5432 |
+| Docker 端口映射 | 3307:3306 | 5433:5432 |
+| TinyInt 类型 | @db.TinyInt | @db.SmallInt |
+| 连接URL格式 | mysql://user:pass@host:port/db | postgresql://user:pass@host:port/db?schema=public |
+
+---
+
 ## 🛠️ 传统部署
 
 ### 1. 环境准备

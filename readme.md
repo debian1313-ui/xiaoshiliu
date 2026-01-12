@@ -144,7 +144,8 @@
 
 - **Node.js** - 运行环境
 - **Express.js** - Web框架
-- **MySQL** - 数据库
+- **MySQL / PostgreSQL** - 数据库 (支持两种数据库)
+- **Prisma** - ORM框架
 - **JWT** - 身份认证
 - **Multer** - 文件上传
 - **bcrypt** - 密码加密
@@ -166,12 +167,13 @@
 |------|----------|
 | Node.js | >= 16.0.0 |
 | MySQL | >= 5.7 |
+| PostgreSQL | >= 12 (可选) |
 | MariaDB | >= 10.3 |
 | npm | >= 8.0.0 |
 | yarn | >= 1.22.0 |
 | 浏览器 | 支持ES6+ |
 
-> 提示：上述为传统本地开发的最低版本要求。若使用 Docker 部署，默认镜像版本如下：MySQL 5.7、Node 18-alpine（前后端构建/运行）、Nginx alpine；Docker >= 20、Docker Compose >= 2。详见[部署指南文档](./doc/DEPLOYMENT.md)。
+> 提示：上述为传统本地开发的最低版本要求。若使用 Docker 部署，默认镜像版本如下：MySQL 8.0 或 PostgreSQL 16、Node 18-alpine（前后端构建/运行）、Nginx alpine；Docker >= 20、Docker Compose >= 2。详见[部署指南文档](./doc/DEPLOYMENT.md)。
 
 ## 环境配置
 

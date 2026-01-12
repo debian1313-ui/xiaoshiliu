@@ -8,9 +8,11 @@
  * @version v1.3.0
  */
 
-const mysql = require('mysql2/promise');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+
+// 数据库提供者配置
+const databaseProvider = process.env.DATABASE_PROVIDER || 'mysql';
 
 /**
  * 将大小字符串转换为字节数
@@ -62,11 +64,12 @@ const config = {
 
   // 数据库配置
   database: {
+    provider: databaseProvider,
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '123456',
     database: process.env.DB_NAME || 'xiaoshiliu',
-    port: process.env.DB_PORT || 3306,
+    port: process.env.DB_PORT || (databaseProvider === 'postgresql' ? 5432 : 3306),
     charset: 'utf8mb4',
     timezone: '+08:00'
   },
@@ -396,16 +399,25 @@ const config = {
   }
 };
 
-// 数据库连接池配置
-const dbConfig = {
-  ...config.database,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-};
+// 数据库连接池配置 (仅用于 MySQL，PostgreSQL 使用 Prisma)
+let pool = null;
 
-// 创建连接池
-const pool = mysql.createPool(dbConfig);
+if (databaseProvider === 'mysql') {
+  const mysql = require('mysql2/promise');
+  const dbConfig = {
+    host: config.database.host,
+    user: config.database.user,
+    password: config.database.password,
+    database: config.database.database,
+    port: config.database.port,
+    charset: config.database.charset,
+    timezone: config.database.timezone,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+  };
+  pool = mysql.createPool(dbConfig);
+}
 
 // 导入 Prisma Client
 const prisma = require('../utils/prisma');

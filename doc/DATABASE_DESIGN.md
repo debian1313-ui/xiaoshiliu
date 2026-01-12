@@ -4,11 +4,34 @@
 
 基于汐社风格的图文社区项目，简化版数据库结构设计，包含用户管理、内容发布、社交互动等核心功能。
 
+### 支持的数据库
+
+本项目支持以下数据库:
+
+| 数据库 | 版本要求 | Prisma Schema 文件 |
+|--------|----------|-------------------|
+| MySQL | >= 5.7 / 8.0 | `prisma/schema.prisma` (默认) |
+| PostgreSQL | >= 12 | `prisma/schema.postgres.prisma` |
+
 ### 字符集和排序规则
 
+**MySQL:**
 - 数据库字符集：`utf8mb4`
 - 排序规则：`utf8mb4_unicode_ci`
 - 存储引擎：`InnoDB`
+
+**PostgreSQL:**
+- 数据库编码：`UTF8`
+- 排序规则：`en_US.UTF-8` 或 `C.UTF-8`
+
+### 切换数据库
+
+如需从 MySQL 切换到 PostgreSQL:
+
+1. 将 `express-project/prisma/schema.postgres.prisma` 复制为 `express-project/prisma/schema.prisma`
+2. 修改 `.env` 文件中的 `DATABASE_PROVIDER` 和 `DATABASE_URL`
+3. 运行 `npx prisma generate` 重新生成 Prisma Client
+4. 运行 `npx prisma db push` 同步数据库结构
 
 ## 核心数据表结构
 
