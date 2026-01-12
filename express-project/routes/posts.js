@@ -20,6 +20,47 @@ const {
 const POST_TYPE_IMAGE = 1;
 const POST_TYPE_VIDEO = 2;
 
+// Visibility constants
+const VISIBILITY_PUBLIC = 'public';
+const VISIBILITY_PRIVATE = 'private';
+const VISIBILITY_FRIENDS_ONLY = 'friends_only';
+
+// Helper to check if two users mutually follow each other
+async function areMutualFollowers(userId1, userId2) {
+  if (!userId1 || !userId2 || userId1 === userId2) return false;
+  
+  const [follows1to2, follows2to1] = await Promise.all([
+    prisma.follow.findUnique({
+      where: { uk_follow: { follower_id: userId1, following_id: userId2 } }
+    }),
+    prisma.follow.findUnique({
+      where: { uk_follow: { follower_id: userId2, following_id: userId1 } }
+    })
+  ]);
+  
+  return !!(follows1to2 && follows2to1);
+}
+
+// Helper to check if user can view a post based on visibility
+async function canViewPost(post, currentUserId) {
+  // Author can always view their own posts
+  if (currentUserId && post.user_id === currentUserId) return true;
+  
+  const visibility = post.visibility || VISIBILITY_PUBLIC;
+  
+  switch (visibility) {
+    case VISIBILITY_PUBLIC:
+      return true;
+    case VISIBILITY_PRIVATE:
+      return false;
+    case VISIBILITY_FRIENDS_ONLY:
+      if (!currentUserId) return false;
+      return await areMutualFollowers(currentUserId, post.user_id);
+    default:
+      return true;
+  }
+}
+
 // Helper to normalize payment settings (support both camelCase and snake_case)
 function normalizePaymentSettings(settings) {
   if (!settings) return null;
@@ -49,6 +90,7 @@ async function formatPost(post, currentUserId, prisma, options = {}) {
     comment_count: post.comment_count,
     created_at: post.created_at,
     is_draft: post.is_draft,
+    visibility: post.visibility || VISIBILITY_PUBLIC,
     nickname: post.user?.nickname,
     user_avatar: post.user?.avatar,
     author_account: post.user?.user_id,
@@ -108,6 +150,30 @@ router.get('/', optionalAuth, async (req, res) => {
 
     const where = {};
     where.is_draft = isDraft;
+    
+    // Get mutual followers for friends_only visibility filtering
+    let mutualFollowerIds = new Set();
+    if (currentUserId) {
+      // Get users who the current user follows
+      const following = await prisma.follow.findMany({
+        where: { follower_id: currentUserId },
+        select: { following_id: true }
+      });
+      const followingIds = following.map(f => f.following_id);
+      
+      // Get users who follow the current user back (mutual followers)
+      if (followingIds.length > 0) {
+        const mutualFollows = await prisma.follow.findMany({
+          where: {
+            follower_id: { in: followingIds },
+            following_id: currentUserId
+          },
+          select: { follower_id: true }
+        });
+        mutualFollowerIds = new Set(mutualFollows.map(f => f.follower_id));
+      }
+    }
+    
     if (isDraft) {
       if (!currentUserId) {
         return res.status(HTTP_STATUS.UNAUTHORIZED).json({ code: RESPONSE_CODES.UNAUTHORIZED, message: '查看草稿需要登录' });
@@ -115,6 +181,33 @@ router.get('/', optionalAuth, async (req, res) => {
       where.user_id = currentUserId;
     } else if (userId) {
       where.user_id = userId;
+      // When viewing specific user's posts
+      if (currentUserId && currentUserId === userId) {
+        // Author can see all their own posts (no visibility filter)
+      } else if (currentUserId && mutualFollowerIds.has(userId)) {
+        // Mutual follower can see public and friends_only posts
+        where.visibility = { in: [VISIBILITY_PUBLIC, VISIBILITY_FRIENDS_ONLY] };
+      } else {
+        // Others can only see public posts
+        where.visibility = VISIBILITY_PUBLIC;
+      }
+    } else {
+      // When browsing all posts (no specific user)
+      // Show public posts + friends_only posts from mutual followers
+      if (currentUserId && mutualFollowerIds.size > 0) {
+        where.OR = [
+          { visibility: VISIBILITY_PUBLIC },
+          { visibility: VISIBILITY_FRIENDS_ONLY, user_id: { in: Array.from(mutualFollowerIds) } },
+          { user_id: currentUserId } // User's own posts
+        ];
+      } else if (currentUserId) {
+        where.OR = [
+          { visibility: VISIBILITY_PUBLIC },
+          { user_id: currentUserId } // User's own posts
+        ];
+      } else {
+        where.visibility = VISIBILITY_PUBLIC;
+      }
     }
     if (category) where.category_id = category;
     if (type) where.type = type;
@@ -165,6 +258,7 @@ router.get('/', optionalAuth, async (req, res) => {
         comment_count: post.comment_count,
         created_at: post.created_at,
         is_draft: post.is_draft,
+        visibility: post.visibility || VISIBILITY_PUBLIC,
         nickname: post.user?.nickname,
         user_avatar: post.user?.avatar,
         author_account: post.user?.user_id,
@@ -324,6 +418,19 @@ router.get('/:id', optionalAuth, async (req, res) => {
       return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '笔记不存在' });
     }
 
+    // Check visibility permissions
+    const canView = await canViewPost(post, currentUserId);
+    if (!canView) {
+      const visibility = post.visibility || VISIBILITY_PUBLIC;
+      let message = '无权查看该笔记';
+      if (visibility === VISIBILITY_PRIVATE) {
+        message = '该笔记为私密笔记';
+      } else if (visibility === VISIBILITY_FRIENDS_ONLY) {
+        message = '该笔记仅互关好友可见';
+      }
+      return res.status(HTTP_STATUS.FORBIDDEN).json({ code: RESPONSE_CODES.FORBIDDEN, message });
+    }
+
     // Increment view count
     await prisma.post.update({ where: { id: postId }, data: { view_count: { increment: 1 } } });
 
@@ -341,6 +448,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
       comment_count: post.comment_count,
       created_at: post.created_at,
       is_draft: post.is_draft,
+      visibility: post.visibility || VISIBILITY_PUBLIC,
       nickname: post.user?.nickname,
       user_avatar: post.user?.avatar,
       author_account: post.user?.user_id,
@@ -418,12 +526,15 @@ router.get('/:id', optionalAuth, async (req, res) => {
 // 创建笔记
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { title, content, category_id, type = 1, images = [], video, tags = [], is_draft = false, paymentSettings, attachment } = req.body;
+    const { title, content, category_id, type = 1, images = [], video, tags = [], is_draft = false, paymentSettings, attachment, visibility = VISIBILITY_PUBLIC } = req.body;
     const userId = BigInt(req.user.id);
 
     if (!title || !content) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '标题和内容不能为空' });
     }
+
+    // Validate visibility value
+    const validVisibility = [VISIBILITY_PUBLIC, VISIBILITY_PRIVATE, VISIBILITY_FRIENDS_ONLY].includes(visibility) ? visibility : VISIBILITY_PUBLIC;
 
     const sanitizedContent = sanitizeContent(content);
 
@@ -435,7 +546,8 @@ router.post('/', authenticateToken, async (req, res) => {
         content: sanitizedContent,
         category_id: category_id ? parseInt(category_id) : null,
         type: parseInt(type),
-        is_draft
+        is_draft,
+        visibility: validVisibility
       }
     });
 
@@ -558,7 +670,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const postId = BigInt(req.params.id);
     const userId = BigInt(req.user.id);
-    const { title, content, category_id, type, images = [], video, tags = [], is_draft, paymentSettings, attachment } = req.body;
+    const { title, content, category_id, type, images = [], video, tags = [], is_draft, paymentSettings, attachment, visibility } = req.body;
 
     const post = await prisma.post.findUnique({ where: { id: postId }, select: { user_id: true } });
     if (!post) {
@@ -574,6 +686,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (category_id !== undefined) updateData.category_id = category_id ? parseInt(category_id) : null;
     if (type !== undefined) updateData.type = parseInt(type);
     if (is_draft !== undefined) updateData.is_draft = is_draft;
+    if (visibility !== undefined) {
+      // Validate visibility value
+      updateData.visibility = [VISIBILITY_PUBLIC, VISIBILITY_PRIVATE, VISIBILITY_FRIENDS_ONLY].includes(visibility) ? visibility : VISIBILITY_PUBLIC;
+    }
 
     await prisma.post.update({ where: { id: postId }, data: updateData });
 

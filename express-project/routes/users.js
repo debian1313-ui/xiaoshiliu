@@ -1026,8 +1026,30 @@ router.get('/:id/posts', optionalAuth, async (req, res) => {
     }
     const userId = userRecord.id;
 
+    // Check if current user is mutual follower with the target user
+    let isMutualFollower = false;
+    if (currentUserId && currentUserId !== userId) {
+      const [followsTarget, followedByTarget] = await Promise.all([
+        prisma.follow.findUnique({ where: { uk_follow: { follower_id: currentUserId, following_id: userId } } }),
+        prisma.follow.findUnique({ where: { uk_follow: { follower_id: userId, following_id: currentUserId } } })
+      ]);
+      isMutualFollower = !!(followsTarget && followedByTarget);
+    }
+
     // 构建查询条件
     const whereConditions = { user_id: userId, is_draft: false };
+    
+    // Add visibility filter based on viewer relationship
+    if (currentUserId && currentUserId === userId) {
+      // Author viewing their own posts - no visibility filter
+    } else if (isMutualFollower) {
+      // Mutual follower can see public and friends_only posts
+      whereConditions.visibility = { in: ['public', 'friends_only'] };
+    } else {
+      // Others can only see public posts
+      whereConditions.visibility = 'public';
+    }
+    
     if (category) {
       whereConditions.category_id = parseInt(category);
     }
@@ -1085,6 +1107,7 @@ router.get('/:id/posts', optionalAuth, async (req, res) => {
         collect_count: post.collect_count,
         comment_count: post.comment_count,
         created_at: post.created_at,
+        visibility: post.visibility || 'public',
         nickname: post.user?.nickname,
         user_avatar: post.user?.avatar,
         avatar: post.user?.avatar,

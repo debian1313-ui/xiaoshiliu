@@ -43,7 +43,8 @@ router.get('/', optionalAuth, async (req, res) => {
     if (type === 'all' || type === 'posts' || type === 'videos') {
       // 构建Prisma查询条件
       const where = {
-        is_draft: false
+        is_draft: false,
+        visibility: 'public' // Only show public posts in search results
       };
 
       // 关键词搜索条件
@@ -155,6 +156,7 @@ router.get('/', optionalAuth, async (req, res) => {
           comment_count: post.comment_count,
           created_at: post.created_at,
           is_draft: post.is_draft,
+          visibility: post.visibility || 'public',
           nickname: post.user?.nickname,
           user_avatar: post.user?.avatar,
           author_account: post.user?.user_id,

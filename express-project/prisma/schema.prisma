@@ -273,20 +273,28 @@ enum TranscodeStatus {
   none
 }
 
+// 笔记可见性枚举
+enum PostVisibility {
+  public       // 公开 - 所有人可见
+  private      // 私密 - 仅自己可见
+  friends_only // 仅互关好友可见
+}
+
 // 笔记表
 model Post {
-  id            BigInt   @id @default(autoincrement())
+  id            BigInt         @id @default(autoincrement())
   user_id       BigInt
-  title         String   @db.VarChar(200)
-  content       String   @db.Text
+  title         String         @db.VarChar(200)
+  content       String         @db.Text
   category_id   Int?
-  type          Int      @default(1)
-  view_count    BigInt   @default(0)
-  like_count    Int      @default(0)
-  collect_count Int      @default(0)
-  comment_count Int      @default(0)
-  created_at    DateTime @default(now())
-  is_draft      Boolean  @default(true)
+  type          Int            @default(1)
+  view_count    BigInt         @default(0)
+  like_count    Int            @default(0)
+  collect_count Int            @default(0)
+  comment_count Int            @default(0)
+  created_at    DateTime       @default(now())
+  is_draft      Boolean        @default(true)
+  visibility    PostVisibility @default(public)
 
   user            User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
   category        Category?           @relation(fields: [category_id], references: [id], onDelete: SetNull)
@@ -304,6 +312,7 @@ model Post {
   @@index([created_at], name: "idx_created_at")
   @@index([like_count], name: "idx_like_count")
   @@index([category_id, created_at], name: "idx_category_id_created_at")
+  @@index([visibility], name: "idx_visibility")
   @@map("posts")
 }
 
