@@ -574,7 +574,7 @@ const columns = [
     key: 'category',
     label: '分类',
     sortable: false,
-    render: (value) => value?.name || '未分类'
+    formatter: (value) => value?.name || '未分类'
   },
   {
     key: 'is_regex',

@@ -180,8 +180,11 @@
                   {{ item[column.key].substring(0, column.maxLength) }}...
                 </span>
               </span>
+              <span v-else-if="column.formatter">
+                {{ column.formatter(item[column.key], item) }}
+              </span>
               <span v-else>
-                {{ item[column.key] || '-' }}
+                {{ formatCellValue(item[column.key]) }}
               </span>
             </td>
             <td>
@@ -268,7 +271,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, nextTick, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, computed, nextTick, onUnmounted, watch } from 'vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import ConfirmDialog from '../../../components/ConfirmDialog.vue'
 import DetailModal from './DetailModal.vue'
@@ -318,6 +321,10 @@ const props = defineProps({
   customActions: {
     type: Array,
     default: () => []
+  },
+  extraParams: {
+    type: Object,
+    default: () => ({})
   }
 })
 
@@ -523,6 +530,15 @@ const loadData = async (targetPage = null, useCache = true) => {
       ...searchParams
     })
 
+    // 添加额外参数
+    if (props.extraParams) {
+      Object.entries(props.extraParams).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') {
+          params.append(key, value)
+        }
+      })
+    }
+
     // 添加排序参数
     if (sortField.value && sortOrder.value) {
       params.append('sortField', sortField.value)
@@ -619,6 +635,16 @@ const refreshData = () => {
   pagination.page = 1
   loadData()
 }
+
+// 暴露方法供父组件调用
+defineExpose({
+  refresh: refreshData
+})
+
+// 监听 extraParams 变化
+watch(() => props.extraParams, () => {
+  refreshData()
+}, { deep: true })
 
 const emit = defineEmits(['close-filter', 'custom-action'])
 
@@ -1146,6 +1172,16 @@ const closePersonalityTagsModal = () => {
 const formatDate = (dateString) => {
   if (!dateString) return '-'
   return new Date(dateString).toLocaleString('zh-CN')
+}
+
+// 格式化单元格值，处理对象类型
+const formatCellValue = (value) => {
+  if (value === null || value === undefined) return '-'
+  if (typeof value === 'object') {
+    // 如果是对象，尝试获取name属性，否则返回'-'
+    return value.name || '-'
+  }
+  return value || '-'
 }
 
 // 打开用户个人主页
