@@ -393,6 +393,18 @@ const config = {
     apiUrl: process.env.DIFY_API_URL || 'http://aish.yuelk.com/v1/chat-messages',
     // Dify API密钥
     apiKey: process.env.DIFY_API_KEY || ''
+  },
+
+  // Redis 队列配置
+  queue: {
+    // 是否启用异步队列
+    enabled: process.env.QUEUE_ENABLED === 'true', // 默认不启用
+    redis: {
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT) || 6379,
+      password: process.env.REDIS_PASSWORD || undefined,
+      db: parseInt(process.env.REDIS_DB) || 0
+    }
   }
 };
 

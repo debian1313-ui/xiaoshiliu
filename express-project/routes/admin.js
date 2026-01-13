@@ -5,6 +5,7 @@ const { prisma } = require('../config/config')
 const { adminAuth } = require('../utils/uploadHelper')
 const { auditComment } = require('../utils/contentAudit')
 const { batchCleanupFiles } = require('../utils/fileCleanup')
+const { getQueueStats, getQueueJobs, retryJob, cleanQueue, isQueueEnabled, QUEUE_NAMES } = require('../utils/queueService')
 const crypto = require('crypto')
 
 // ===================== AI审核设置 =====================
@@ -2576,6 +2577,87 @@ router.get('/stats/overview', adminAuth, async (req, res) => {
     console.error('获取统计信息失败:', error)
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取失败' })
   }
+})
+
+// ===================== 队列管理 =====================
+
+// 获取队列统计信息
+router.get('/queues', adminAuth, async (req, res) => {
+  try {
+    const stats = await getQueueStats()
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: stats,
+      message: 'success'
+    })
+  } catch (error) {
+    console.error('获取队列统计失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取队列统计失败' })
+  }
+})
+
+// 获取队列任务列表
+router.get('/queues/:name/jobs', adminAuth, async (req, res) => {
+  try {
+    const { name } = req.params
+    const { status = 'waiting', start = 0, end = 20 } = req.query
+
+    const result = await getQueueJobs(name, status, parseInt(start), parseInt(end))
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: result,
+      message: 'success'
+    })
+  } catch (error) {
+    console.error('获取队列任务列表失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取队列任务列表失败' })
+  }
+})
+
+// 重试失败的任务
+router.post('/queues/:name/jobs/:jobId/retry', adminAuth, async (req, res) => {
+  try {
+    const { name, jobId } = req.params
+
+    const result = await retryJob(name, jobId)
+    if (result.success) {
+      res.json({ code: RESPONSE_CODES.SUCCESS, message: result.message })
+    } else {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.ERROR, message: result.message })
+    }
+  } catch (error) {
+    console.error('重试任务失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '重试任务失败' })
+  }
+})
+
+// 清空队列
+router.delete('/queues/:name', adminAuth, async (req, res) => {
+  try {
+    const { name } = req.params
+
+    const result = await cleanQueue(name)
+    if (result.success) {
+      res.json({ code: RESPONSE_CODES.SUCCESS, message: result.message })
+    } else {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.ERROR, message: result.message })
+    }
+  } catch (error) {
+    console.error('清空队列失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '清空队列失败' })
+  }
+})
+
+// 获取队列名称列表
+router.get('/queue-names', adminAuth, (req, res) => {
+  res.json({
+    code: RESPONSE_CODES.SUCCESS,
+    data: {
+      enabled: isQueueEnabled(),
+      names: Object.values(QUEUE_NAMES)
+    },
+    message: 'success'
+  })
 })
 
 module.exports = router

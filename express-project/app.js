@@ -29,6 +29,7 @@ const { execSync } = require('child_process');
 const config = require('./config/config');
 const { HTTP_STATUS, RESPONSE_CODES } = require('./constants');
 const prisma = require('./utils/prisma');
+const { initQueueService, closeQueueService } = require('./utils/queueService');
 
 // 加载环境变量
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
@@ -221,7 +222,10 @@ async function validatePrismaConnection() {
 const PORT = config.server.port;
 
 // 先验证 Prisma 连接，然后启动服务器
-validatePrismaConnection().then((connected) => {
+validatePrismaConnection().then(async (connected) => {
+  // 初始化异步队列服务
+  await initQueueService();
+  
   app.listen(PORT, () => {
     console.log(`● 服务器运行在端口 ${PORT}`);
     console.log(`● 环境: ${config.server.env}`);
@@ -231,8 +235,9 @@ validatePrismaConnection().then((connected) => {
   });
 });
 
-// 优雅关闭 - 断开 Prisma 连接
+// 优雅关闭 - 断开 Prisma 连接和队列服务
 process.on('beforeExit', async () => {
+  await closeQueueService();
   await prisma.$disconnect();
 });
 
