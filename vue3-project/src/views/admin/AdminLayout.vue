@@ -279,6 +279,7 @@ const menuItems = [
   { path: '/admin/sessions', title: '会话管理', icon: 'setting' },
   { path: '/admin/audit', title: '认证管理', icon: 'verified' },
   { path: '/admin/content-review', title: '审核管理', icon: 'warning' },
+  { path: '/admin/queues', title: '队列管理', icon: 'data' },
   { path: '/admin/admins', title: '管理员管理', icon: 'admin' }
 ]
 

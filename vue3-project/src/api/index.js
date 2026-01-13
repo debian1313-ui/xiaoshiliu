@@ -791,6 +791,32 @@ export const adminApi = {
   // 获取动态
   getMonitorActivities() {
     return request.get('/admin/monitor/activities')
+  },
+
+  // ========== 队列管理 ==========
+  // 获取队列统计信息
+  getQueueStats() {
+    return request.get('/admin/queues')
+  },
+
+  // 获取队列名称列表
+  getQueueNames() {
+    return request.get('/admin/queue-names')
+  },
+
+  // 获取队列任务列表
+  getQueueJobs(queueName, params = {}) {
+    return request.get(`/admin/queues/${queueName}/jobs`, { params })
+  },
+
+  // 重试失败的任务
+  retryJob(queueName, jobId) {
+    return request.post(`/admin/queues/${queueName}/jobs/${jobId}/retry`)
+  },
+
+  // 清空队列
+  clearQueue(queueName) {
+    return request.delete(`/admin/queues/${queueName}`)
   }
 }
 

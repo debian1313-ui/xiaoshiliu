@@ -33,6 +33,7 @@ import SessionManagement from '@/views/admin/SessionManagement.vue'
 import AdminManagement from '@/views/admin/AdminManagement.vue'
 import AuditManagement from '@/views/admin/AuditManagement.vue'
 import ContentReviewManagement from '@/views/admin/ContentReviewManagement.vue'
+import QueueManagement from '@/views/admin/QueueManagement.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -261,6 +262,11 @@ const router = createRouter({
           path: 'content-review',
           name: 'admin_content_review',
           component: ContentReviewManagement
+        },
+        {
+          path: 'queues',
+          name: 'admin_queues',
+          component: QueueManagement
         }
       ]
     }
