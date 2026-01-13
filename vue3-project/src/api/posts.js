@@ -175,6 +175,39 @@ export async function getPostList(params = {}) {
             hasMore: response.data.pagination.page < response.data.pagination.pages
           }
         }
+      } else if (type === 'private') {
+        // 获取用户自己的私密笔记
+        const searchParams = new URLSearchParams({
+          page: page.toString(),
+          limit: limit.toString(),
+          visibility: 'private'
+        })
+
+        if (category) {
+          searchParams.append('category', category)
+        }
+
+        if (searchKeyword && searchKeyword.trim()) {
+          searchParams.append('keyword', searchKeyword.trim())
+        }
+
+        if (sort) {
+          searchParams.append('sort', sort)
+        }
+
+        response = await fetch(`${apiConfig.baseURL}/users/${userId}/posts?${searchParams.toString()}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        }).then(res => res.json())
+
+        if (response && response.code === 200 && response.data && response.data.posts) {
+          return {
+            posts: response.data.posts.map(transformPostData),
+            pagination: response.data.pagination,
+            hasMore: response.data.pagination.page < response.data.pagination.pages
+          }
+        }
       }
     } else if ((searchKeyword && searchKeyword.trim()) || (searchTag && searchTag.trim())) {
       // 如果有搜索关键词或标签，使用新的统一搜索API

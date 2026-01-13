@@ -1,7 +1,24 @@
 <template>
   <div class="visibility-selector">
-    <div class="visibility-label">可见性设置</div>
-    <div class="visibility-options">
+    <div class="visibility-trigger" @click="toggleExpanded">
+      <div class="trigger-left">
+        <div class="trigger-icon">{{ currentOption.icon }}</div>
+        <div class="trigger-content">
+          <div class="trigger-label">可见性设置</div>
+          <div class="trigger-value">{{ currentOption.label }}</div>
+        </div>
+      </div>
+      <div class="trigger-right">
+        <SvgIcon 
+          name="down" 
+          width="16" 
+          height="16" 
+          class="expand-icon"
+          :class="{ rotated: expanded }"
+        />
+      </div>
+    </div>
+    <div v-if="expanded" class="visibility-options">
       <div 
         v-for="option in visibilityOptions" 
         :key="option.value" 
@@ -23,6 +40,7 @@
 </template>
 
 <script setup>
+import { ref, computed } from 'vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 
 const props = defineProps({
@@ -33,6 +51,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
+
+const expanded = ref(false)
 
 const visibilityOptions = [
   {
@@ -55,9 +75,18 @@ const visibilityOptions = [
   }
 ]
 
+const currentOption = computed(() => {
+  return visibilityOptions.find(opt => opt.value === props.modelValue) || visibilityOptions[0]
+})
+
+const toggleExpanded = () => {
+  expanded.value = !expanded.value
+}
+
 const selectVisibility = (value) => {
   emit('update:modelValue', value)
   emit('change', value)
+  expanded.value = false
 }
 </script>
 
@@ -66,23 +95,10 @@ const selectVisibility = (value) => {
   margin-top: 12px;
 }
 
-.visibility-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-color-primary);
-  margin-bottom: 12px;
-}
-
-.visibility-options {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.visibility-option {
+.visibility-trigger {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
   padding: 12px 16px;
   background: var(--bg-color-secondary);
   border: 1px solid var(--border-color-primary);
@@ -91,9 +107,79 @@ const selectVisibility = (value) => {
   transition: all 0.2s ease;
 }
 
-.visibility-option:hover {
+.visibility-trigger:hover {
   border-color: var(--primary-color);
   background: var(--bg-color-primary);
+}
+
+.trigger-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.trigger-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.trigger-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trigger-label {
+  font-size: 12px;
+  color: var(--text-color-tertiary);
+}
+
+.trigger-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-color-primary);
+}
+
+.trigger-right {
+  display: flex;
+  align-items: center;
+}
+
+.expand-icon {
+  color: var(--text-color-tertiary);
+  transition: transform 0.2s ease;
+}
+
+.expand-icon.rotated {
+  transform: rotate(180deg);
+}
+
+.visibility-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--bg-color-secondary);
+  border: 1px solid var(--border-color-primary);
+  border-radius: 8px;
+}
+
+.visibility-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-color-primary);
+  border: 1px solid var(--border-color-primary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.visibility-option:hover {
+  border-color: var(--primary-color);
+  background: var(--bg-color-secondary);
 }
 
 .visibility-option.selected {

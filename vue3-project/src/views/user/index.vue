@@ -15,6 +15,9 @@ import BackToTopButton from '@/components/BackToTopButton.vue'
 import ImageViewer from '@/components/ImageViewer.vue'
 import VerifiedBadge from '@/components/VerifiedBadge.vue'
 
+// Tab宽度常量（用于滑块位置计算）
+const TAB_WIDTH = 64
+
 const router = useRouter()
 const navigationStore = useNavigationStore()
 const userStore = useUserStore()
@@ -166,6 +169,7 @@ const { width: windowWidth } = useWindowSize()
 // tab栏相关
 const tabs = ref([
   { name: 'posts', label: '笔记' },
+  { name: 'private', label: '私密' },
   { name: 'collections', label: '收藏' },
   { name: 'likes', label: '点赞' }
 ])
@@ -177,6 +181,7 @@ const fixedTabBarRef = ref(null)
 // 添加刷新键，用于触发WaterfallFlow组件重新加载数据
 const refreshKeys = ref({
   posts: 0,
+  private: 0,
   collections: 0,
   likes: 0
 })
@@ -185,18 +190,20 @@ const refreshKeys = ref({
 const sliderStyle = computed(() => {
   const index = tabs.value.findIndex(tab => tab.name === activeTab.value)
   const isLargeScreen = windowWidth.value > 900
+  const tabCount = tabs.value.length
+  const centerOffset = (tabCount * TAB_WIDTH) / 2
 
   if (isLargeScreen) {
     // 大屏：tab容器居中，max-width: 700px，无padding-left
     // 指示器需要相对于居中的tab容器定位
     return {
-      left: `calc(50% - 96px + ${index * 64}px)`
+      left: `calc(50% - ${centerOffset}px + ${index * TAB_WIDTH}px)`
     }
   } else {
     // 小屏：tab容器有padding-left: 16px，justify-content: center
     // 由于左边有16px padding，需要稍微向左调整以补偿视觉偏移
     return {
-      left: `calc(50% - 88px + ${index * 64}px)`
+      left: `calc(50% - ${centerOffset - 8}px + ${index * TAB_WIDTH}px)`
     }
   }
 })
@@ -204,20 +211,35 @@ const sliderStyle = computed(() => {
 const fixedSliderStyle = computed(() => {
   const index = tabs.value.findIndex(tab => tab.name === activeTab.value)
   const isLargeScreen = windowWidth.value > 900
+  const tabCount = tabs.value.length
+  const centerOffset = (tabCount * TAB_WIDTH) / 2
 
   if (isLargeScreen) {
     return {
-      left: `calc(220px + (100vw - 220px - 192px) / 2 + ${index * 64}px)`
+      left: `calc(220px + (100vw - 220px - 192px) / 2 - ${centerOffset - TAB_WIDTH / 2}px + ${index * TAB_WIDTH}px)`
     }
   } else {
     // 小屏：与普通tab相同的布局
     return {
-      left: `calc(50% - 88px + ${index * 64}px)`
+      left: `calc(50% - ${centerOffset - 8}px + ${index * TAB_WIDTH}px)`
     }
   }
 })
 
-
+// 计算tab内容的transform值
+function getTabTransform(tabName) {
+  const tabOrder = tabs.value.map(tab => tab.name)
+  const activeIndex = tabOrder.indexOf(activeTab.value)
+  const tabIndex = tabOrder.indexOf(tabName)
+  
+  if (activeIndex === tabIndex) {
+    return 'translateX(0%)'
+  } else if (tabIndex < activeIndex) {
+    return 'translateX(-100%)'
+  } else {
+    return 'translateX(100%)'
+  }
+}
 
 function onTabClick(tabName) {
   // 在切换tab前立即检查当前滚动位置
@@ -381,16 +403,23 @@ function handleCollect(data) {
     <div class="content-switch-container" v-if="userStore.isLoggedIn">
 
       <div class="content-item" :class="{ active: activeTab === 'posts' }"
-        :style="{ transform: activeTab === 'posts' ? 'translateX(0%)' : 'translateX(-100%)' }">
+        :style="{ transform: getTabTransform('posts') }">
         <div class="waterfall-container">
           <WaterfallFlow :userId="userStore.userInfo?.user_id" :type="'posts'" :refreshKey="refreshKeys.posts"
             @follow="handleFollow" @unfollow="handleUnfollow" @like="handleLike" @collect="handleCollect" />
         </div>
       </div>
 
+      <div class="content-item" :class="{ active: activeTab === 'private' }"
+        :style="{ transform: getTabTransform('private') }">
+        <div class="waterfall-container">
+          <WaterfallFlow :userId="userStore.userInfo?.user_id" :type="'private'" :refreshKey="refreshKeys.private"
+            @follow="handleFollow" @unfollow="handleUnfollow" @like="handleLike" @collect="handleCollect" />
+        </div>
+      </div>
 
       <div class="content-item" :class="{ active: activeTab === 'collections' }"
-        :style="{ transform: activeTab === 'collections' ? 'translateX(0%)' : activeTab === 'posts' ? 'translateX(100%)' : 'translateX(-100%)' }">
+        :style="{ transform: getTabTransform('collections') }">
         <div class="waterfall-container">
           <WaterfallFlow :userId="userStore.userInfo?.user_id" :type="'collections'"
             :refreshKey="refreshKeys.collections" @follow="handleFollow" @unfollow="handleUnfollow" @like="handleLike"
@@ -400,7 +429,7 @@ function handleCollect(data) {
 
 
       <div class="content-item" :class="{ active: activeTab === 'likes' }"
-        :style="{ transform: activeTab === 'likes' ? 'translateX(0%)' : 'translateX(100%)' }">
+        :style="{ transform: getTabTransform('likes') }">
         <div class="waterfall-container">
           <WaterfallFlow :userId="userStore.userInfo?.user_id" :type="'likes'" :refreshKey="refreshKeys.likes"
             @follow="handleFollow" @unfollow="handleUnfollow" @like="handleLike" @collect="handleCollect" />

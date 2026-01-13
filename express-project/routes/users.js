@@ -1014,6 +1014,7 @@ router.get('/:id/posts', optionalAuth, async (req, res) => {
     const category = req.query.category;
     const keyword = req.query.keyword;
     const sort = req.query.sort || 'created_at';
+    const visibilityFilter = req.query.visibility;
 
     // 始终通过汐社号查找对应的数字ID
     const userRecord = await prisma.user.findUnique({
@@ -1041,7 +1042,12 @@ router.get('/:id/posts', optionalAuth, async (req, res) => {
     
     // Add visibility filter based on viewer relationship
     if (currentUserId && currentUserId === userId) {
-      // Author viewing their own posts - no visibility filter
+      // Author viewing their own posts
+      // If visibility filter is specified, apply it (for private tab)
+      if (visibilityFilter && ['public', 'private', 'friends_only'].includes(visibilityFilter)) {
+        whereConditions.visibility = visibilityFilter;
+      }
+      // Otherwise no visibility filter - show all
     } else if (isMutualFollower) {
       // Mutual follower can see public and friends_only posts
       whereConditions.visibility = { in: ['public', 'friends_only'] };
