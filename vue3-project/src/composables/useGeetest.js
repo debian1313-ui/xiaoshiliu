@@ -74,7 +74,7 @@ export function useGeetest(options = {}) {
           captchaId: id,
           product: product,
           language: 'zho', // 简体中文
-          protocol: window.location.protocol
+          protocol: 'https://' // 强制使用https协议，避免相对路径问题
         }, (obj) => {
           captchaObj = obj
 
