@@ -279,6 +279,7 @@ const menuItems = [
   { path: '/admin/sessions', title: '会话管理', icon: 'setting' },
   { path: '/admin/audit', title: '认证管理', icon: 'verified' },
   { path: '/admin/content-review', title: '审核管理', icon: 'warning' },
+  { path: '/admin/banned-words', title: '违禁词管理', icon: 'unpassed' },
   { path: '/admin/queues', title: '队列管理', icon: 'data' },
   { path: '/admin/admins', title: '管理员管理', icon: 'admin' }
 ]
@@ -306,6 +307,7 @@ const currentPageDescription = computed(() => {
     '/admin/sessions': '管理用户登录会话',
     '/admin/audit': '管理用户认证申请和审核',
     '/admin/content-review': '审核评论和昵称等内容',
+    '/admin/banned-words': '管理本地违禁词，支持通配符',
     '/admin/admins': '管理系统管理员账号'
   }
   return descriptions[route.path]

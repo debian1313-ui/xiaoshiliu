@@ -34,6 +34,7 @@ import AdminManagement from '@/views/admin/AdminManagement.vue'
 import AuditManagement from '@/views/admin/AuditManagement.vue'
 import ContentReviewManagement from '@/views/admin/ContentReviewManagement.vue'
 import QueueManagement from '@/views/admin/QueueManagement.vue'
+import BannedWordsManagement from '@/views/admin/BannedWordsManagement.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -267,6 +268,11 @@ const router = createRouter({
           path: 'queues',
           name: 'admin_queues',
           component: QueueManagement
+        },
+        {
+          path: 'banned-words',
+          name: 'admin_banned_words',
+          component: BannedWordsManagement
         }
       ]
     }

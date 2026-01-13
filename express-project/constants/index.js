@@ -51,8 +51,11 @@ const PAID_CONTENT = {
 
 // 审核类型常量
 const AUDIT_TYPES = {
-  PERSONAL: 1,  // 个人认证
-  BUSINESS: 2   // 企业认证
+  PERSONAL: 1,    // 个人认证
+  BUSINESS: 2,    // 企业认证
+  COMMENT: 3,     // 评论审核
+  NICKNAME: 4,    // 昵称审核
+  BIO: 5          // 个人简介审核
 };
 
 // 审核状态常量
@@ -62,11 +65,19 @@ const AUDIT_STATUS = {
   REJECTED: 2   // 已拒绝
 };
 
+// 违禁词类型常量
+const BANNED_WORD_TYPES = {
+  USERNAME: 1,  // 用户名/昵称
+  COMMENT: 2,   // 评论内容
+  BIO: 3        // 个人简介
+};
+
 module.exports = {
   HTTP_STATUS,
   RESPONSE_CODES,
   ERROR_MESSAGES,
   PAID_CONTENT,
   AUDIT_TYPES,
-  AUDIT_STATUS
+  AUDIT_STATUS,
+  BANNED_WORD_TYPES
 };

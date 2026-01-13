@@ -62,6 +62,7 @@ const getRedisConnection = () => {
 const QUEUE_NAMES = {
   IP_LOCATION: 'ip-location-update',
   CONTENT_AUDIT: 'content-audit',
+  AUDIT_LOG: 'audit-log',
   GENERAL_TASK: 'general-task'
 };
 
@@ -241,6 +242,38 @@ async function initWorkers(connection) {
             }
           });
         }
+
+        // 如果是个人简介审核，审核不通过则设置bio_audit_status为2
+        if (type === 'bio' && targetId) {
+          if (result.passed) {
+            await prisma.user.update({
+              where: { id: BigInt(targetId) },
+              data: { bio_audit_status: 1 }
+            });
+            console.log(`✅ 个人简介审核通过 - 用户ID: ${targetId}`);
+          } else {
+            await prisma.user.update({
+              where: { id: BigInt(targetId) },
+              data: { bio_audit_status: 2 }
+            });
+            console.log(`⚠️ 个人简介审核不通过 - 用户ID: ${targetId}, 原因: ${result.reason || '个人简介不符合社区规范'}`);
+          }
+          
+          // 创建审核记录
+          await prisma.audit.create({
+            data: {
+              user_id: BigInt(targetId),
+              type: 5, // 个人简介审核
+              target_id: BigInt(targetId),
+              content: content.substring(0, 500),
+              risk_level: result.risk_level || 'unknown',
+              categories: result.categories || [],
+              reason: result.passed ? '个人简介审核通过' : `[AI自动审核拒绝] 个人简介不符合规范。原因: ${result.reason || '个人简介不符合社区规范'}`,
+              status: result.passed ? 1 : 2,
+              audit_time: new Date()
+            }
+          });
+        }
         
         console.log(`✅ 内容审核完成 - 类型: ${type}, 结果: ${result.passed ? '通过' : '不通过'}`);
         return { success: true, result };
@@ -250,6 +283,41 @@ async function initWorkers(connection) {
       }
     },
     { connection, concurrency: queueConfig.concurrency.contentAudit }
+  );
+
+  // 审核日志 Worker
+  workers[QUEUE_NAMES.AUDIT_LOG] = new Worker(
+    QUEUE_NAMES.AUDIT_LOG,
+    async (job) => {
+      const { userId, type, targetId, content, auditResult, riskLevel, categories, reason, status } = job.data;
+      console.log(`🔄 处理审核日志写入任务 - 类型: ${type}, 用户: ${userId}`);
+      
+      try {
+        const { prisma } = require('../config/config');
+        
+        await prisma.audit.create({
+          data: {
+            user_id: BigInt(userId),
+            type: type,
+            target_id: targetId ? BigInt(targetId) : null,
+            content: content.substring(0, 500),
+            audit_result: auditResult,
+            risk_level: riskLevel || 'unknown',
+            categories: categories || [],
+            reason: reason || '',
+            status: status,
+            audit_time: status !== 0 ? new Date() : null
+          }
+        });
+        
+        console.log(`✅ 审核日志写入成功 - 类型: ${type}, 用户: ${userId}`);
+        return { success: true };
+      } catch (error) {
+        console.error(`❌ 审核日志写入失败 - 类型: ${type}`, error.message);
+        throw error;
+      }
+    },
+    { connection, concurrency: queueConfig.concurrency.generalTask }
   );
 
   // 通用任务 Worker
@@ -337,6 +405,61 @@ async function addContentAuditTask(content, userId, type, targetId = null) {
     return job;
   } catch (error) {
     console.error('添加内容审核任务失败:', error.message);
+    return null;
+  }
+}
+
+/**
+ * 添加审核日志写入任务到队列
+ * @param {Object} auditData - 审核日志数据
+ * @param {number} auditData.userId - 用户 ID
+ * @param {number} auditData.type - 审核类型
+ * @param {number} auditData.targetId - 目标 ID (可选)
+ * @param {string} auditData.content - 审核内容
+ * @param {Object} auditData.auditResult - 审核结果 (可选)
+ * @param {string} auditData.riskLevel - 风险等级
+ * @param {Array} auditData.categories - 分类
+ * @param {string} auditData.reason - 原因
+ * @param {number} auditData.status - 状态 (0:待审核 1:通过 2:拒绝)
+ */
+async function addAuditLogTask(auditData) {
+  if (!queueConfig.enabled || !isInitialized) {
+    // 队列未启用时，同步写入
+    try {
+      const { prisma } = require('../config/config');
+      await prisma.audit.create({
+        data: {
+          user_id: BigInt(auditData.userId),
+          type: auditData.type,
+          target_id: auditData.targetId ? BigInt(auditData.targetId) : null,
+          content: auditData.content.substring(0, 500),
+          audit_result: auditData.auditResult,
+          risk_level: auditData.riskLevel || 'unknown',
+          categories: auditData.categories || [],
+          reason: auditData.reason || '',
+          status: auditData.status,
+          audit_time: auditData.status !== 0 ? new Date() : null
+        }
+      });
+      console.log(`📝 审核日志同步写入成功 - 类型: ${auditData.type}, 用户: ${auditData.userId}`);
+    } catch (error) {
+      console.error('审核日志同步写入失败:', error.message);
+    }
+    return null;
+  }
+
+  try {
+    const queue = queues[QUEUE_NAMES.AUDIT_LOG];
+    const job = await queue.add('write-audit-log', auditData, {
+      attempts: queueConfig.retry.attempts,
+      backoff: { type: 'exponential', delay: queueConfig.retry.backoffDelay },
+      removeOnComplete: 100,
+      removeOnFail: 50
+    });
+    console.log(`📝 审核日志任务已加入队列 - 类型: ${auditData.type}, 任务 ID: ${job.id}`);
+    return job;
+  } catch (error) {
+    console.error('添加审核日志任务失败:', error.message);
     return null;
   }
 }
@@ -601,6 +724,7 @@ module.exports = {
   initQueueService,
   addIPLocationTask,
   addContentAuditTask,
+  addAuditLogTask,
   addGeneralTask,
   getQueueStats,
   getQueueJobs,

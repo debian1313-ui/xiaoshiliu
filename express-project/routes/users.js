@@ -6,6 +6,9 @@ const { prisma } = require('../config/config');
 const { optionalAuth, authenticateToken } = require('../middleware/auth');
 const NotificationHelper = require('../utils/notificationHelper');
 const { protectPostListItem } = require('../utils/paidContentHelper');
+const { auditNickname, isAuditEnabled } = require('../utils/contentAudit');
+const { addContentAuditTask, addAuditLogTask, isQueueEnabled } = require('../utils/queueService');
+const { checkUsernameBannedWords, checkBioBannedWords, getBannedWordAuditResult } = require('../utils/bannedWordsChecker');
 
 // 内容最大长度限制
 const MAX_CONTENT_LENGTH = 1000;
@@ -275,9 +278,10 @@ router.get('/:id/personality-tags', async (req, res) => {
 });
 
 // 获取用户信息
-router.get('/:id', async (req, res) => {
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const userIdParam = req.params.id;
+    const currentUserId = req.user ? BigInt(req.user.id) : null;
 
     // 只通过汐社号(user_id)进行查找
     const user = await prisma.user.findUnique({
@@ -292,13 +296,33 @@ router.get('/:id', async (req, res) => {
       });
     }
 
+    // 判断是否是本人
+    const isOwner = currentUserId && currentUserId === user.id;
+
+    // 处理个人简介的可见性
+    let displayBio = user.bio;
+    let bioAuditStatus = user.bio_audit_status;
+    
+    if (!isOwner) {
+      // 非本人查看：检查简介审核状态
+      if (bioAuditStatus === 0) {
+        // 待审核：显示提示文字
+        displayBio = '正在等待审核';
+      } else if (bioAuditStatus === 2) {
+        // 已拒绝：隐藏简介
+        displayBio = '';
+      }
+      // 已通过(1)：正常显示
+    }
+
     // 格式化用户数据
     const userData = {
       id: Number(user.id),
       user_id: user.user_id,
       nickname: user.nickname,
       avatar: user.avatar,
-      bio: user.bio,
+      bio: displayBio,
+      bio_audit_status: isOwner ? bioAuditStatus : undefined, // 仅本人可见审核状态
       location: user.location,
       follow_count: user.follow_count,
       fans_count: user.fans_count,
@@ -368,7 +392,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     // 始终通过汐社号查找对应的数字ID
     const userRecord = await prisma.user.findUnique({
       where: { user_id: userIdParam },
-      select: { id: true }
+      select: { id: true, nickname: true, bio: true }
     });
 
     if (!userRecord) {
@@ -386,9 +410,17 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '昵称不能为空' });
     }
 
-    const updateData = { nickname: nickname.trim() };
+    const trimmedNickname = nickname.trim();
+    const trimmedBio = bio !== undefined ? (bio || '').trim() : undefined;
+
+    // 检查昵称是否有修改
+    const nicknameChanged = trimmedNickname !== userRecord.nickname;
+    // 检查个人简介是否有修改
+    const bioChanged = trimmedBio !== undefined && trimmedBio !== (userRecord.bio || '');
+
+    const updateData = { nickname: trimmedNickname };
     if (avatar !== undefined) updateData.avatar = avatar || '';
-    if (bio !== undefined) updateData.bio = bio || '';
+    if (trimmedBio !== undefined) updateData.bio = trimmedBio;
     if (location !== undefined) updateData.location = location || '';
     if (gender !== undefined) updateData.gender = gender || null;
     if (zodiac_sign !== undefined) updateData.zodiac_sign = zodiac_sign || null;
@@ -397,14 +429,103 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (major !== undefined) updateData.major = major || null;
     if (interests !== undefined) updateData.interests = interests || null;
 
+    // 检查昵称违禁词
+    if (nicknameChanged) {
+      const nicknameCheck = await checkUsernameBannedWords(prisma, trimmedNickname);
+      if (nicknameCheck.matched) {
+        // 触发本地违禁词，记录并拒绝
+        addAuditLogTask({
+          userId: Number(targetUserId),
+          type: AUDIT_TYPES.NICKNAME,
+          targetId: Number(targetUserId),
+          content: trimmedNickname,
+          auditResult: getBannedWordAuditResult(nicknameCheck.matchedWords),
+          riskLevel: 'high',
+          categories: ['banned_word'],
+          reason: `[本地违禁词拦截] 昵称触发违禁词: ${nicknameCheck.matchedWords.join(', ')}`,
+          status: 2
+        });
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({
+          code: RESPONSE_CODES.VALIDATION_ERROR,
+          message: '昵称包含违禁词，请修改后重试'
+        });
+      }
+      
+      // 如果启用了审核，添加异步审核任务
+      if (isAuditEnabled()) {
+        if (isQueueEnabled()) {
+          addContentAuditTask(trimmedNickname, Number(targetUserId), 'nickname', Number(targetUserId));
+        } else {
+          // 同步审核
+          const auditResult = await auditNickname(trimmedNickname, Number(targetUserId));
+          addAuditLogTask({
+            userId: Number(targetUserId),
+            type: AUDIT_TYPES.NICKNAME,
+            targetId: Number(targetUserId),
+            content: trimmedNickname,
+            auditResult: auditResult,
+            riskLevel: auditResult?.risk_level || 'low',
+            categories: auditResult?.categories || [],
+            reason: auditResult?.passed ? '[AI审核通过] 昵称审核通过' : `[AI审核] ${auditResult?.reason || '昵称审核未通过'}`,
+            status: auditResult?.passed ? 1 : 0
+          });
+        }
+      }
+    }
+
+    // 检查个人简介违禁词
+    if (bioChanged && trimmedBio) {
+      const bioCheck = await checkBioBannedWords(prisma, trimmedBio);
+      if (bioCheck.matched) {
+        // 触发本地违禁词，设置简介为待审核状态
+        updateData.bio_audit_status = 2; // 拒绝
+        addAuditLogTask({
+          userId: Number(targetUserId),
+          type: AUDIT_TYPES.BIO,
+          targetId: Number(targetUserId),
+          content: trimmedBio,
+          auditResult: getBannedWordAuditResult(bioCheck.matchedWords),
+          riskLevel: 'high',
+          categories: ['banned_word'],
+          reason: `[本地违禁词拦截] 个人简介触发违禁词: ${bioCheck.matchedWords.join(', ')}`,
+          status: 2
+        });
+      } else if (isAuditEnabled()) {
+        // 需要审核，设置为待审核状态
+        updateData.bio_audit_status = 0;
+        if (isQueueEnabled()) {
+          addContentAuditTask(trimmedBio, Number(targetUserId), 'bio', Number(targetUserId));
+        } else {
+          // 同步审核
+          const auditResult = await auditNickname(trimmedBio, Number(targetUserId)); // 复用昵称审核
+          const passed = auditResult?.passed !== false;
+          updateData.bio_audit_status = passed ? 1 : 2;
+          addAuditLogTask({
+            userId: Number(targetUserId),
+            type: AUDIT_TYPES.BIO,
+            targetId: Number(targetUserId),
+            content: trimmedBio,
+            auditResult: auditResult,
+            riskLevel: auditResult?.risk_level || 'low',
+            categories: auditResult?.categories || [],
+            reason: passed ? '[AI审核通过] 个人简介审核通过' : `[AI审核拒绝] ${auditResult?.reason || '个人简介不符合规范'}`,
+            status: passed ? 1 : 2
+          });
+        }
+      } else {
+        // 未启用审核，直接通过
+        updateData.bio_audit_status = 1;
+      }
+    }
+
     await prisma.user.update({ where: { id: targetUserId }, data: updateData });
 
     const updatedUser = await prisma.user.findUnique({
       where: { id: targetUserId },
       select: {
-        id: true, user_id: true, nickname: true, avatar: true, bio: true, location: true, email: true,
-        gender: true, zodiac_sign: true, mbti: true, education: true, major: true, interests: true,
-        follow_count: true, fans_count: true, like_count: true
+        id: true, user_id: true, nickname: true, avatar: true, bio: true, bio_audit_status: true,
+        location: true, email: true, gender: true, zodiac_sign: true, mbti: true, education: true,
+        major: true, interests: true, follow_count: true, fans_count: true, like_count: true
       }
     });
 

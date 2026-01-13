@@ -47,6 +47,21 @@ model Audit {
   @@map("audit")
 }
 
+// 违禁词表
+model BannedWord {
+  id         Int      @id @default(autoincrement())
+  word       String   @db.VarChar(100)
+  type       Int      @db.TinyInt // 1:用户名 2:评论内容 3:个人简介
+  is_regex   Boolean  @default(false) // 是否为正则表达式/通配符模式
+  enabled    Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([type], name: "idx_banned_word_type")
+  @@index([enabled], name: "idx_banned_word_enabled")
+  @@map("banned_words")
+}
+
 // 分类表
 model Category {
   id             Int      @id @default(autoincrement())
@@ -427,6 +442,7 @@ model User {
   email          String?   @db.VarChar(100)
   avatar         String?   @db.VarChar(500)
   bio            String?   @db.Text
+  bio_audit_status Int     @default(1) @db.TinyInt // 0:待审核 1:已通过 2:已拒绝
   location       String?   @db.VarChar(100)
   follow_count   Int       @default(0)
   fans_count     Int       @default(0)
