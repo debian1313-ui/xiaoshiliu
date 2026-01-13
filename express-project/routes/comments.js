@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { HTTP_STATUS, RESPONSE_CODES, ERROR_MESSAGES, AUDIT_TYPES, BANNED_WORD_TYPES } = require('../constants');
+const { HTTP_STATUS, RESPONSE_CODES, ERROR_MESSAGES, AUDIT_TYPES, AUDIT_STATUS, BANNED_WORD_TYPES } = require('../constants');
 const { prisma } = require('../config/config');
 const { authenticateToken, optionalAuth } = require('../middleware/auth');
 const NotificationHelper = require('../utils/notificationHelper');
@@ -241,7 +241,7 @@ router.post('/', authenticateToken, async (req, res) => {
         riskLevel: 'high',
         categories: ['banned_word'],
         reason: `[本地违禁词拦截] 触发违禁词: ${bannedWordCheck.matchedWords.join(', ')}`,
-        status: 2 // 直接拒绝
+        status: AUDIT_STATUS.REJECTED
       });
       
       return res.status(HTTP_STATUS.OK).json({
@@ -255,10 +255,10 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     // 进行内容审核
-    let auditStatus = isAuditEnabled() ? 0 : 1;
+    let auditStatus = isAuditEnabled() ? AUDIT_STATUS.PENDING : AUDIT_STATUS.APPROVED;
     let isPublic = isAuditEnabled() ? false : true;
     let auditResult = null;
-    let auditRecordStatus = 0;
+    let auditRecordStatus = AUDIT_STATUS.PENDING;
     let shouldDeleteComment = false;
     let useAsyncAudit = false;
 
@@ -267,7 +267,7 @@ router.post('/', authenticateToken, async (req, res) => {
     if (isAuditEnabled() && isQueueEnabled()) {
       // 使用异步审核：评论先创建为待审核状态，后台处理审核
       useAsyncAudit = true;
-      auditStatus = 0;
+      auditStatus = AUDIT_STATUS.PENDING;
       isPublic = false;
       console.log('📝 使用异步队列进行内容审核');
     } else if (isAuditEnabled()) {
@@ -292,14 +292,14 @@ router.post('/', authenticateToken, async (req, res) => {
           
           if (auditResult.passed !== undefined) {
             if (auditResult.passed === true) {
-              auditStatus = 1;
+              auditStatus = AUDIT_STATUS.APPROVED;
               isPublic = true;
-              auditRecordStatus = 1;
+              auditRecordStatus = AUDIT_STATUS.APPROVED;
               detailedReason = `[AI自动审核通过] ${detailedReason}`;
             } else {
-              auditStatus = 2;
+              auditStatus = AUDIT_STATUS.REJECTED;
               isPublic = false;
-              auditRecordStatus = 2;
+              auditRecordStatus = AUDIT_STATUS.REJECTED;
               shouldDeleteComment = true;
               detailedReason = `[AI自动审核拒绝] ${detailedReason}`;
             }
@@ -329,7 +329,7 @@ router.post('/', authenticateToken, async (req, res) => {
           riskLevel: 'unknown',
           categories: [],
           reason: '审核服务异常，需人工审核',
-          status: 0
+          status: AUDIT_STATUS.PENDING
         });
       }
     }

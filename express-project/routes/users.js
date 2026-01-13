@@ -6,7 +6,7 @@ const { prisma } = require('../config/config');
 const { optionalAuth, authenticateToken } = require('../middleware/auth');
 const NotificationHelper = require('../utils/notificationHelper');
 const { protectPostListItem } = require('../utils/paidContentHelper');
-const { auditNickname, isAuditEnabled } = require('../utils/contentAudit');
+const { auditNickname, auditBio, isAuditEnabled } = require('../utils/contentAudit');
 const { addContentAuditTask, addAuditLogTask, isQueueEnabled } = require('../utils/queueService');
 const { checkUsernameBannedWords, checkBioBannedWords, getBannedWordAuditResult } = require('../utils/bannedWordsChecker');
 
@@ -443,7 +443,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
           riskLevel: 'high',
           categories: ['banned_word'],
           reason: `[本地违禁词拦截] 昵称触发违禁词: ${nicknameCheck.matchedWords.join(', ')}`,
-          status: 2
+          status: AUDIT_STATUS.REJECTED
         });
         return res.status(HTTP_STATUS.BAD_REQUEST).json({
           code: RESPONSE_CODES.VALIDATION_ERROR,
@@ -467,7 +467,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
             riskLevel: auditResult?.risk_level || 'low',
             categories: auditResult?.categories || [],
             reason: auditResult?.passed ? '[AI审核通过] 昵称审核通过' : `[AI审核] ${auditResult?.reason || '昵称审核未通过'}`,
-            status: auditResult?.passed ? 1 : 0
+            status: auditResult?.passed ? AUDIT_STATUS.APPROVED : AUDIT_STATUS.PENDING
           });
         }
       }
@@ -488,18 +488,18 @@ router.put('/:id', authenticateToken, async (req, res) => {
           riskLevel: 'high',
           categories: ['banned_word'],
           reason: `[本地违禁词拦截] 个人简介触发违禁词: ${bioCheck.matchedWords.join(', ')}`,
-          status: 2
+          status: AUDIT_STATUS.REJECTED
         });
       } else if (isAuditEnabled()) {
         // 需要审核，设置为待审核状态
-        updateData.bio_audit_status = 0;
+        updateData.bio_audit_status = AUDIT_STATUS.PENDING;
         if (isQueueEnabled()) {
           addContentAuditTask(trimmedBio, Number(targetUserId), 'bio', Number(targetUserId));
         } else {
           // 同步审核
-          const auditResult = await auditNickname(trimmedBio, Number(targetUserId)); // 复用昵称审核
+          const auditResult = await auditBio(trimmedBio, Number(targetUserId));
           const passed = auditResult?.passed !== false;
-          updateData.bio_audit_status = passed ? 1 : 2;
+          updateData.bio_audit_status = passed ? AUDIT_STATUS.APPROVED : AUDIT_STATUS.REJECTED;
           addAuditLogTask({
             userId: Number(targetUserId),
             type: AUDIT_TYPES.BIO,
@@ -509,12 +509,12 @@ router.put('/:id', authenticateToken, async (req, res) => {
             riskLevel: auditResult?.risk_level || 'low',
             categories: auditResult?.categories || [],
             reason: passed ? '[AI审核通过] 个人简介审核通过' : `[AI审核拒绝] ${auditResult?.reason || '个人简介不符合规范'}`,
-            status: passed ? 1 : 2
+            status: passed ? AUDIT_STATUS.APPROVED : AUDIT_STATUS.REJECTED
           });
         }
       } else {
         // 未启用审核，直接通过
-        updateData.bio_audit_status = 1;
+        updateData.bio_audit_status = AUDIT_STATUS.APPROVED;
       }
     }
 

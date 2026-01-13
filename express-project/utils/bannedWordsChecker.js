@@ -20,16 +20,31 @@ const CACHE_TTL = 60000; // 缓存60秒
  * 将通配符模式转换为正则表达式
  * 支持 * (匹配任意字符) 和 ? (匹配单个字符)
  * @param {string} pattern - 通配符模式
- * @returns {RegExp} 正则表达式
+ * @returns {RegExp|null} 正则表达式，如果模式无效则返回null
  */
 function wildcardToRegex(pattern) {
-  // 转义特殊正则字符，但保留 * 和 ?
-  let regexStr = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&') // 转义特殊字符
-    .replace(/\*/g, '.*')  // * 匹配任意字符
-    .replace(/\?/g, '.');  // ? 匹配单个字符
+  // 限制模式长度以防止ReDoS
+  if (!pattern || pattern.length > 100) {
+    return null;
+  }
   
-  return new RegExp(regexStr, 'i'); // 不区分大小写
+  // 限制连续的通配符数量
+  if (/\*{3,}/.test(pattern)) {
+    return null;
+  }
+  
+  try {
+    // 转义特殊正则字符，但保留 * 和 ?
+    let regexStr = pattern
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&') // 转义特殊字符
+      .replace(/\*+/g, '.*?')  // * 匹配任意字符(非贪婪模式)
+      .replace(/\?/g, '.');   // ? 匹配单个字符
+    
+    return new RegExp(regexStr, 'i'); // 不区分大小写
+  } catch (e) {
+    console.error('无效的正则模式:', pattern, e.message);
+    return null;
+  }
 }
 
 /**

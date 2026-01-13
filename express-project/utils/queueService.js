@@ -66,6 +66,9 @@ const QUEUE_NAMES = {
   GENERAL_TASK: 'general-task'
 };
 
+// 内容截断长度常量
+const CONTENT_TRUNCATE_LENGTH = 500;
+
 // 存储所有队列实例
 const queues = {};
 const workers = {};
@@ -203,7 +206,7 @@ async function initWorkers(connection) {
               user_id: BigInt(userId),
               type: 3, // 评论审核
               target_id: BigInt(targetId),
-              content: content.substring(0, 500),
+              content: content.substring(0, CONTENT_TRUNCATE_LENGTH),
               risk_level: result.risk_level || 'unknown',
               categories: result.categories || [],
               reason: result.passed ? '审核通过' : `[AI自动审核拒绝] ${result.reason || '内容不符合社区规范'}`,
@@ -265,7 +268,7 @@ async function initWorkers(connection) {
               user_id: BigInt(targetId),
               type: 5, // 个人简介审核
               target_id: BigInt(targetId),
-              content: content.substring(0, 500),
+              content: content.substring(0, CONTENT_TRUNCATE_LENGTH),
               risk_level: result.risk_level || 'unknown',
               categories: result.categories || [],
               reason: result.passed ? '个人简介审核通过' : `[AI自动审核拒绝] 个人简介不符合规范。原因: ${result.reason || '个人简介不符合社区规范'}`,
@@ -300,7 +303,7 @@ async function initWorkers(connection) {
             user_id: BigInt(userId),
             type: type,
             target_id: targetId ? BigInt(targetId) : null,
-            content: content.substring(0, 500),
+            content: content.substring(0, CONTENT_TRUNCATE_LENGTH),
             audit_result: auditResult,
             risk_level: riskLevel || 'unknown',
             categories: categories || [],
@@ -432,7 +435,7 @@ async function addAuditLogTask(auditData) {
           user_id: BigInt(auditData.userId),
           type: auditData.type,
           target_id: auditData.targetId ? BigInt(auditData.targetId) : null,
-          content: auditData.content.substring(0, 500),
+          content: auditData.content.substring(0, CONTENT_TRUNCATE_LENGTH),
           audit_result: auditData.auditResult,
           risk_level: auditData.riskLevel || 'unknown',
           categories: auditData.categories || [],

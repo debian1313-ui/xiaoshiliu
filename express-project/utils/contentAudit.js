@@ -139,6 +139,16 @@ async function auditNickname(nickname, userId) {
 }
 
 /**
+ * 审核个人简介内容
+ * @param {string} bio - 个人简介内容
+ * @param {number|string} userId - 用户ID
+ * @returns {Promise<Object>} 审核结果
+ */
+async function auditBio(bio, userId) {
+  return auditContent(bio, `user-bio-${userId}`);
+}
+
+/**
  * 检查内容审核是否启用
  * @returns {boolean} 是否启用
  */
@@ -150,5 +160,6 @@ module.exports = {
   auditContent,
   auditComment,
   auditNickname,
+  auditBio,
   isAuditEnabled
 };
