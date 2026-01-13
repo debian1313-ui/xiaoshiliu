@@ -3025,6 +3025,14 @@ onUnmounted(() => {
     window.visualViewport.removeEventListener('resize', adjustMobilePadding)
     window.visualViewport.removeEventListener('scroll', adjustMobilePadding)
   }
+  
+  // 确保视频在组件卸载时暂停播放
+  if (videoPlayer.value?.pause) {
+    videoPlayer.value.pause()
+  }
+  if (mobileVideoPlayer.value?.pause) {
+    mobileVideoPlayer.value.pause()
+  }
 })
 
 watch(isInputFocused, async (newValue) => {

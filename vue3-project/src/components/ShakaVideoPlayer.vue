@@ -1092,6 +1092,26 @@ const setupVideoListeners = () => {
   videoContainer.value.addEventListener('touchstart', showControls)
 }
 
+// 页面可见性变化处理函数（用于暂停视频当用户切换标签页或打开新标签页）
+let visibilityChangeHandler = null
+
+const setupVisibilityListener = () => {
+  visibilityChangeHandler = () => {
+    if (document.hidden && videoElement.value && !videoElement.value.paused) {
+      console.log('🎬 [ShakaVideoPlayer] 页面隐藏，暂停视频播放')
+      videoElement.value.pause()
+    }
+  }
+  document.addEventListener('visibilitychange', visibilityChangeHandler)
+}
+
+const cleanupVisibilityListener = () => {
+  if (visibilityChangeHandler) {
+    document.removeEventListener('visibilitychange', visibilityChangeHandler)
+    visibilityChangeHandler = null
+  }
+}
+
 // 监听 src 变化
 watch(() => props.src, (newSrc) => {
   if (!newSrc) return
@@ -1153,6 +1173,7 @@ onMounted(() => {
     previewDuration: props.previewDuration
   })
   setupVideoListeners()
+  setupVisibilityListener()
   if (props.src) {
     initPlayer()
   }
@@ -1166,6 +1187,12 @@ onBeforeUnmount(() => {
   if (reEnableAbrTimer) {
     clearTimeout(reEnableAbrTimer)
   }
+  
+  // 先暂停视频播放，确保导航离开时停止播放
+  if (videoElement.value) {
+    videoElement.value.pause()
+  }
+  
   if (player) {
     // 移除adaptation事件监听器
     player.removeEventListener('adaptation', onAdaptation)
@@ -1193,6 +1220,9 @@ onBeforeUnmount(() => {
       videoElement.value.removeEventListener('webkitendfullscreen', webkitEndFullscreenHandler)
     }
   }
+  
+  // 清理页面可见性变化监听器
+  cleanupVisibilityListener()
 })
 
 // 处理解锁按钮点击
