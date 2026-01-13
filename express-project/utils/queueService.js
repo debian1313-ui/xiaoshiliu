@@ -767,5 +767,6 @@ module.exports = {
   cleanQueue,
   isQueueEnabled,
   closeQueueService,
+  generateRandomNickname,
   QUEUE_NAMES
 };
