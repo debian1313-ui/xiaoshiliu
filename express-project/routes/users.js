@@ -454,10 +454,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
         } else {
           // 同步审核
           const auditResult = await auditNickname(trimmedNickname, Number(targetUserId));
+          let replacementNickname = null;
           if (!auditResult?.passed) {
             // AI审核不通过，生成随机昵称替换
-            const randomNickname = generateRandomNickname();
-            updateData.nickname = randomNickname;
+            replacementNickname = generateRandomNickname();
+            updateData.nickname = replacementNickname;
           }
           addAuditLogTask({
             userId: Number(targetUserId),
@@ -467,7 +468,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
             auditResult: auditResult,
             riskLevel: auditResult?.risk_level || 'low',
             categories: auditResult?.categories || [],
-            reason: auditResult?.passed ? '[AI审核通过] 昵称审核通过' : `[AI审核拒绝] ${auditResult?.reason || '昵称审核未通过'}，已自动替换为随机昵称`,
+            reason: auditResult?.passed ? '[AI审核通过] 昵称审核通过' : `[AI审核拒绝] ${auditResult?.reason || '昵称审核未通过'}，已自动替换为随机昵称: ${replacementNickname}`,
             status: auditResult?.passed ? AUDIT_STATUS.APPROVED : AUDIT_STATUS.REJECTED
           });
         }
