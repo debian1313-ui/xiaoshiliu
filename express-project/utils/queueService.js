@@ -10,6 +10,18 @@ const { Queue, Worker, QueueEvents } = require('bullmq');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
+/**
+ * 生成随机昵称（英文和数字组合）
+ * 用于昵称审核不通过时替换
+ * @returns {string} 随机昵称
+ */
+function generateRandomNickname() {
+  const prefix = 'user';
+  const randomStr = Math.random().toString(36).substring(2, 8);
+  const randomNum = Math.floor(Math.random() * 1000);
+  return `${prefix}_${randomStr}${randomNum}`;
+}
+
 // 队列配置
 let queueConfig = {
   enabled: process.env.QUEUE_ENABLED === 'true',
@@ -194,6 +206,36 @@ async function initWorkers(connection) {
               risk_level: result.risk_level || 'unknown',
               categories: result.categories || [],
               reason: result.passed ? '审核通过' : `[AI自动审核拒绝] ${result.reason || '内容不符合社区规范'}`,
+              status: result.passed ? 1 : 2,
+              audit_time: new Date()
+            }
+          });
+        }
+        
+        // 如果是昵称审核，审核不通过则修改为随机昵称
+        if (type === 'nickname' && targetId) {
+          if (result.passed) {
+            console.log(`✅ 昵称审核通过 - 用户ID: ${targetId}`);
+          } else {
+            // 审核不通过：生成随机昵称并更新
+            const randomNickname = generateRandomNickname();
+            await prisma.user.update({
+              where: { id: BigInt(targetId) },
+              data: { nickname: randomNickname }
+            });
+            console.log(`⚠️ 昵称审核不通过，已修改为随机昵称 - 用户ID: ${targetId}, 新昵称: ${randomNickname}, 原因: ${result.reason || '昵称不符合社区规范'}`);
+          }
+          
+          // 创建审核记录
+          await prisma.audit.create({
+            data: {
+              user_id: BigInt(targetId),
+              type: 4, // 昵称审核
+              target_id: BigInt(targetId),
+              content: content.substring(0, 100),
+              risk_level: result.risk_level || 'unknown',
+              categories: result.categories || [],
+              reason: result.passed ? '昵称审核通过' : `[AI自动审核] 昵称不符合规范，已修改为随机昵称。原因: ${result.reason || '昵称不符合社区规范'}`,
               status: result.passed ? 1 : 2,
               audit_time: new Date()
             }
@@ -410,7 +452,9 @@ async function getQueueJobs(queueName, status = 'waiting', start = 0, end = 20) 
         processedOn: job.processedOn,
         finishedOn: job.finishedOn,
         attempts: job.attemptsMade,
-        failedReason: job.failedReason
+        failedReason: job.failedReason,
+        // 包含任务返回结果（如AI审核结果）
+        returnValue: job.returnvalue || null
       }))
     };
   } catch (error) {
@@ -477,6 +521,52 @@ function isQueueEnabled() {
 }
 
 /**
+ * 获取单个任务的详细信息
+ * @param {string} queueName - 队列名称
+ * @param {string} jobId - 任务 ID
+ */
+async function getJobDetails(queueName, jobId) {
+  if (!queueConfig.enabled || !isInitialized) {
+    return { enabled: false, job: null };
+  }
+
+  const queue = queues[queueName];
+  if (!queue) {
+    return { enabled: true, error: '队列不存在', job: null };
+  }
+
+  try {
+    const job = await queue.getJob(jobId);
+    if (!job) {
+      return { enabled: true, error: '任务不存在', job: null };
+    }
+
+    const state = await job.getState();
+    
+    return {
+      enabled: true,
+      job: {
+        id: job.id,
+        name: job.name,
+        data: job.data,
+        timestamp: job.timestamp,
+        processedOn: job.processedOn,
+        finishedOn: job.finishedOn,
+        attempts: job.attemptsMade,
+        failedReason: job.failedReason,
+        returnValue: job.returnvalue || null,
+        state: state,
+        progress: job.progress,
+        stacktrace: job.stacktrace || []
+      }
+    };
+  } catch (error) {
+    console.error(`获取任务 ${jobId} 详情失败:`, error.message);
+    return { enabled: true, error: error.message, job: null };
+  }
+}
+
+/**
  * 关闭队列服务
  */
 async function closeQueueService() {
@@ -514,6 +604,7 @@ module.exports = {
   addGeneralTask,
   getQueueStats,
   getQueueJobs,
+  getJobDetails,
   retryJob,
   cleanQueue,
   isQueueEnabled,

@@ -5,7 +5,7 @@ const { prisma } = require('../config/config')
 const { adminAuth } = require('../utils/uploadHelper')
 const { auditComment } = require('../utils/contentAudit')
 const { batchCleanupFiles } = require('../utils/fileCleanup')
-const { getQueueStats, getQueueJobs, retryJob, cleanQueue, isQueueEnabled, QUEUE_NAMES } = require('../utils/queueService')
+const { getQueueStats, getQueueJobs, getJobDetails, retryJob, cleanQueue, isQueueEnabled, QUEUE_NAMES } = require('../utils/queueService')
 const crypto = require('crypto')
 
 // ===================== AI审核设置 =====================
@@ -2611,6 +2611,27 @@ router.get('/queues/:name/jobs', adminAuth, async (req, res) => {
   } catch (error) {
     console.error('获取队列任务列表失败:', error)
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取队列任务列表失败' })
+  }
+})
+
+// 获取单个任务详情（包含完整的返回结果数据）
+router.get('/queues/:name/jobs/:jobId', adminAuth, async (req, res) => {
+  try {
+    const { name, jobId } = req.params
+
+    const result = await getJobDetails(name, jobId)
+    if (result.error) {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.ERROR, message: result.error })
+    } else {
+      res.json({
+        code: RESPONSE_CODES.SUCCESS,
+        data: result,
+        message: 'success'
+      })
+    }
+  } catch (error) {
+    console.error('获取任务详情失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取任务详情失败' })
   }
 })
 
