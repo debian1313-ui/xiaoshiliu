@@ -662,7 +662,7 @@ const closeBackgroundCropModal = () => {
   }
 }
 
-const handleBackgroundCropConfirm = async (blob) => {
+const handleBackgroundCropConfirm = (blob) => {
   try {
     // 将裁剪后的图片转换为base64，暂存在form中
     const reader = new FileReader()

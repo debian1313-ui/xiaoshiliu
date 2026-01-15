@@ -54,11 +54,17 @@ export default {
     const cropImage = ref(null)
     let cropper = null
 
+    // 背景图输出配置
+    const OUTPUT_WIDTH = 800
+    const OUTPUT_HEIGHT = 450
+    const ASPECT_RATIO = 16 / 9
+    const IMAGE_QUALITY = 0.9
+
     // 初始化裁剪器 - 使用横屏比例 (16:9)
     const initCropper = () => {
       if (cropImage.value && props.imageSrc) {
         cropper = new Cropper(cropImage.value, {
-          aspectRatio: 16 / 9,  // 横屏比例
+          aspectRatio: ASPECT_RATIO,
           viewMode: 1,
           dragMode: 'move',
           autoCropArea: 0.8,
@@ -105,15 +111,15 @@ export default {
     const handleConfirm = () => {
       if (cropper) {
         const canvas = cropper.getCroppedCanvas({
-          width: 800,
-          height: 450,
+          width: OUTPUT_WIDTH,
+          height: OUTPUT_HEIGHT,
           imageSmoothingEnabled: true,
           imageSmoothingQuality: 'high'
         })
         
         canvas.toBlob((blob) => {
           emit('confirm', blob)
-        }, 'image/jpeg', 0.9)
+        }, 'image/jpeg', IMAGE_QUALITY)
       }
     }
 
