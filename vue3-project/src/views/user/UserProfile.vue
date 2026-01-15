@@ -255,18 +255,18 @@ onMounted(async () => {
   <div class="content-container">
 
     <div class="user-info" v-if="userInfo.nickname">
+      <!-- 背景图 - 覆盖整个用户信息区域 -->
+      <div class="background-image-container">
+        <img 
+          v-if="userInfo.background" 
+          :src="userInfo.background" 
+          alt="背景图" 
+          class="background-image"
+        />
+        <div v-else class="background-placeholder"></div>
+        <div class="background-overlay"></div>
+      </div>
       <div class="basic-info">
-        <!-- 背景图 -->
-        <div class="background-image-container">
-          <img 
-            v-if="userInfo.background" 
-            :src="userInfo.background" 
-            alt="背景图" 
-            class="background-image"
-          />
-          <div v-else class="background-placeholder"></div>
-          <div class="background-overlay"></div>
-        </div>
         <img :src="userInfo.avatar || defaultAvatar" :alt="userInfo.nickname || '用户头像'" class="avatar"
           @click="previewAvatar" @error="handleAvatarError">
         <div class="user-basic">
@@ -404,25 +404,13 @@ onMounted(async () => {
   width: 100%;
   max-width: 1200px;
   overflow-x: hidden;
-  background: var(--bg-color-primary);
-  transition: background-color 0.2s ease;
-}
-
-.basic-info {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  height: 120px;
-  width: 100%;
-  padding: 0 16px;
   position: relative;
-  overflow: hidden;
   border-radius: 12px;
   margin: 0 16px;
   max-width: calc(100% - 32px);
 }
 
-/* 背景图容器 */
+/* 背景图容器 - 覆盖整个用户信息区域 */
 .background-image-container {
   position: absolute;
   top: 0;
@@ -452,8 +440,18 @@ onMounted(async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(to right, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.2) 100%);
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.5) 100%);
   pointer-events: none;
+}
+
+.basic-info {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: 100%;
+  padding: 0 16px;
+  position: relative;
+  z-index: 1;
 }
 
 .avatar {
@@ -548,9 +546,12 @@ onMounted(async () => {
 
 .user-desc {
   margin: 17px 0px 0px;
-  color: var(--text-color-primary);
+  color: #ffffff;
   font-size: 14px;
   padding: 0 16px;
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .user-interactions {
@@ -558,6 +559,8 @@ onMounted(async () => {
   padding: 0 16px;
   flex-wrap: wrap;
   width: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .user-interactions div {
@@ -575,7 +578,7 @@ onMounted(async () => {
 }
 
 .interaction-item:hover {
-  background-color: var(--bg-color-secondary);
+  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .interaction-item:last-child {
@@ -587,17 +590,36 @@ onMounted(async () => {
 }
 
 .count {
-  color: var(--text-color-primary);
+  color: #ffffff;
   margin-right: 4px;
   font-size: 14px;
   text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .shows {
-  color: var(--text-color-quaternary);
+  color: rgba(255, 255, 255, 0.85);
   margin: 4px 0 0;
   font-size: 14px;
   text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* 用户信息区域内的个性标签样式覆盖 */
+.user-info :deep(.personality-tags) {
+  position: relative;
+  z-index: 1;
+}
+
+.user-info :deep(.tag) {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(4px);
+}
+
+.user-info :deep(.tag .gender-icon) {
+  color: #ffffff;
 }
 
 /* ---------- 3.5. 关注按钮样式 ---------- */
