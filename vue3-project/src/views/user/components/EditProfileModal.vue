@@ -27,6 +27,27 @@
             </div>
           </div>
 
+          <div class="form-group">
+            <label class="form-label">背景图:</label>
+            <div class="background-upload-container">
+              <div class="background-upload-area" @click="triggerBackgroundFileInput" @dragover.prevent @drop.prevent="handleBackgroundDrop">
+                <div v-if="!backgroundUploading" class="background-preview">
+                  <img v-if="form.background" :src="form.background" alt="背景图" class="background-preview-image" />
+                  <div v-else class="background-placeholder-preview">
+                    <SvgIcon name="image" width="24" height="24" />
+                    <span>点击上传背景图</span>
+                  </div>
+                  <SvgIcon class="overlay-icon" name="edit" width="24" height="24" />
+                </div>
+                <div v-else class="upload-loading">
+                  <div class="loading-spinner"></div>
+                  <span class="loading-text">上传中...</span>
+                </div>
+              </div>
+              <input ref="backgroundFileInput" type="file" accept="image/*" @change="handleBackgroundFileSelect" style="display: none;" />
+            </div>
+          </div>
+
 
           <div class="form-group">
             <label class="form-label">昵称:</label>
@@ -144,6 +165,9 @@
   <CropModal :visible="showCropModal" :image-src="cropImageSrc" :uploading="uploading" @close="closeCropModal"
     @confirm="handleCropConfirm" />
 
+  <BackgroundCropModal :visible="showBackgroundCropModal" :image-src="backgroundCropImageSrc" :uploading="backgroundUploading" @close="closeBackgroundCropModal"
+    @confirm="handleBackgroundCropConfirm" />
+
 
   <div v-if="showEmojiPanel" class="emoji-panel-overlay" v-click-outside.mousedown="closeEmojiPanel"
     v-escape-key="closeEmojiPanel">
@@ -172,6 +196,7 @@ import DropdownSelect from '@/components/DropdownSelect.vue'
 import MbtiPicker from '@/components/MbtiPicker.vue'
 import MentionModal from '@/components/mention/MentionModal.vue'
 import ContentEditableInput from '@/components/ContentEditableInput.vue'
+import BackgroundCropModal from './BackgroundCropModal.vue'
 import CropModal from './CropModal.vue'
 import { useScrollLock } from '@/composables/useScrollLock'
 import { sanitizeContent } from '@/utils/contentSecurity'
@@ -315,12 +340,14 @@ const form = reactive({
   avatar: '',
   nickname: '',
   bio: '',
+  background: '', // 背景图
 
   gender: '',
   zodiac_sign: '',
   mbti: '',
   interests: [],
-  avatarBlob: null // 存储裁剪后的图片blob
+  avatarBlob: null, // 存储裁剪后的图片blob
+  backgroundBlob: null // 存储裁剪后的背景图blob
 })
 
 // 兴趣爱好相关
@@ -340,6 +367,12 @@ const fileInput = ref(null)
 const uploading = ref(false)
 const avatarError = ref('')
 const saving = ref(false)
+
+// 背景图上传相关
+const backgroundFileInput = ref(null)
+const backgroundUploading = ref(false)
+const showBackgroundCropModal = ref(false)
+const backgroundCropImageSrc = ref('')
 
 // 选项数据
 const genderOptions = [
@@ -427,6 +460,7 @@ watch(() => props.visible, (newValue) => {
     form.avatar = isValidAvatar ? props.userInfo.avatar : defaultAvatar
     form.nickname = props.userInfo.nickname || ''
     form.bio = props.userInfo.bio || ''
+    form.background = props.userInfo.background || ''
 
     form.gender = props.userInfo.gender || ''
     form.zodiac_sign = props.userInfo.zodiac_sign || ''
@@ -454,6 +488,7 @@ watch(() => props.visible, (newValue) => {
 
     avatarError.value = ''
     newInterest.value = ''
+    form.backgroundBlob = null
   } else {
     // 解锁滚动
     unlock()
@@ -578,6 +613,68 @@ const handleCropConfirm = async (blob) => {
   } catch (error) {
     console.error('处理图片失败:', error)
     avatarError.value = '处理图片失败，请重试'
+  }
+}
+
+// 背景图上传相关方法
+const triggerBackgroundFileInput = () => {
+  backgroundFileInput.value?.click()
+}
+
+const handleBackgroundFileSelect = (event) => {
+  const file = event.target.files[0]
+  if (file) {
+    showBackgroundCropDialog(file)
+  }
+}
+
+const handleBackgroundDrop = (event) => {
+  event.preventDefault()
+  const files = event.dataTransfer.files
+  if (files.length > 0) {
+    showBackgroundCropDialog(files[0])
+  }
+}
+
+const showBackgroundCropDialog = async (file) => {
+  if (!validateFile(file)) {
+    return
+  }
+
+  try {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      backgroundCropImageSrc.value = e.target.result
+      showBackgroundCropModal.value = true
+    }
+    reader.readAsDataURL(file)
+  } catch (error) {
+    console.error('文件读取失败:', error)
+    $message.error('文件读取失败，请重试')
+  }
+}
+
+const closeBackgroundCropModal = () => {
+  showBackgroundCropModal.value = false
+  backgroundCropImageSrc.value = ''
+  if (backgroundFileInput.value) {
+    backgroundFileInput.value.value = ''
+  }
+}
+
+const handleBackgroundCropConfirm = async (blob) => {
+  try {
+    // 将裁剪后的图片转换为base64，暂存在form中
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      form.background = e.target.result
+      form.backgroundBlob = blob // 保存blob用于后续上传
+      closeBackgroundCropModal()
+    }
+    reader.readAsDataURL(blob)
+  } catch (error) {
+    console.error('处理背景图失败:', error)
+    $message.error('处理背景图失败，请重试')
   }
 }
 
@@ -729,6 +826,7 @@ const handleSave = async () => {
     const formData = { ...form }
     formData.bio = sanitizedBio
     delete formData.avatarBlob
+    delete formData.backgroundBlob
     delete formData.location
     if (form.avatarBlob) {
       uploading.value = true
@@ -752,6 +850,32 @@ const handleSave = async () => {
         return
       } finally {
         uploading.value = false
+      }
+    }
+
+    // 上传背景图
+    if (form.backgroundBlob) {
+      backgroundUploading.value = true
+
+      try {
+        const result = await imageUploadApi.uploadCroppedImage(form.backgroundBlob, {
+          filename: 'background.jpg'
+        })
+
+        if (result.success) {
+          formData.background = result.data.url
+          console.log('背景图上传成功:', result.data.url)
+        } else {
+          console.error('背景图上传失败:', result.message)
+          $message.error(result.message || '背景图上传失败，请重试')
+          return
+        }
+      } catch (error) {
+        console.error('背景图上传异常:', error)
+        $message.error('背景图上传失败，请重试')
+        return
+      } finally {
+        backgroundUploading.value = false
       }
     }
 
@@ -1168,6 +1292,73 @@ const handleSave = async () => {
 
 .avatar-upload-area:hover .avatar-image {
   filter: brightness(0.6);
+}
+
+/* 背景图上传样式 */
+.background-upload-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.background-upload-area {
+  position: relative;
+  width: 100%;
+  height: 100px;
+  border: 2px dashed #ddd;
+  border-radius: 8px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.background-upload-area:hover {
+  border-color: var(--primary-color);
+}
+
+.background-preview {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.background-preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.background-placeholder-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-color-secondary);
+  font-size: 14px;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-color-secondary);
+  border-radius: 6px;
+}
+
+.background-upload-area:hover .overlay-icon {
+  opacity: 0.9;
+  color: #ffffff;
+  transform: scale(1.1);
+}
+
+.background-upload-area:hover .background-preview-image {
+  filter: brightness(0.6);
+}
+
+.background-upload-area:hover .background-placeholder-preview {
+  background: var(--bg-color-tertiary);
 }
 
 .upload-loading {

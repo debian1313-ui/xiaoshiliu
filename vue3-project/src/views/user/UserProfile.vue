@@ -256,6 +256,17 @@ onMounted(async () => {
 
     <div class="user-info" v-if="userInfo.nickname">
       <div class="basic-info">
+        <!-- 背景图 -->
+        <div class="background-image-container">
+          <img 
+            v-if="userInfo.background" 
+            :src="userInfo.background" 
+            alt="背景图" 
+            class="background-image"
+          />
+          <div v-else class="background-placeholder"></div>
+          <div class="background-overlay"></div>
+        </div>
         <img :src="userInfo.avatar || defaultAvatar" :alt="userInfo.nickname || '用户头像'" class="avatar"
           @click="previewAvatar" @error="handleAvatarError">
         <div class="user-basic">
@@ -401,18 +412,59 @@ onMounted(async () => {
   display: flex;
   flex-direction: row;
   align-items: center;
-  height: 72px;
+  height: 120px;
   width: 100%;
   padding: 0 16px;
   position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  margin: 0 16px;
+  max-width: calc(100% - 32px);
+}
+
+/* 背景图容器 */
+.background-image-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.background-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.background-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, var(--bg-color-secondary) 0%, var(--bg-color-tertiary) 100%);
+}
+
+.background-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.2) 100%);
+  pointer-events: none;
 }
 
 .avatar {
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  border: 1px solid var(--border-color-primary);
+  border: 3px solid rgba(255, 255, 255, 0.9);
   cursor: pointer;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .user-basic {
@@ -421,25 +473,29 @@ onMounted(async () => {
   flex: 1;
   margin-left: 16px;
   gap: 6px;
+  position: relative;
+  z-index: 1;
 }
 
 
 .user-nickname {
-  color: var(--text-color-primary);
+  color: #ffffff;
   font-size: 18px;
   font-weight: bold;
   gap: 6px;
   align-items: center;
   display: flex;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .user-content {
   display: flex;
   flex-direction: column;
-  color: var(--text-color-quaternary);
+  color: rgba(255, 255, 255, 0.85);
   font-size: 12px;
   gap: 4px;
   max-width: 100%;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 /* 大屏幕下恢复横向布局 */
@@ -550,6 +606,7 @@ onMounted(async () => {
   right: 16px;
   top: 50%;
   transform: translateY(-50%);
+  z-index: 1;
 }
 
 /* ---------- 3.6. 加载和错误状态样式 ---------- */
@@ -777,7 +834,12 @@ onMounted(async () => {
   }
 
   /* 内边距调整 */
-  .basic-info,
+  .basic-info {
+    padding: 0 16px;
+    margin: 0;
+    max-width: 100%;
+  }
+
   .user-desc,
   .user-interactions {
     padding: 0;
@@ -785,7 +847,7 @@ onMounted(async () => {
 
   /* 关注按钮在大屏下的位置调整 */
   .follow-button-wrapper {
-    right: 0;
+    right: 16px;
   }
 
   /* Tab栏响应式 */
