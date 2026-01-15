@@ -456,6 +456,7 @@ model User {
   nickname       String    @db.VarChar(100)
   email          String?   @db.VarChar(100)
   avatar         String?   @db.VarChar(500)
+  background     String?   @db.VarChar(500) // 用户个人主页背景图
   bio            String?   @db.Text
   bio_audit_status Int     @default(1) @db.TinyInt // 0:待审核 1:已通过 2:已拒绝
   location       String?   @db.VarChar(100)

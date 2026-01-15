@@ -321,6 +321,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
       user_id: user.user_id,
       nickname: user.nickname,
       avatar: user.avatar,
+      background: user.background, // 用户背景图
       bio: displayBio,
       bio_audit_status: isOwner ? bioAuditStatus : undefined, // 仅本人可见审核状态
       location: user.location,
@@ -387,7 +388,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const userIdParam = req.params.id;
     const currentUserId = BigInt(req.user.id);
-    const { nickname, avatar, bio, location, gender, zodiac_sign, mbti, education, major, interests } = req.body;
+    const { nickname, avatar, background, bio, location, gender, zodiac_sign, mbti, education, major, interests } = req.body;
 
     // 始终通过汐社号查找对应的数字ID
     const userRecord = await prisma.user.findUnique({
@@ -420,6 +421,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     const updateData = { nickname: trimmedNickname };
     if (avatar !== undefined) updateData.avatar = avatar || '';
+    if (background !== undefined) updateData.background = background || ''; // 背景图
     if (trimmedBio !== undefined) updateData.bio = trimmedBio;
     if (location !== undefined) updateData.location = location || '';
     if (gender !== undefined) updateData.gender = gender || null;
@@ -530,7 +532,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const updatedUser = await prisma.user.findUnique({
       where: { id: targetUserId },
       select: {
-        id: true, user_id: true, nickname: true, avatar: true, bio: true, bio_audit_status: true,
+        id: true, user_id: true, nickname: true, avatar: true, background: true, bio: true, bio_audit_status: true,
         location: true, email: true, gender: true, zodiac_sign: true, mbti: true, education: true,
         major: true, interests: true, follow_count: true, fans_count: true, like_count: true
       }

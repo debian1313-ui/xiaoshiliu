@@ -798,7 +798,7 @@ router.post('/login', async (req, res) => {
     // 查找用户
     const user = await prisma.user.findUnique({
       where: { user_id: user_id.toString() },
-      select: { id: true, user_id: true, nickname: true, password: true, avatar: true, bio: true, location: true, follow_count: true, fans_count: true, like_count: true, is_active: true, gender: true, zodiac_sign: true, mbti: true, education: true, major: true, interests: true }
+      select: { id: true, user_id: true, nickname: true, password: true, avatar: true, background: true, bio: true, location: true, follow_count: true, fans_count: true, like_count: true, is_active: true, gender: true, zodiac_sign: true, mbti: true, education: true, major: true, interests: true }
     });
 
     if (!user) {
@@ -997,7 +997,7 @@ router.get('/me', authenticateToken, async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { id: BigInt(userId) },
-      select: { id: true, user_id: true, nickname: true, avatar: true, bio: true, location: true, email: true, follow_count: true, fans_count: true, like_count: true, is_active: true, created_at: true, gender: true, zodiac_sign: true, mbti: true, education: true, major: true, interests: true, verified: true }
+      select: { id: true, user_id: true, nickname: true, avatar: true, background: true, bio: true, location: true, email: true, follow_count: true, fans_count: true, like_count: true, is_active: true, created_at: true, gender: true, zodiac_sign: true, mbti: true, education: true, major: true, interests: true, verified: true }
     });
 
     if (!user) {
@@ -1337,7 +1337,7 @@ router.put('/admin/admins/:id/password', authenticateToken, async (req, res) => 
 // ========== OAuth2 登录相关 ==========
 
 // OAuth2用户信息查询字段（减少重复）
-const OAUTH2_USER_SELECT_FIELDS = { id: true, user_id: true, nickname: true, avatar: true, bio: true, location: true, follow_count: true, fans_count: true, like_count: true, is_active: true, gender: true, zodiac_sign: true, mbti: true, education: true, major: true, interests: true };
+const OAUTH2_USER_SELECT_FIELDS = { id: true, user_id: true, nickname: true, avatar: true, background: true, bio: true, location: true, follow_count: true, fans_count: true, like_count: true, is_active: true, gender: true, zodiac_sign: true, mbti: true, education: true, major: true, interests: true };
 
 // 生成OAuth2 state参数
 const generateOAuth2State = () => {
