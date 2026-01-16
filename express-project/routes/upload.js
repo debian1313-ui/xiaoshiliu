@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const { authenticateToken } = require('../middleware/auth');
 const { uploadFile, uploadVideo, uploadImage } = require('../utils/uploadHelper');
 const transcodingQueue = require('../utils/transcodingQueue');
+const { addVideoTranscodingTask, isQueueEnabled } = require('../utils/queueService');
 const config = require('../config/config');
 const { pool } = require('../config/config');
 const { 
@@ -323,14 +324,23 @@ router.post('/video', authenticateToken, videoUpload.fields([
         console.log('🎬 将视频添加到转码队列...');
         const originalVideoUrl = uploadResult.url;
         
-        // 添加到转码队列（异步处理，不阻塞响应）
-        const taskId = transcodingQueue.addTask(
-          uploadResult.filePath,
-          req.user.id,
-          originalVideoUrl
-        );
-        
-        console.log(`✅ 视频已加入转码队列 [任务ID: ${taskId}]`);
+        // 优先使用BullMQ队列，如果队列未启用则使用内存队列
+        if (isQueueEnabled()) {
+          const job = await addVideoTranscodingTask(
+            uploadResult.filePath,
+            req.user.id,
+            originalVideoUrl
+          );
+          console.log(`✅ 视频已加入BullMQ转码队列 [任务ID: ${job?.id}]`);
+        } else {
+          // 回退到内存队列
+          const taskId = transcodingQueue.addTask(
+            uploadResult.filePath,
+            req.user.id,
+            originalVideoUrl
+          );
+          console.log(`✅ 视频已加入内存转码队列 [任务ID: ${taskId}]`);
+        }
       } catch (error) {
         console.error('❌ 添加到转码队列失败:', error.message);
         // 转码失败不影响视频上传
@@ -524,13 +534,23 @@ router.post('/chunk/merge', authenticateToken, async (req, res) => {
       try {
         console.log('🎬 将视频添加到转码队列...');
         
-        const taskId = transcodingQueue.addTask(
-          filePath,
-          req.user.id,
-          videoUrl
-        );
-        
-        console.log(`✅ 视频已加入转码队列 [任务ID: ${taskId}]`);
+        // 优先使用BullMQ队列，如果队列未启用则使用内存队列
+        if (isQueueEnabled()) {
+          const job = await addVideoTranscodingTask(
+            filePath,
+            req.user.id,
+            videoUrl
+          );
+          console.log(`✅ 视频已加入BullMQ转码队列 [任务ID: ${job?.id}]`);
+        } else {
+          // 回退到内存队列
+          const taskId = transcodingQueue.addTask(
+            filePath,
+            req.user.id,
+            videoUrl
+          );
+          console.log(`✅ 视频已加入内存转码队列 [任务ID: ${taskId}]`);
+        }
       } catch (error) {
         console.error('❌ 添加到转码队列失败:', error.message);
         // 转码失败不影响视频上传

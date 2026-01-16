@@ -35,7 +35,8 @@ let queueConfig = {
   concurrency: {
     ipLocation: parseInt(process.env.QUEUE_IP_LOCATION_CONCURRENCY) || 5,
     contentAudit: parseInt(process.env.QUEUE_CONTENT_AUDIT_CONCURRENCY) || 3,
-    generalTask: parseInt(process.env.QUEUE_GENERAL_TASK_CONCURRENCY) || 5
+    generalTask: parseInt(process.env.QUEUE_GENERAL_TASK_CONCURRENCY) || 5,
+    videoTranscoding: parseInt(process.env.QUEUE_VIDEO_TRANSCODING_CONCURRENCY) || 1
   },
   // 重试配置
   retry: {
@@ -64,7 +65,8 @@ const QUEUE_NAMES = {
   CONTENT_AUDIT: 'content-audit',
   AUDIT_LOG: 'audit-log',
   GENERAL_TASK: 'general-task',
-  BROWSING_HISTORY: 'browsing-history'
+  BROWSING_HISTORY: 'browsing-history',
+  VIDEO_TRANSCODING: 'video-transcoding'
 };
 
 // 内容截断长度常量
@@ -426,6 +428,60 @@ async function initWorkers(connection) {
     { connection, concurrency: queueConfig.concurrency.generalTask }
   );
 
+  // 视频转码 Worker
+  workers[QUEUE_NAMES.VIDEO_TRANSCODING] = new Worker(
+    QUEUE_NAMES.VIDEO_TRANSCODING,
+    async (job) => {
+      const { filePath, userId, originalVideoUrl } = job.data;
+      console.log(`🔄 处理视频转码任务 - 用户: ${userId}, 文件: ${filePath}`);
+      
+      try {
+        const { convertToDash } = require('./videoTranscoder');
+        const { prisma } = require('../config/config');
+        
+        // 执行转码，并报告进度
+        const result = await convertToDash(
+          filePath,
+          userId,
+          async (progress) => {
+            // 更新任务进度
+            await job.updateProgress(progress);
+            console.log(`⏳ 转码任务 [ID: ${job.id}] 进度: ${progress}%`);
+          }
+        );
+        
+        if (result.success) {
+          console.log(`✅ 转码任务完成 [ID: ${job.id}]: ${result.manifestUrl}`);
+          
+          // 更新数据库中的视频URL
+          try {
+            const updateResult = await prisma.postVideo.updateMany({
+              where: { video_url: originalVideoUrl },
+              data: { video_url: result.manifestUrl }
+            });
+            
+            if (updateResult.count > 0) {
+              console.log(`✅ 已更新 ${updateResult.count} 条视频记录为DASH URL [ID: ${job.id}]`);
+            } else {
+              console.log(`⚠️ 未找到需要更新的视频记录 [ID: ${job.id}]（视频可能还未关联到帖子）`);
+            }
+          } catch (dbError) {
+            console.error(`❌ 更新数据库视频URL失败 [ID: ${job.id}]:`, dbError.message);
+          }
+          
+          return { success: true, manifestUrl: result.manifestUrl };
+        } else {
+          console.error(`❌ 转码任务失败 [ID: ${job.id}]: ${result.message}`);
+          throw new Error(result.message || '转码失败');
+        }
+      } catch (error) {
+        console.error(`❌ 视频转码失败 - 用户: ${userId}`, error.message);
+        throw error;
+      }
+    },
+    { connection, concurrency: queueConfig.concurrency.videoTranscoding }
+  );
+
   console.log('● 队列 Workers 初始化完成');
 }
 
@@ -560,6 +616,36 @@ async function addGeneralTask(taskType, data = {}) {
     return job;
   } catch (error) {
     console.error('添加通用任务失败:', error.message);
+    return null;
+  }
+}
+
+/**
+ * 添加视频转码任务到队列
+ * @param {string} filePath - 视频文件路径
+ * @param {number|string} userId - 用户 ID
+ * @param {string} originalVideoUrl - 原始视频URL
+ * @returns {Object|null} - 返回任务对象或null
+ */
+async function addVideoTranscodingTask(filePath, userId, originalVideoUrl) {
+  if (!queueConfig.enabled || !isInitialized) {
+    // 如果队列未启用，使用原有的内存队列处理
+    console.log('⚠️ 队列服务未启用，视频转码将使用内存队列');
+    return null;
+  }
+
+  try {
+    const queue = queues[QUEUE_NAMES.VIDEO_TRANSCODING];
+    const job = await queue.add('transcode-video', { filePath, userId: String(userId), originalVideoUrl }, {
+      attempts: queueConfig.retry.attempts,
+      backoff: { type: 'exponential', delay: queueConfig.retry.backoffDelay * 2 },
+      removeOnComplete: 100,
+      removeOnFail: 50
+    });
+    console.log(`📝 视频转码任务已加入队列 - 用户: ${userId}, 任务 ID: ${job.id}`);
+    return job;
+  } catch (error) {
+    console.error('添加视频转码任务失败:', error.message);
     return null;
   }
 }
@@ -943,6 +1029,7 @@ module.exports = {
   addContentAuditTask,
   addAuditLogTask,
   addGeneralTask,
+  addVideoTranscodingTask,
   addBrowsingHistoryTask,
   cleanupExpiredBrowsingHistory,
   getQueueStats,
