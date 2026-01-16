@@ -12,6 +12,7 @@ import { useLikeStore } from '@/stores/like.js'
 import { useCollectStore } from '@/stores/collect.js'
 import { useAuthStore } from '@/stores/auth'
 import { getPostList } from '@/api/posts.js'
+import { userApi } from '@/api/index.js'
 import defaultAvatar from '@/assets/imgs/avatar.png'
 import defaultPlaceholder from '@/assets/imgs/未加载.png'
 
@@ -732,6 +733,13 @@ function onCardClick(item, event) {
     // 设置选中的item并显示详情卡片（使用深拷贝避免影响原始数据）
     selectedItem.value = JSON.parse(JSON.stringify(item))
     showDetailCard.value = true
+
+    // 记录浏览历史（登录用户）
+    if (userStore.isLoggedIn && item.id) {
+        userApi.recordHistory(item.id).catch(error => {
+            console.debug('记录浏览历史失败:', error)
+        })
+    }
 
     // 修改页面标题
     const originalTitle = document.title

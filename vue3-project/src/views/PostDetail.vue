@@ -23,11 +23,13 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getPostDetail } from '@/api/posts'
 import { userApi } from '@/api/index.js'
+import { useUserStore } from '@/stores/user'
 import DetailCard from '@/components/DetailCard.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 
 const postData = ref(null)
 const loading = ref(true)
@@ -47,8 +49,7 @@ const updateShowBackButton = () => {
 const recordBrowsingHistory = async (postId) => {
   try {
     // 只有登录用户才记录浏览历史
-    const token = localStorage.getItem('token')
-    if (token) {
+    if (userStore.isLoggedIn) {
       await userApi.recordHistory(postId)
     }
   } catch (error) {
