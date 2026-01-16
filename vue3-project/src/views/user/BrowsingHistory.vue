@@ -31,6 +31,15 @@ async function clearAllHistory() {
   }
 }
 
+// 处理单条历史记录删除
+function handleDeleteHistory(data) {
+  if (data.success) {
+    console.log('删除浏览历史成功:', data.id)
+  } else {
+    console.error('删除浏览历史失败:', data.error)
+  }
+}
+
 onMounted(() => {
   navigationStore.scrollToTop('instant')
   
@@ -67,6 +76,7 @@ onMounted(() => {
           :userId="userStore.userInfo?.user_id" 
           :type="'history'" 
           :refreshKey="refreshKey"
+          @deleteHistory="handleDeleteHistory"
         />
       </div>
     </div>

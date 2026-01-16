@@ -54,7 +54,7 @@ const collectStore = useCollectStore()
 const authStore = useAuthStore()
 
 // 定义emit事件
-const emit = defineEmits(['follow', 'unfollow', 'like', 'collect'])
+const emit = defineEmits(['follow', 'unfollow', 'like', 'collect', 'deleteHistory'])
 
 const loading = ref(true)
 const loadingMore = ref(false)
@@ -807,6 +807,43 @@ const handleDetailCardCollect = (data) => {
     emit('collect', data)
 }
 
+// 删除单条浏览历史
+async function onDeleteHistory(item) {
+    try {
+        const response = await userApi.deleteHistoryItem(item.id)
+        if (response.success) {
+            // 从列表中移除该项目
+            removeItemFromColumns(item.id)
+            emit('deleteHistory', { id: item.id, success: true })
+        } else {
+            // API返回失败
+            console.error('删除浏览历史失败: API返回失败')
+            emit('deleteHistory', { id: item.id, success: false, error: 'API返回失败' })
+        }
+    } catch (error) {
+        console.error('删除浏览历史失败:', error)
+        emit('deleteHistory', { id: item.id, success: false, error })
+    }
+}
+
+// 从列表和列中移除指定项目
+function removeItemFromColumns(itemId) {
+    // 从contentList中移除
+    const index = contentList.value.findIndex(item => item.id === itemId)
+    if (index > -1) {
+        contentList.value.splice(index, 1)
+    }
+    
+    // 从columns中移除
+    for (let i = 0; i < columns.value.length; i++) {
+        const colIndex = columns.value[i].findIndex(item => item.id === itemId)
+        if (colIndex > -1) {
+            columns.value[i].splice(colIndex, 1)
+            break
+        }
+    }
+}
+
 async function onLikeClick(item, willBeLiked, e) {
     e.stopPropagation()
 
@@ -897,6 +934,9 @@ function handleImageError(event) {
                 <template v-else-if="props.type === 'likes'">
                     还没有点赞任何内容
                 </template>
+                <template v-else-if="props.type === 'history'">
+                    暂无浏览记录
+                </template>
                 <template v-else-if="props.searchKeyword">
                     没有找到相关内容
                 </template>
@@ -927,6 +967,10 @@ function handleImageError(event) {
                             <div v-if="item.type === 2" class="video-indicator">
                                 <SvgIcon name="play" width="12" height="12" />
                             </div>
+                            <!-- 历史记录删除按钮 -->
+                            <button v-if="props.type === 'history'" class="history-delete-btn" @click.stop="onDeleteHistory(item)" aria-label="删除历史记录" title="删除历史记录">
+                                <SvgIcon name="close" width="14" height="14" />
+                            </button>
                         </div>
                         <div class="content-title">{{ item.title }}</div>
                         <div class="contentlist">
@@ -1098,6 +1142,36 @@ function handleImageError(event) {
     z-index: 2;
     backdrop-filter: blur(4px);
     transition: all 0.2s ease;
+}
+
+/* 历史记录删除按钮样式 */
+.history-delete-btn {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 24px;
+    height: 24px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    z-index: 3;
+    backdrop-filter: blur(4px);
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.2s ease;
+}
+
+.content-img:hover .history-delete-btn {
+    opacity: 1;
+}
+
+.history-delete-btn:hover {
+    background: rgba(255, 77, 79, 0.8);
+    transform: scale(1.1);
 }
 
 
