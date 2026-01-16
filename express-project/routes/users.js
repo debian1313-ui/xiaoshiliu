@@ -248,6 +248,239 @@ router.delete('/verification/revoke', authenticateToken, async (req, res) => {
   }
 });
 
+// 记录浏览历史
+router.post('/history', authenticateToken, async (req, res) => {
+  try {
+    const userId = BigInt(req.user.id);
+    const { post_id } = req.body;
+
+    if (!post_id) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        code: RESPONSE_CODES.VALIDATION_ERROR,
+        message: '笔记ID不能为空'
+      });
+    }
+
+    const postId = BigInt(post_id);
+
+    // 检查笔记是否存在
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true, is_draft: true }
+    });
+
+    if (!post || post.is_draft) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        code: RESPONSE_CODES.NOT_FOUND,
+        message: '笔记不存在'
+      });
+    }
+
+    // 使用upsert来记录或更新浏览历史
+    await prisma.browsingHistory.upsert({
+      where: {
+        uk_user_post_history: {
+          user_id: userId,
+          post_id: postId
+        }
+      },
+      update: {
+        updated_at: new Date()
+      },
+      create: {
+        user_id: userId,
+        post_id: postId
+      }
+    });
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      message: '浏览记录已保存',
+      success: true
+    });
+  } catch (error) {
+    console.error('记录浏览历史失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      code: RESPONSE_CODES.ERROR,
+      message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR
+    });
+  }
+});
+
+// 获取浏览历史列表
+router.get('/history', authenticateToken, async (req, res) => {
+  try {
+    const userId = BigInt(req.user.id);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const histories = await prisma.browsingHistory.findMany({
+      where: { user_id: userId },
+      include: {
+        post: {
+          include: {
+            user: { select: { id: true, user_id: true, nickname: true, avatar: true, location: true } },
+            category: { select: { name: true } },
+            images: { select: { image_url: true, is_free_preview: true } },
+            videos: { select: { video_url: true, cover_url: true }, take: 1 },
+            tags: { include: { tag: { select: { id: true, name: true } } } },
+            paymentSettings: true
+          }
+        }
+      },
+      orderBy: { updated_at: 'desc' },
+      take: limit,
+      skip: skip
+    });
+
+    // 过滤掉草稿和不存在的笔记
+    const validHistories = histories.filter(h => h.post && !h.post.is_draft);
+    const posts = validHistories.map(h => ({ ...h.post, viewed_at: h.updated_at }));
+
+    let purchasedPostIds = new Set();
+    let likedPostIds = new Set();
+    let collectedPostIds = new Set();
+    if (posts.length > 0) {
+      const postIds = posts.map(p => p.id);
+      const purchases = await prisma.userPurchasedContent.findMany({ where: { user_id: userId, post_id: { in: postIds } }, select: { post_id: true } });
+      purchasedPostIds = new Set(purchases.map(p => p.post_id));
+      const likes = await prisma.like.findMany({ where: { user_id: userId, target_type: 1, target_id: { in: postIds } }, select: { target_id: true } });
+      likedPostIds = new Set(likes.map(l => l.target_id));
+      const collections = await prisma.collection.findMany({ where: { user_id: userId, post_id: { in: postIds } }, select: { post_id: true } });
+      collectedPostIds = new Set(collections.map(c => c.post_id));
+    }
+
+    const formattedPosts = posts.map(post => {
+      const formatted = {
+        id: Number(post.id),
+        user_id: Number(post.user_id),
+        title: post.title,
+        content: post.content,
+        category_id: post.category_id,
+        category: post.category?.name,
+        type: post.type,
+        view_count: Number(post.view_count),
+        like_count: post.like_count,
+        collect_count: post.collect_count,
+        comment_count: post.comment_count,
+        created_at: post.created_at,
+        viewed_at: post.viewed_at,
+        nickname: post.user?.nickname,
+        user_avatar: post.user?.avatar,
+        avatar: post.user?.avatar,
+        author: post.user?.nickname,
+        author_account: post.user?.user_id,
+        location: post.user?.location
+      };
+
+      const isAuthor = post.user_id === userId;
+      const hasPurchased = purchasedPostIds.has(post.id);
+      const paymentSetting = post.paymentSettings;
+      const imageUrls = post.images.map(img => ({ url: img.image_url, isFreePreview: img.is_free_preview }));
+      const videoData = post.videos[0] || null;
+
+      protectPostListItem(formatted, {
+        paymentSetting: paymentSetting ? { enabled: paymentSetting.enabled ? 1 : 0, free_preview_count: paymentSetting.free_preview_count, preview_duration: paymentSetting.preview_duration, price: paymentSetting.price, hide_all: paymentSetting.hide_all } : null,
+        isAuthor,
+        hasPurchased,
+        videoData: videoData ? { video_url: videoData.video_url, cover_url: videoData.cover_url } : null,
+        imageUrls
+      });
+
+      formatted.tags = post.tags.map(pt => ({ id: pt.tag.id, name: pt.tag.name }));
+      formatted.liked = likedPostIds.has(post.id);
+      formatted.collected = collectedPostIds.has(post.id);
+      return formatted;
+    });
+
+    const total = await prisma.browsingHistory.count({
+      where: {
+        user_id: userId,
+        post: { is_draft: false }
+      }
+    });
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      message: 'success',
+      data: {
+        posts: formattedPosts,
+        pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+      }
+    });
+  } catch (error) {
+    console.error('获取浏览历史失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      code: RESPONSE_CODES.ERROR,
+      message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR
+    });
+  }
+});
+
+// 删除单条浏览历史
+router.delete('/history/:postId', authenticateToken, async (req, res) => {
+  try {
+    const userId = BigInt(req.user.id);
+    const postId = BigInt(req.params.postId);
+
+    const history = await prisma.browsingHistory.findUnique({
+      where: {
+        uk_user_post_history: {
+          user_id: userId,
+          post_id: postId
+        }
+      }
+    });
+
+    if (!history) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        code: RESPONSE_CODES.NOT_FOUND,
+        message: '浏览记录不存在'
+      });
+    }
+
+    await prisma.browsingHistory.delete({
+      where: { id: history.id }
+    });
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      message: '浏览记录已删除',
+      success: true
+    });
+  } catch (error) {
+    console.error('删除浏览历史失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      code: RESPONSE_CODES.ERROR,
+      message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR
+    });
+  }
+});
+
+// 清空所有浏览历史
+router.delete('/history', authenticateToken, async (req, res) => {
+  try {
+    const userId = BigInt(req.user.id);
+
+    await prisma.browsingHistory.deleteMany({
+      where: { user_id: userId }
+    });
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      message: '浏览历史已清空',
+      success: true
+    });
+  } catch (error) {
+    console.error('清空浏览历史失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      code: RESPONSE_CODES.ERROR,
+      message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR
+    });
+  }
+});
+
 // 获取用户个性标签
 router.get('/:id/personality-tags', async (req, res) => {
   try {
@@ -1559,239 +1792,6 @@ router.get('/:id/stats', async (req, res) => {
   } catch (error) {
     console.error('获取用户统计信息失败:', error);
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR });
-  }
-});
-
-// 记录浏览历史
-router.post('/history', authenticateToken, async (req, res) => {
-  try {
-    const userId = BigInt(req.user.id);
-    const { post_id } = req.body;
-
-    if (!post_id) {
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({
-        code: RESPONSE_CODES.VALIDATION_ERROR,
-        message: '笔记ID不能为空'
-      });
-    }
-
-    const postId = BigInt(post_id);
-
-    // 检查笔记是否存在
-    const post = await prisma.post.findUnique({
-      where: { id: postId },
-      select: { id: true, is_draft: true }
-    });
-
-    if (!post || post.is_draft) {
-      return res.status(HTTP_STATUS.NOT_FOUND).json({
-        code: RESPONSE_CODES.NOT_FOUND,
-        message: '笔记不存在'
-      });
-    }
-
-    // 使用upsert来记录或更新浏览历史
-    await prisma.browsingHistory.upsert({
-      where: {
-        uk_user_post_history: {
-          user_id: userId,
-          post_id: postId
-        }
-      },
-      update: {
-        updated_at: new Date()
-      },
-      create: {
-        user_id: userId,
-        post_id: postId
-      }
-    });
-
-    res.json({
-      code: RESPONSE_CODES.SUCCESS,
-      message: '浏览记录已保存',
-      success: true
-    });
-  } catch (error) {
-    console.error('记录浏览历史失败:', error);
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
-      code: RESPONSE_CODES.ERROR,
-      message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR
-    });
-  }
-});
-
-// 获取浏览历史列表
-router.get('/history', authenticateToken, async (req, res) => {
-  try {
-    const userId = BigInt(req.user.id);
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
-
-    const histories = await prisma.browsingHistory.findMany({
-      where: { user_id: userId },
-      include: {
-        post: {
-          include: {
-            user: { select: { id: true, user_id: true, nickname: true, avatar: true, location: true } },
-            category: { select: { name: true } },
-            images: { select: { image_url: true, is_free_preview: true } },
-            videos: { select: { video_url: true, cover_url: true }, take: 1 },
-            tags: { include: { tag: { select: { id: true, name: true } } } },
-            paymentSettings: true
-          }
-        }
-      },
-      orderBy: { updated_at: 'desc' },
-      take: limit,
-      skip: skip
-    });
-
-    // 过滤掉草稿和不存在的笔记
-    const validHistories = histories.filter(h => h.post && !h.post.is_draft);
-    const posts = validHistories.map(h => ({ ...h.post, viewed_at: h.updated_at }));
-
-    let purchasedPostIds = new Set();
-    let likedPostIds = new Set();
-    let collectedPostIds = new Set();
-    if (posts.length > 0) {
-      const postIds = posts.map(p => p.id);
-      const purchases = await prisma.userPurchasedContent.findMany({ where: { user_id: userId, post_id: { in: postIds } }, select: { post_id: true } });
-      purchasedPostIds = new Set(purchases.map(p => p.post_id));
-      const likes = await prisma.like.findMany({ where: { user_id: userId, target_type: 1, target_id: { in: postIds } }, select: { target_id: true } });
-      likedPostIds = new Set(likes.map(l => l.target_id));
-      const collections = await prisma.collection.findMany({ where: { user_id: userId, post_id: { in: postIds } }, select: { post_id: true } });
-      collectedPostIds = new Set(collections.map(c => c.post_id));
-    }
-
-    const formattedPosts = posts.map(post => {
-      const formatted = {
-        id: Number(post.id),
-        user_id: Number(post.user_id),
-        title: post.title,
-        content: post.content,
-        category_id: post.category_id,
-        category: post.category?.name,
-        type: post.type,
-        view_count: Number(post.view_count),
-        like_count: post.like_count,
-        collect_count: post.collect_count,
-        comment_count: post.comment_count,
-        created_at: post.created_at,
-        viewed_at: post.viewed_at,
-        nickname: post.user?.nickname,
-        user_avatar: post.user?.avatar,
-        avatar: post.user?.avatar,
-        author: post.user?.nickname,
-        author_account: post.user?.user_id,
-        location: post.user?.location
-      };
-
-      const isAuthor = post.user_id === userId;
-      const hasPurchased = purchasedPostIds.has(post.id);
-      const paymentSetting = post.paymentSettings;
-      const imageUrls = post.images.map(img => ({ url: img.image_url, isFreePreview: img.is_free_preview }));
-      const videoData = post.videos[0] || null;
-
-      protectPostListItem(formatted, {
-        paymentSetting: paymentSetting ? { enabled: paymentSetting.enabled ? 1 : 0, free_preview_count: paymentSetting.free_preview_count, preview_duration: paymentSetting.preview_duration, price: paymentSetting.price, hide_all: paymentSetting.hide_all } : null,
-        isAuthor,
-        hasPurchased,
-        videoData: videoData ? { video_url: videoData.video_url, cover_url: videoData.cover_url } : null,
-        imageUrls
-      });
-
-      formatted.tags = post.tags.map(pt => ({ id: pt.tag.id, name: pt.tag.name }));
-      formatted.liked = likedPostIds.has(post.id);
-      formatted.collected = collectedPostIds.has(post.id);
-      return formatted;
-    });
-
-    const total = await prisma.browsingHistory.count({
-      where: {
-        user_id: userId,
-        post: { is_draft: false }
-      }
-    });
-
-    res.json({
-      code: RESPONSE_CODES.SUCCESS,
-      message: 'success',
-      data: {
-        posts: formattedPosts,
-        pagination: { page, limit, total, pages: Math.ceil(total / limit) }
-      }
-    });
-  } catch (error) {
-    console.error('获取浏览历史失败:', error);
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
-      code: RESPONSE_CODES.ERROR,
-      message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR
-    });
-  }
-});
-
-// 删除单条浏览历史
-router.delete('/history/:postId', authenticateToken, async (req, res) => {
-  try {
-    const userId = BigInt(req.user.id);
-    const postId = BigInt(req.params.postId);
-
-    const history = await prisma.browsingHistory.findUnique({
-      where: {
-        uk_user_post_history: {
-          user_id: userId,
-          post_id: postId
-        }
-      }
-    });
-
-    if (!history) {
-      return res.status(HTTP_STATUS.NOT_FOUND).json({
-        code: RESPONSE_CODES.NOT_FOUND,
-        message: '浏览记录不存在'
-      });
-    }
-
-    await prisma.browsingHistory.delete({
-      where: { id: history.id }
-    });
-
-    res.json({
-      code: RESPONSE_CODES.SUCCESS,
-      message: '浏览记录已删除',
-      success: true
-    });
-  } catch (error) {
-    console.error('删除浏览历史失败:', error);
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
-      code: RESPONSE_CODES.ERROR,
-      message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR
-    });
-  }
-});
-
-// 清空所有浏览历史
-router.delete('/history', authenticateToken, async (req, res) => {
-  try {
-    const userId = BigInt(req.user.id);
-
-    await prisma.browsingHistory.deleteMany({
-      where: { user_id: userId }
-    });
-
-    res.json({
-      code: RESPONSE_CODES.SUCCESS,
-      message: '浏览历史已清空',
-      success: true
-    });
-  } catch (error) {
-    console.error('清空浏览历史失败:', error);
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
-      code: RESPONSE_CODES.ERROR,
-      message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR
-    });
   }
 });
 
