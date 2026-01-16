@@ -220,9 +220,15 @@ const getAuthHeaders = () => {
   return headers
 }
 
+// Get static file URL for preview (without /api prefix)
+const getStaticFileUrl = (file) => {
+  // Static files are served directly, not through /api
+  return file.path
+}
+
 // Get file URL for preview
 const getFileUrl = (file) => {
-  return `${apiConfig.baseURL}${file.path}`
+  return getStaticFileUrl(file)
 }
 
 // Format file size
@@ -360,8 +366,8 @@ const uploadFile = async (file, isVideo = false) => {
   
   const formDataUpload = new FormData()
   
-  // Fetch file via HTTP from server and re-upload through upload API
-  const fileUrl = `${apiConfig.baseURL}${file.path}`
+  // Fetch file via HTTP from server static path (not /api)
+  const fileUrl = file.path
   const response = await fetch(fileUrl)
   
   if (!response.ok) {
@@ -377,7 +383,7 @@ const uploadFile = async (file, isVideo = false) => {
   const uploadResponse = await fetch(`${apiConfig.baseURL}${uploadEndpoint}`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${adminToken}`
+      'Authorization': 'Bearer ' + adminToken
     },
     body: formDataUpload
   })
