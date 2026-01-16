@@ -39,8 +39,12 @@ const { route, handleExploreClick } = useRouteUtils()
 const userStore = useUserStore()
 const notificationStore = useNotificationStore()
 
-// 从store获取未读通知数量
-const unreadCount = computed(() => notificationStore.unreadCount)
+// 从store获取未读通知数量（包含系统消息）
+const unreadCount = computed(() => {
+  const regularCount = notificationStore.unreadCount || 0
+  const systemCount = notificationStore.unreadCountByType?.system || 0
+  return regularCount + systemCount
+})
 
 // 底部导航配置
 const footerList = ref([

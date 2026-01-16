@@ -1643,7 +1643,8 @@ router.get('/oauth2/callback', async (req, res) => {
       is_new_user: isNewUser ? 'true' : 'false'
     });
 
-    res.redirect(`/?${redirectParams.toString()}`);
+    // 重定向到 /explore 页面
+    res.redirect(`/explore?${redirectParams.toString()}`);
   } catch (error) {
     console.error('OAuth2回调处理失败:', error.message);
     console.error('OAuth2回调错误堆栈:', error.stack);

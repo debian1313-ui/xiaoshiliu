@@ -3262,5 +3262,265 @@ router.delete('/batch-upload/files', adminAuth, async (req, res) => {
   }
 })
 
+// ===================== 系统通知管理 =====================
+
+// 系统通知类型映射
+const SYSTEM_NOTIFICATION_TYPES = ['system', 'activity']
+
+// 获取系统通知列表
+router.get('/system-notifications', adminAuth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 20
+    const skip = (page - 1) * limit
+    const { title, type, is_active, sortField = 'created_at', sortOrder = 'desc' } = req.query
+
+    const where = {}
+    if (title) where.title = { contains: title }
+    if (type && SYSTEM_NOTIFICATION_TYPES.includes(type)) where.type = type
+    if (is_active !== undefined && is_active !== '') where.is_active = is_active === 'true' || is_active === '1'
+
+    const [total, notifications] = await Promise.all([
+      prisma.systemNotification.count({ where }),
+      prisma.systemNotification.findMany({
+        where,
+        include: {
+          _count: {
+            select: { confirmations: true }
+          }
+        },
+        orderBy: { [sortField]: sortOrder.toLowerCase() },
+        take: limit,
+        skip: skip
+      })
+    ])
+
+    const formattedNotifications = notifications.map(n => ({
+      id: Number(n.id),
+      title: n.title,
+      content: n.content,
+      type: n.type,
+      image_url: n.image_url,
+      images: n.image_url ? [n.image_url] : [], // 为MultiImageUpload组件提供images数组
+      link_url: n.link_url,
+      is_active: n.is_active,
+      start_time: n.start_time,
+      end_time: n.end_time,
+      created_at: n.created_at,
+      updated_at: n.updated_at,
+      confirmation_count: n._count.confirmations
+    }))
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: { data: formattedNotifications, pagination: { page, limit, total, pages: Math.ceil(total / limit) } },
+      message: 'success'
+    })
+  } catch (error) {
+    console.error('获取系统通知列表失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取失败' })
+  }
+})
+
+// 获取单个系统通知详情
+router.get('/system-notifications/:id', adminAuth, async (req, res) => {
+  try {
+    const notificationId = BigInt(req.params.id)
+    const notification = await prisma.systemNotification.findUnique({
+      where: { id: notificationId },
+      include: {
+        _count: {
+          select: { confirmations: true }
+        }
+      }
+    })
+
+    if (!notification) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '系统通知不存在' })
+    }
+
+    const result = {
+      id: Number(notification.id),
+      title: notification.title,
+      content: notification.content,
+      type: notification.type,
+      image_url: notification.image_url,
+      images: notification.image_url ? [notification.image_url] : [], // 为MultiImageUpload组件提供images数组
+      link_url: notification.link_url,
+      is_active: notification.is_active,
+      start_time: notification.start_time,
+      end_time: notification.end_time,
+      created_at: notification.created_at,
+      updated_at: notification.updated_at,
+      confirmation_count: notification._count.confirmations
+    }
+
+    res.json({ code: RESPONSE_CODES.SUCCESS, data: result, message: 'success' })
+  } catch (error) {
+    console.error('获取系统通知详情失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取失败' })
+  }
+})
+
+// 创建系统通知
+router.post('/system-notifications', adminAuth, async (req, res) => {
+  try {
+    const { title, content, type, image_url, images, link_url, is_active, start_time, end_time } = req.body
+
+    if (!title || !title.trim()) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '标题不能为空' })
+    }
+
+    if (!content || !content.trim()) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '内容不能为空' })
+    }
+
+    // 验证通知类型，如果提供了无效类型则返回错误
+    if (type && !SYSTEM_NOTIFICATION_TYPES.includes(type)) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '无效的通知类型，必须是 system 或 activity' })
+    }
+
+    const notificationType = type || 'system'
+    
+    // 支持images数组（优先）或image_url字符串
+    let finalImageUrl = null
+    if (images && Array.isArray(images) && images.length > 0) {
+      finalImageUrl = images[0] // 取第一张图片
+    } else if (image_url) {
+      finalImageUrl = image_url.trim()
+    }
+
+    const notification = await prisma.systemNotification.create({
+      data: {
+        title: title.trim(),
+        content: content.trim(),
+        type: notificationType,
+        image_url: finalImageUrl || null,
+        link_url: link_url?.trim() || null,
+        is_active: is_active !== false,
+        start_time: start_time ? new Date(start_time) : null,
+        end_time: end_time ? new Date(end_time) : null
+      }
+    })
+
+    res.json({ code: RESPONSE_CODES.SUCCESS, data: { id: Number(notification.id) }, message: '创建成功' })
+  } catch (error) {
+    console.error('创建系统通知失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '创建失败' })
+  }
+})
+
+// 更新系统通知
+router.put('/system-notifications/:id', adminAuth, async (req, res) => {
+  try {
+    const notificationId = BigInt(req.params.id)
+    const { title, content, type, image_url, images, link_url, is_active, start_time, end_time } = req.body
+
+    const notification = await prisma.systemNotification.findUnique({ where: { id: notificationId } })
+    if (!notification) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '系统通知不存在' })
+    }
+
+    const updateData = {}
+    if (title !== undefined) {
+      if (!title.trim()) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '标题不能为空' })
+      }
+      updateData.title = title.trim()
+    }
+    if (content !== undefined) {
+      if (!content.trim()) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '内容不能为空' })
+      }
+      updateData.content = content.trim()
+    }
+    if (type !== undefined && SYSTEM_NOTIFICATION_TYPES.includes(type)) updateData.type = type
+    
+    // 支持images数组（优先）或image_url字符串
+    if (images !== undefined) {
+      if (Array.isArray(images) && images.length > 0) {
+        updateData.image_url = images[0]
+      } else {
+        updateData.image_url = null
+      }
+    } else if (image_url !== undefined) {
+      updateData.image_url = image_url?.trim() || null
+    }
+    
+    if (link_url !== undefined) updateData.link_url = link_url?.trim() || null
+    if (is_active !== undefined) updateData.is_active = !!is_active
+    if (start_time !== undefined) updateData.start_time = start_time ? new Date(start_time) : null
+    if (end_time !== undefined) updateData.end_time = end_time ? new Date(end_time) : null
+
+    await prisma.systemNotification.update({ where: { id: notificationId }, data: updateData })
+    res.json({ code: RESPONSE_CODES.SUCCESS, message: '更新成功' })
+  } catch (error) {
+    console.error('更新系统通知失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '更新失败' })
+  }
+})
+
+// 删除系统通知
+router.delete('/system-notifications/:id', adminAuth, async (req, res) => {
+  try {
+    const notificationId = BigInt(req.params.id)
+    
+    const notification = await prisma.systemNotification.findUnique({ where: { id: notificationId } })
+    if (!notification) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '系统通知不存在' })
+    }
+
+    await prisma.systemNotification.delete({ where: { id: notificationId } })
+    res.json({ code: RESPONSE_CODES.SUCCESS, message: '删除成功' })
+  } catch (error) {
+    console.error('删除系统通知失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '删除失败' })
+  }
+})
+
+// 批量删除系统通知
+router.delete('/system-notifications', adminAuth, async (req, res) => {
+  try {
+    const { ids } = req.body
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '请提供要删除的ID列表' })
+    }
+
+    const notificationIds = ids.map(id => BigInt(id))
+    await prisma.systemNotification.deleteMany({ where: { id: { in: notificationIds } } })
+
+    res.json({ code: RESPONSE_CODES.SUCCESS, message: '成功删除 ' + ids.length + ' 条记录' })
+  } catch (error) {
+    console.error('批量删除系统通知失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '删除失败' })
+  }
+})
+
+// 切换系统通知启用状态
+router.put('/system-notifications/:id/toggle-active', adminAuth, async (req, res) => {
+  try {
+    const notificationId = BigInt(req.params.id)
+    
+    const notification = await prisma.systemNotification.findUnique({ where: { id: notificationId } })
+    if (!notification) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '系统通知不存在' })
+    }
+
+    await prisma.systemNotification.update({
+      where: { id: notificationId },
+      data: { is_active: !notification.is_active }
+    })
+
+    res.json({ 
+      code: RESPONSE_CODES.SUCCESS, 
+      message: notification.is_active ? '已禁用' : '已启用',
+      data: { is_active: !notification.is_active }
+    })
+  } catch (error) {
+    console.error('切换系统通知状态失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '操作失败' })
+  }
+})
+
 module.exports = router
 module.exports.isAiAutoReviewEnabled = isAiAutoReviewEnabled

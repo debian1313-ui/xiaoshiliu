@@ -175,6 +175,13 @@
                   个性标签
                 </span>
               </span>
+              <span v-else-if="column.type === 'link' && item[column.key]">
+                <a :href="item[column.key]" target="_blank" class="external-link" :title="item[column.key]">
+                  {{ column.maxLength && item[column.key].length > column.maxLength 
+                    ? item[column.key].substring(0, column.maxLength) + '...' 
+                    : item[column.key] }}
+                </a>
+              </span>
               <span v-else-if="column.maxLength && item[column.key] && item[column.key].length > column.maxLength">
                 <span class="truncated-content" @click="showDetail(item, column)" :title="'查看' + column.label">
                   {{ item[column.key].substring(0, column.maxLength) }}...
@@ -1745,6 +1752,22 @@ const handleCustomAction = (action, item) => {
   word-wrap: break-word;
   word-break: break-all;
   line-height: 1.4;
+}
+
+.external-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  display: inline-block;
+  max-width: 150px;
+  word-wrap: break-word;
+  word-break: break-all;
+  line-height: 1.4;
+  transition: opacity 0.2s;
+}
+
+.external-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
 }
 
 .truncated-content:hover,

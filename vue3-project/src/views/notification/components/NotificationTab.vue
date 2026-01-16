@@ -28,6 +28,7 @@ const props = defineProps({
   unreadCounts: {
     type: Object,
     default: () => ({
+      system: 0,
       comments: 0,
       likes: 0,
       collections: 0,
@@ -125,9 +126,9 @@ defineExpose({
 }
 
 .tab-item {
-  padding: 0 10px;
+  padding: 0 16px;
   height: 40px;
-  width: 68px;
+  min-width: 68px;
   font-size: 16px;
   color: var(--text-color-secondary);
   cursor: pointer;

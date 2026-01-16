@@ -361,6 +361,51 @@ model SystemSetting {
   @@map("system_settings")
 }
 
+// 系统通知类型枚举
+enum SystemNotificationType {
+  system   // 系统消息
+  activity // 活动消息
+}
+
+// 系统通知表
+model SystemNotification {
+  id           BigInt                 @id @default(autoincrement())
+  title        String                 @db.VarChar(200)
+  content      String                 @db.Text
+  type         SystemNotificationType @default(system)
+  image_url    String?                @db.VarChar(500)
+  link_url     String?                @db.VarChar(500)
+  is_active    Boolean                @default(true)
+  start_time   DateTime?
+  end_time     DateTime?
+  created_at   DateTime               @default(now())
+  updated_at   DateTime               @updatedAt
+
+  // 用户确认记录关联
+  confirmations SystemNotificationConfirmation[]
+
+  @@index([is_active], name: "idx_system_notification_active")
+  @@index([type], name: "idx_system_notification_type")
+  @@index([start_time, end_time], name: "idx_system_notification_time")
+  @@map("system_notifications")
+}
+
+// 系统通知用户确认记录表
+model SystemNotificationConfirmation {
+  id              BigInt   @id @default(autoincrement())
+  notification_id BigInt
+  user_id         BigInt
+  confirmed_at    DateTime @default(now())
+
+  notification SystemNotification @relation(fields: [notification_id], references: [id], onDelete: Cascade)
+  user         User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([notification_id, user_id], name: "uk_notification_user")
+  @@index([notification_id], name: "idx_confirmation_notification")
+  @@index([user_id], name: "idx_confirmation_user")
+  @@map("system_notification_confirmations")
+}
+
 // 标签表
 model Tag {
   id         Int       @id @default(autoincrement())
@@ -512,6 +557,7 @@ model User {
   purchasedContentAsUser  UserPurchasedContent[] @relation("PurchasedContentUser")
   purchasedContentAsAuthor UserPurchasedContent[] @relation("PurchasedContentAuthor")
   browsingHistory         BrowsingHistory[]
+  systemNotificationConfirmations SystemNotificationConfirmation[]
 
   @@index([user_id], name: "idx_user_id")
   @@index([email], name: "idx_email")

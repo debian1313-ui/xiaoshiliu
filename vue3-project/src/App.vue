@@ -17,6 +17,7 @@ import KeyboardShortcutsModal from '@/components/modals/KeyboardShortcutsModal.v
 import AccountSecurityModal from '@/components/modals/AccountSecurityModal.vue'
 import VerifiedModal from '@/components/modals/VerifiedModal.vue'
 import BalanceModal from '@/components/modals/BalanceModal.vue'
+import SystemNotificationModal from '@/components/modals/SystemNotificationModal.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useConfirm } from '@/views/admin/composables/useConfirm'
 
@@ -62,11 +63,14 @@ const handleOAuth2Callback = () => {
   }
 
   // 立即清除URL参数（安全性：减少敏感信息在URL中的暴露时间）
-  window.history.replaceState({}, document.title, window.location.pathname)
+  // 重定向到 /explore 页面，不保留任何参数
+  const cleanUrl = window.location.origin + '/explore'
 
   // 处理OAuth2登录错误
   if (error) {
     console.error('OAuth2登录错误:', error, errorMessage)
+    // 先清除URL，再显示错误
+    window.history.replaceState({}, document.title, cleanUrl)
     // 显示错误提示给用户
     const errorMessages = {
       'oauth2_disabled': 'OAuth2登录未启用',
@@ -86,18 +90,21 @@ const handleOAuth2Callback = () => {
 
   // 处理OAuth2登录成功
   if (oauth2Login === 'success' && accessToken) {
+    // 先清除URL参数，防止刷新时重复处理
+    window.history.replaceState({}, document.title, cleanUrl)
+    
     // 保存token
     localStorage.setItem('token', accessToken)
     if (refreshToken) {
       localStorage.setItem('refreshToken', refreshToken)
     }
     
-    // 获取用户信息并保存
+    // 获取用户信息并保存，完成后重定向到 /explore
     userStore.getCurrentUser().then(() => {
       console.log('OAuth2登录成功', isNewUser === 'true' ? '（新用户）' : '')
       
-      // 刷新页面以应用登录状态
-      window.location.reload()
+      // 跳转到 /explore 页面
+      window.location.href = cleanUrl
     }).catch((err) => {
       console.error('获取用户信息失败:', err)
     })
@@ -185,6 +192,7 @@ onMounted(() => {
       @close="accountSecurityStore.closeAccountSecurityModal" />
     <VerifiedModal v-if="verifiedStore.showVerifiedModal" @close="verifiedStore.closeVerifiedModal" />
     <BalanceModal v-model:visible="balanceStore.showBalanceModal" @close="balanceStore.closeBalanceModal" />
+    <SystemNotificationModal />
     <ConfirmDialog v-model:visible="confirmState.visible" :title="confirmState.title" :message="confirmState.message"
       :type="confirmState.type" :confirm-text="confirmState.confirmText" :cancel-text="confirmState.cancelText"
       :show-cancel="confirmState.showCancel" @confirm="handleConfirm" @cancel="handleCancel" />

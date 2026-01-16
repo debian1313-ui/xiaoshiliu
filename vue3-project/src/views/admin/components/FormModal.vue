@@ -14,6 +14,9 @@
             <input v-if="field.type === 'text' || field.type === 'password'" :value="getInputValue(field)"
               @input="updateInputField(field, $event.target.value)" :type="field.type" :placeholder="field.placeholder"
               :required="field.required" :maxlength="field.maxlength" />
+            <input v-else-if="field.type === 'datetime'" :value="formatDateTimeForInput(formData[field.key])"
+              @input="updateField(field.key, $event.target.value ? new Date($event.target.value).toISOString() : null)" 
+              type="datetime-local" :placeholder="field.placeholder" :required="field.required" />
             <div v-else-if="field.type === 'textarea'" class="input-section">
               <div class="content-input-wrapper">
                 <ContentEditableInput :ref="el => setContentEditableRef(field.key, el)" v-model="formData[field.key]"
@@ -420,6 +423,24 @@ const getInputValue = (field) => {
   }
 
   return value || ''
+}
+
+// 格式化日期时间值为datetime-local输入框所需的格式
+const formatDateTimeForInput = (value) => {
+  if (!value) return ''
+  try {
+    const date = new Date(value)
+    if (isNaN(date.getTime())) return ''
+    // 转换为 YYYY-MM-DDTHH:mm 格式（datetime-local 输入框所需格式）
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+    return `${year}-${month}-${day}T${hours}:${minutes}`
+  } catch (e) {
+    return ''
+  }
 }
 
 // 获取文本域的值

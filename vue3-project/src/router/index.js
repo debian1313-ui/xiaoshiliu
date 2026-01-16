@@ -36,6 +36,7 @@ import AuditManagement from '@/views/admin/AuditManagement.vue'
 import ContentReviewManagement from '@/views/admin/ContentReviewManagement.vue'
 import QueueManagement from '@/views/admin/QueueManagement.vue'
 import BannedWordsManagement from '@/views/admin/BannedWordsManagement.vue'
+import SystemNotificationManagement from '@/views/admin/SystemNotificationManagement.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -284,6 +285,11 @@ const router = createRouter({
           path: 'banned-words',
           name: 'admin_banned_words',
           component: BannedWordsManagement
+        },
+        {
+          path: 'system-notifications',
+          name: 'admin_system_notifications',
+          component: SystemNotificationManagement
         }
       ]
     }
