@@ -42,6 +42,9 @@ function transformPostData(backendPost) {
     videos: backendPost.videos || [],
     avatar: backendPost.user_avatar || new URL('@/assets/imgs/avatar.png', import.meta.url).href,
     author: backendPost.nickname || '匿名用户',
+    // 保留原始字段名以供 DetailCard 使用
+    nickname: backendPost.nickname || '匿名用户',
+    user_avatar: backendPost.user_avatar || new URL('@/assets/imgs/avatar.png', import.meta.url).href,
     location: backendPost.location || '',
     // 统计数据 - 统一使用后端字段名
     view_count: backendPost.view_count || 0,

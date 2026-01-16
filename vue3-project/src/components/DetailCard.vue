@@ -307,6 +307,9 @@
                 <span v-if="showPaymentOverlay && (postData.content.length > 50 || isContentHidden)" class="content-locked-hint">
                   （内容已隐藏，解锁后查看完整内容）
                 </span>
+                <span v-if="shouldShowExpandButton" class="content-expand-btn" @click="toggleContentExpand">
+                  {{ isContentExpanded ? '收起' : '展开' }}
+                </span>
               </p>
               <!-- 附件下载区域 - 付费内容时隐藏 -->
               <div v-if="postData.attachment && postData.attachment.url && !showPaymentOverlay" class="attachment-download">
@@ -699,6 +702,7 @@ const likeButtonRef = ref(null)
 const isAnimating = ref(true)
 const showContent = ref(false) // 新增：控制内容显示
 const isClosing = ref(false) // 新增：控制关闭动画状态
+const isContentExpanded = ref(false) // 控制长文本内容展开/收起
 
 // 付费设置相关状态
 const isUnlocking = ref(false) // 解锁中状态
@@ -1157,15 +1161,34 @@ const postData = computed(() => {
   return data
 })
 
+// 内容字符限制常量
+const CONTENT_CHAR_LIMIT = 200
+
+// 判断内容是否需要展开功能
+const shouldShowExpandButton = computed(() => {
+  if (showPaymentOverlay.value) return false
+  const fullContent = postData.value.content
+  return fullContent && fullContent.length > CONTENT_CHAR_LIMIT
+})
+
+// 切换内容展开/收起
+const toggleContentExpand = () => {
+  isContentExpanded.value = !isContentExpanded.value
+}
+
 // 付费内容时显示的截断内容
 const displayContent = computed(() => {
   const fullContent = postData.value.content
-  if (!showPaymentOverlay.value) {
+  // 付费内容只显示前50个字符
+  if (showPaymentOverlay.value) {
+    if (fullContent.length > 50) {
+      return fullContent.substring(0, 50) + '...'
+    }
     return fullContent
   }
-  // 付费内容只显示前50个字符
-  if (fullContent.length > 50) {
-    return fullContent.substring(0, 50) + '...'
+  // 非付费内容：超过200字符时根据展开状态显示
+  if (fullContent.length > CONTENT_CHAR_LIMIT && !isContentExpanded.value) {
+    return fullContent.substring(0, CONTENT_CHAR_LIMIT) + '...'
   }
   return fullContent
 })
@@ -3812,6 +3835,21 @@ function handleAvatarError(event) {
   color: var(--text-color-tertiary);
   font-size: 13px;
   font-style: italic;
+}
+
+/* 内容展开/收起按钮 */
+.content-expand-btn {
+  display: inline;
+  color: var(--primary-color);
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: 500;
+  margin-left: 4px;
+  transition: opacity 0.2s ease;
+}
+
+.content-expand-btn:hover {
+  opacity: 0.8;
 }
 
 /* 图片区域付费遮罩 */
