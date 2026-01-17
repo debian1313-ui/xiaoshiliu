@@ -2,20 +2,26 @@
   <div class="layout-container">
     <Sidebar v-if="showSidebar" />
     <div class="main-content" :class="{ 'with-sidebar': showSidebar }">
-      <LayoutHeader />
-      <div class="content-wrapper">
+      <LayoutHeader v-if="!isPostDetailPage" />
+      <div class="content-wrapper" :class="{ 'no-footer-padding': isPostDetailPage }">
         <router-view />
       </div>
-      <LayoutFooter v-if="!showSidebar" />
+      <LayoutFooter v-if="!showSidebar && !isPostDetailPage" />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import Sidebar from './components/Sidebar.vue'
 import LayoutHeader from './components/LayoutHeader.vue'
 import LayoutFooter from './components/LayoutFooter.vue'
+
+const route = useRoute()
+
+// Check if current route is post detail page
+const isPostDetailPage = computed(() => route.name === 'post_detail')
 
 const showSidebar = ref(window.innerWidth > 960)
 const handleResize = () => {
@@ -102,5 +108,10 @@ onUnmounted(() => {
   .content-wrapper {
     padding-bottom: 0;
   }
+}
+
+/* Remove padding when footer is hidden (e.g., on post detail page) */
+.content-wrapper.no-footer-padding {
+  padding-bottom: 0;
 }
 </style>

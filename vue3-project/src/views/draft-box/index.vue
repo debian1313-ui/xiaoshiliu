@@ -19,10 +19,6 @@
         <SvgIcon name="search" width="16" height="16" class="search-icon" />
         <input v-model="searchKeyword" type="text" placeholder="搜索草稿标题或内容" @input="handleSearch" />
       </div>
-      <div class="filter-options">
-        <DropdownSelect v-model="selectedCategory" :options="categoryOptions" placeholder="全部分类" label-key="label"
-          value-key="value" min-width="120px" max-width="150px" @change="handleCategoryChange" />
-      </div>
     </div>
 
 
@@ -84,14 +80,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getDraftPosts, deletePost, updatePost } from '@/api/posts'
-import { getCategories } from '@/api/categories'
 
 import SvgIcon from '@/components/SvgIcon.vue'
-import DropdownSelect from '@/components/DropdownSelect.vue'
 import MessageToast from '@/components/MessageToast.vue'
 import ConfirmModal from '@/components/ConfirmDialog.vue'
 import PostItem from '@/components/PostItem.vue'
@@ -108,8 +102,6 @@ const currentPage = ref(1)
 const totalPages = ref(1)
 const totalDrafts = ref(0)
 const searchKeyword = ref('')
-const selectedCategory = ref('')
-const categories = ref([])
 
 // 弹窗状态
 const showDeleteModal = ref(false)
@@ -124,17 +116,6 @@ const clickPosition = ref({ x: 0, y: 0 })
 const showToast = ref(false)
 const toastMessage = ref('')
 const toastType = ref('success')
-
-// 下拉选择器选项
-const categoryOptions = computed(() => {
-  return [
-    { value: '', label: '全部分类' },
-    ...categories.value.map(category => ({
-      value: category.id,
-      label: category.name
-    }))
-  ]
-})
 
 // 消息提示方法
 const showMessage = (message, type = 'success') => {
@@ -157,13 +138,6 @@ const goToPublish = () => {
   router.push('/publish')
 }
 
-// 获取分类名称
-const getCategoryName = (categoryId) => {
-  if (!categoryId) return ''
-  const categoryObj = categories.value.find(cat => cat.id === categoryId)
-  return categoryObj ? categoryObj.name : ''
-}
-
 // 加载草稿列表
 const loadDrafts = async () => {
   try {
@@ -180,7 +154,6 @@ const loadDrafts = async () => {
       page: currentPage.value,
       limit: 10,
       keyword: searchKeyword.value,
-      category_id: selectedCategory.value,
       sort: 'created_at',
       user_id: userStore.userInfo.user_id
     }
@@ -203,13 +176,6 @@ const loadDrafts = async () => {
 
 // 搜索处理
 const handleSearch = () => {
-  currentPage.value = 1
-  loadDrafts()
-}
-
-// 分类筛选处理
-const handleCategoryChange = (event) => {
-  selectedCategory.value = event.value
   currentPage.value = 1
   loadDrafts()
 }
@@ -302,23 +268,10 @@ const closeDetailCard = () => {
   }
 }
 
-// 加载分类数据
-const loadCategories = async () => {
-  try {
-    const response = await getCategories()
-    if (response.success && response.data) {
-      categories.value = response.data
-    }
-  } catch (error) {
-    console.error('加载分类失败:', error)
-  }
-}
-
 // 组件挂载时加载数据
 onMounted(() => {
   // 初始化用户信息
   userStore.initUserInfo()
-  loadCategories()
   loadDrafts()
 })
 </script>

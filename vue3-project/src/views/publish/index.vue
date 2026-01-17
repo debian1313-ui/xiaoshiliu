@@ -128,6 +128,9 @@
             </button>
           </div>
 
+          <!-- 可见性设置 -->
+          <VisibilitySelector v-model="form.visibility" />
+
           <div v-if="showEmojiPanel" class="emoji-panel-overlay" v-click-outside="closeEmojiPanel">
             <div class="emoji-panel" @click.stop>
               <EmojiPicker @select="handleEmojiSelect" />
@@ -135,12 +138,6 @@
           </div>
 
           <MentionModal :visible="showMentionPanel" @close="closeMentionPanel" @select="handleMentionSelect" />
-        </div>
-
-        <div class="category-section">
-          <div class="section-title">分类</div>
-          <DropdownSelect v-model="form.category_id" :options="categories" placeholder="请选择分类" label-key="name"
-            value-key="id" max-width="300px" min-width="200px" @change="handleCategoryChange" />
         </div>
 
         <div class="tag-section">
@@ -194,7 +191,6 @@ import { useUserStore } from '@/stores/user'
 import { useAuthStore } from '@/stores/auth'
 import { useNavigationStore } from '@/stores/navigation'
 import { createPost, getPostDetail, updatePost, deletePost } from '@/api/posts'
-import { getCategories } from '@/api/categories'
 import { useScrollLock } from '@/composables/useScrollLock'
 import { hasMentions, cleanMentions } from '@/utils/mentionParser'
 
@@ -202,7 +198,6 @@ import MultiImageUpload from '@/components/MultiImageUpload.vue'
 import VideoUpload from '@/components/VideoUpload.vue'
 import SvgIcon from '@/components/SvgIcon.vue'
 import TagSelector from '@/components/TagSelector.vue'
-import DropdownSelect from '@/components/DropdownSelect.vue'
 import MessageToast from '@/components/MessageToast.vue'
 import EmojiPicker from '@/components/EmojiPicker.vue'
 import MentionModal from '@/components/mention/MentionModal.vue'
@@ -210,6 +205,7 @@ import ContentEditableInput from '@/components/ContentEditableInput.vue'
 import TextImageModal from '@/views/publish/components/TextImageModal.vue'
 import AttachmentUploadModal from '@/components/AttachmentUploadModal.vue'
 import PaymentSettingsModal from '@/components/PaymentSettingsModal.vue'
+import VisibilitySelector from '@/components/VisibilitySelector.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -244,8 +240,8 @@ const form = reactive({
   images: [],
   video: null,
   tags: [],
-  category_id: null,
   attachment: null,
+  visibility: 'public',
   paymentSettings: {
     enabled: false,
     paymentType: 'single',
@@ -260,14 +256,12 @@ const form = reactive({
 const currentDraftId = ref(null)
 const isEditMode = ref(false)
 
-const categories = ref([])
-
 // 提及用户数据（实际使用中应该从 API 获取）
 const mentionUsers = ref([])
 
 const canPublish = computed(() => {
-  // 检查必填字段：标题、内容、分类
-  if (!form.title.trim() || !form.content.trim() || !form.category_id) {
+  // 检查必填字段：标题、内容
+  if (!form.title.trim() || !form.content.trim()) {
     return false
   }
   
@@ -348,8 +342,6 @@ const openLoginModal = () => {
 
 onMounted(async () => {
   navigationStore.scrollToTop('instant')
-  // 先加载分类列表，确保分类数据可用
-  await loadCategories()
   // 检查是否是编辑草稿模式
   const draftId = route.query.draftId
   const mode = route.query.mode
@@ -361,21 +353,6 @@ onMounted(async () => {
 
 onUnmounted(() => {
 })
-
-const loadCategories = async () => {
-  try {
-    const response = await getCategories()
-    if (response.success && response.data) {
-      categories.value = response.data.map(category => ({
-        id: category.id,
-        name: category.name
-      }))
-    }
-  } catch (error) {
-    console.error('加载分类失败:', error)
-    showMessage('加载分类失败', 'error')
-  }
-}
 
 const validateForm = () => {
   return true
@@ -502,10 +479,6 @@ const formatAttachmentSize = (bytes) => {
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
-const handleCategoryChange = (data) => {
-  form.category_id = data.value
 }
 
 const handleContentFocus = () => {
@@ -636,11 +609,6 @@ const handlePublish = async () => {
     return
   }
 
-  if (!form.category_id) {
-    showMessage('请选择分类', 'error')
-    return
-  }
-
   // 根据上传类型验证媒体文件
   if (uploadType.value === 'image') {
     if (!multiImageUploadRef.value || multiImageUploadRef.value.getImageCount() === 0) {
@@ -747,10 +715,10 @@ const handlePublish = async () => {
       images: uploadType.value === 'image' ? mediaData : [],
       video: uploadType.value === 'video' ? mediaData : null,
       tags: form.tags,
-      category_id: form.category_id,
       type: uploadType.value === 'image' ? 1 : 2, // 1: 图文, 2: 视频
       is_draft: false, // 发布状态
       attachment: form.attachment || null,
+      visibility: form.visibility || 'public',
       paymentSettings: form.paymentSettings.enabled ? form.paymentSettings : null
     }
 
@@ -800,8 +768,8 @@ const resetForm = () => {
   form.images = []
   form.video = null
   form.tags = []
-  form.category_id = null
   form.attachment = null
+  form.visibility = 'public'
   form.paymentSettings = {
     enabled: false,
     paymentType: 'single',
@@ -867,6 +835,9 @@ const loadDraftData = async (draftId) => {
         }
       }
 
+      // 设置可见性数据
+      form.visibility = fullData.visibility || 'public'
+
       // 处理标签数据：确保转换为字符串数组
       if (draft.tags && Array.isArray(draft.tags)) {
         form.tags = draft.tags.map(tag => {
@@ -879,14 +850,6 @@ const loadDraftData = async (draftId) => {
         })
       } else {
         form.tags = []
-      }
-
-      // 根据分类名称找到分类ID
-      if (response.category && categories.value.length > 0) {
-        const categoryItem = categories.value.find(cat => cat.name === response.category)
-        form.category_id = categoryItem ? categoryItem.id : null
-      } else {
-        form.category_id = null
       }
 
       // 根据草稿数据类型设置uploadType
@@ -1014,10 +977,10 @@ const handleSaveDraft = async () => {
       images: uploadType.value === 'image' ? mediaData : [],
       video: uploadType.value === 'video' ? mediaData : null,
       tags: form.tags || [],
-      category_id: form.category_id || null,
       type: uploadType.value === 'image' ? 1 : 2, // 1: 图文, 2: 视频
       is_draft: true,
       attachment: form.attachment || null,
+      visibility: form.visibility || 'public',
       paymentSettings: form.paymentSettings.enabled ? form.paymentSettings : null
     }
 
@@ -1720,10 +1683,6 @@ const handleSaveDraft = async () => {
   background: var(--primary-color);
   color: white;
   border-color: var(--primary-color);
-}
-
-.category-section {
-  margin-bottom: 1rem;
 }
 
 

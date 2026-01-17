@@ -6,6 +6,9 @@ const { prisma } = require('../config/config');
 const { optionalAuth, authenticateToken } = require('../middleware/auth');
 const NotificationHelper = require('../utils/notificationHelper');
 const { protectPostListItem } = require('../utils/paidContentHelper');
+const { auditNickname, auditBio, isAuditEnabled } = require('../utils/contentAudit');
+const { addContentAuditTask, addAuditLogTask, isQueueEnabled, generateRandomNickname, addBrowsingHistoryTask, cleanupExpiredBrowsingHistory, BROWSING_HISTORY_CONFIG } = require('../utils/queueService');
+const { checkUsernameBannedWords, checkBioBannedWords, getBannedWordAuditResult } = require('../utils/bannedWordsChecker');
 
 // 内容最大长度限制
 const MAX_CONTENT_LENGTH = 1000;
@@ -245,6 +248,237 @@ router.delete('/verification/revoke', authenticateToken, async (req, res) => {
   }
 });
 
+// 记录浏览历史（使用异步队列，限制每用户每分钟20条）
+router.post('/history', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { post_id } = req.body;
+
+    if (!post_id) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        code: RESPONSE_CODES.VALIDATION_ERROR,
+        message: '笔记ID不能为空'
+      });
+    }
+
+    // 检查笔记是否存在
+    const post = await prisma.post.findUnique({
+      where: { id: BigInt(post_id) },
+      select: { id: true, is_draft: true }
+    });
+
+    if (!post || post.is_draft) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        code: RESPONSE_CODES.NOT_FOUND,
+        message: '笔记不存在'
+      });
+    }
+
+    // 使用异步队列记录浏览历史（带速率限制）
+    const result = await addBrowsingHistoryTask(userId, post_id);
+    
+    if (result && result.rateLimited) {
+      return res.status(HTTP_STATUS.TOO_MANY_REQUESTS || 429).json({
+        code: RESPONSE_CODES.ERROR,
+        message: `浏览历史记录频率过高，每分钟最多记录${BROWSING_HISTORY_CONFIG.rateLimit}条`
+      });
+    }
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      message: '浏览记录已保存',
+      success: true
+    });
+  } catch (error) {
+    console.error('记录浏览历史失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      code: RESPONSE_CODES.ERROR,
+      message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR
+    });
+  }
+});
+
+// 获取浏览历史列表（只返回48小时内的记录）
+router.get('/history', authenticateToken, async (req, res) => {
+  try {
+    const userId = BigInt(req.user.id);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+    
+    // 计算48小时前的时间点
+    const cutoffTime = new Date(Date.now() - BROWSING_HISTORY_CONFIG.retentionHours * 60 * 60 * 1000);
+
+    const histories = await prisma.browsingHistory.findMany({
+      where: { 
+        user_id: userId,
+        updated_at: { gte: cutoffTime }
+      },
+      include: {
+        post: {
+          include: {
+            user: { select: { id: true, user_id: true, nickname: true, avatar: true, location: true } },
+            category: { select: { name: true } },
+            images: { select: { image_url: true, is_free_preview: true } },
+            videos: { select: { video_url: true, cover_url: true }, take: 1 },
+            tags: { include: { tag: { select: { id: true, name: true } } } },
+            paymentSettings: true
+          }
+        }
+      },
+      orderBy: { updated_at: 'desc' },
+      take: limit,
+      skip: skip
+    });
+
+    // 过滤掉草稿和不存在的笔记
+    const validHistories = histories.filter(h => h.post && !h.post.is_draft);
+    const posts = validHistories.map(h => ({ ...h.post, viewed_at: h.updated_at }));
+
+    let purchasedPostIds = new Set();
+    let likedPostIds = new Set();
+    let collectedPostIds = new Set();
+    if (posts.length > 0) {
+      const postIds = posts.map(p => p.id);
+      const purchases = await prisma.userPurchasedContent.findMany({ where: { user_id: userId, post_id: { in: postIds } }, select: { post_id: true } });
+      purchasedPostIds = new Set(purchases.map(p => p.post_id));
+      const likes = await prisma.like.findMany({ where: { user_id: userId, target_type: 1, target_id: { in: postIds } }, select: { target_id: true } });
+      likedPostIds = new Set(likes.map(l => l.target_id));
+      const collections = await prisma.collection.findMany({ where: { user_id: userId, post_id: { in: postIds } }, select: { post_id: true } });
+      collectedPostIds = new Set(collections.map(c => c.post_id));
+    }
+
+    const formattedPosts = posts.map(post => {
+      const formatted = {
+        id: Number(post.id),
+        user_id: Number(post.user_id),
+        title: post.title,
+        content: post.content,
+        category_id: post.category_id,
+        category: post.category?.name,
+        type: post.type,
+        view_count: Number(post.view_count),
+        like_count: post.like_count,
+        collect_count: post.collect_count,
+        comment_count: post.comment_count,
+        created_at: post.created_at,
+        viewed_at: post.viewed_at,
+        nickname: post.user?.nickname,
+        user_avatar: post.user?.avatar,
+        avatar: post.user?.avatar,
+        author: post.user?.nickname,
+        author_account: post.user?.user_id,
+        location: post.user?.location
+      };
+
+      const isAuthor = post.user_id === userId;
+      const hasPurchased = purchasedPostIds.has(post.id);
+      const paymentSetting = post.paymentSettings;
+      const imageUrls = post.images.map(img => ({ url: img.image_url, isFreePreview: img.is_free_preview }));
+      const videoData = post.videos[0] || null;
+
+      protectPostListItem(formatted, {
+        paymentSetting: paymentSetting ? { enabled: paymentSetting.enabled ? 1 : 0, free_preview_count: paymentSetting.free_preview_count, preview_duration: paymentSetting.preview_duration, price: paymentSetting.price, hide_all: paymentSetting.hide_all } : null,
+        isAuthor,
+        hasPurchased,
+        videoData: videoData ? { video_url: videoData.video_url, cover_url: videoData.cover_url } : null,
+        imageUrls
+      });
+
+      formatted.tags = post.tags.map(pt => ({ id: pt.tag.id, name: pt.tag.name }));
+      formatted.liked = likedPostIds.has(post.id);
+      formatted.collected = collectedPostIds.has(post.id);
+      return formatted;
+    });
+
+    const total = await prisma.browsingHistory.count({
+      where: {
+        user_id: userId,
+        post: { is_draft: false },
+        updated_at: { gte: cutoffTime }
+      }
+    });
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      message: 'success',
+      data: {
+        posts: formattedPosts,
+        pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+      }
+    });
+  } catch (error) {
+    console.error('获取浏览历史失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      code: RESPONSE_CODES.ERROR,
+      message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR
+    });
+  }
+});
+
+// 删除单条浏览历史
+router.delete('/history/:postId', authenticateToken, async (req, res) => {
+  try {
+    const userId = BigInt(req.user.id);
+    const postId = BigInt(req.params.postId);
+
+    const history = await prisma.browsingHistory.findUnique({
+      where: {
+        uk_user_post_history: {
+          user_id: userId,
+          post_id: postId
+        }
+      }
+    });
+
+    if (!history) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        code: RESPONSE_CODES.NOT_FOUND,
+        message: '浏览记录不存在'
+      });
+    }
+
+    await prisma.browsingHistory.delete({
+      where: { id: history.id }
+    });
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      message: '浏览记录已删除',
+      success: true
+    });
+  } catch (error) {
+    console.error('删除浏览历史失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      code: RESPONSE_CODES.ERROR,
+      message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR
+    });
+  }
+});
+
+// 清空所有浏览历史
+router.delete('/history', authenticateToken, async (req, res) => {
+  try {
+    const userId = BigInt(req.user.id);
+
+    await prisma.browsingHistory.deleteMany({
+      where: { user_id: userId }
+    });
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      message: '浏览历史已清空',
+      success: true
+    });
+  } catch (error) {
+    console.error('清空浏览历史失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      code: RESPONSE_CODES.ERROR,
+      message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR
+    });
+  }
+});
+
 // 获取用户个性标签
 router.get('/:id/personality-tags', async (req, res) => {
   try {
@@ -275,9 +509,10 @@ router.get('/:id/personality-tags', async (req, res) => {
 });
 
 // 获取用户信息
-router.get('/:id', async (req, res) => {
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const userIdParam = req.params.id;
+    const currentUserId = req.user ? BigInt(req.user.id) : null;
 
     // 只通过汐社号(user_id)进行查找
     const user = await prisma.user.findUnique({
@@ -292,13 +527,34 @@ router.get('/:id', async (req, res) => {
       });
     }
 
+    // 判断是否是本人
+    const isOwner = currentUserId && currentUserId === user.id;
+
+    // 处理个人简介的可见性
+    let displayBio = user.bio;
+    let bioAuditStatus = user.bio_audit_status;
+    
+    if (!isOwner) {
+      // 非本人查看：检查简介审核状态
+      if (bioAuditStatus === 0) {
+        // 待审核：显示提示文字
+        displayBio = '正在等待审核';
+      } else if (bioAuditStatus === 2) {
+        // 已拒绝：显示内容审核失败
+        displayBio = '内容审核失败';
+      }
+      // 已通过(1)：正常显示
+    }
+
     // 格式化用户数据
     const userData = {
       id: Number(user.id),
       user_id: user.user_id,
       nickname: user.nickname,
       avatar: user.avatar,
-      bio: user.bio,
+      background: user.background, // 用户背景图
+      bio: displayBio,
+      bio_audit_status: isOwner ? bioAuditStatus : undefined, // 仅本人可见审核状态
       location: user.location,
       follow_count: user.follow_count,
       fans_count: user.fans_count,
@@ -363,12 +619,12 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const userIdParam = req.params.id;
     const currentUserId = BigInt(req.user.id);
-    const { nickname, avatar, bio, location, gender, zodiac_sign, mbti, education, major, interests } = req.body;
+    const { nickname, avatar, background, bio, location, gender, zodiac_sign, mbti, education, major, interests } = req.body;
 
     // 始终通过汐社号查找对应的数字ID
     const userRecord = await prisma.user.findUnique({
       where: { user_id: userIdParam },
-      select: { id: true }
+      select: { id: true, nickname: true, bio: true }
     });
 
     if (!userRecord) {
@@ -386,9 +642,18 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '昵称不能为空' });
     }
 
-    const updateData = { nickname: nickname.trim() };
+    const trimmedNickname = nickname.trim();
+    const trimmedBio = bio !== undefined ? (bio || '').trim() : undefined;
+
+    // 检查昵称是否有修改
+    const nicknameChanged = trimmedNickname !== userRecord.nickname;
+    // 检查个人简介是否有修改
+    const bioChanged = trimmedBio !== undefined && trimmedBio !== (userRecord.bio || '');
+
+    const updateData = { nickname: trimmedNickname };
     if (avatar !== undefined) updateData.avatar = avatar || '';
-    if (bio !== undefined) updateData.bio = bio || '';
+    if (background !== undefined) updateData.background = background || ''; // 背景图
+    if (trimmedBio !== undefined) updateData.bio = trimmedBio;
     if (location !== undefined) updateData.location = location || '';
     if (gender !== undefined) updateData.gender = gender || null;
     if (zodiac_sign !== undefined) updateData.zodiac_sign = zodiac_sign || null;
@@ -397,14 +662,110 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (major !== undefined) updateData.major = major || null;
     if (interests !== undefined) updateData.interests = interests || null;
 
+    // 检查昵称违禁词
+    if (nicknameChanged) {
+      const nicknameCheck = await checkUsernameBannedWords(prisma, trimmedNickname);
+      if (nicknameCheck.matched) {
+        // 触发本地违禁词，生成随机昵称替换
+        const randomNickname = generateRandomNickname();
+        updateData.nickname = randomNickname;
+        addAuditLogTask({
+          userId: Number(targetUserId),
+          type: AUDIT_TYPES.NICKNAME,
+          targetId: Number(targetUserId),
+          content: trimmedNickname,
+          auditResult: getBannedWordAuditResult(nicknameCheck.matchedWords),
+          riskLevel: 'high',
+          categories: ['banned_word'],
+          reason: `[本地违禁词拒绝] 昵称触发违禁词: ${nicknameCheck.matchedWords.join(', ')}，已自动替换为随机昵称: ${randomNickname}`,
+          status: AUDIT_STATUS.REJECTED
+        });
+      } else if (isAuditEnabled()) {
+        // 如果启用了审核，添加异步审核任务
+        if (isQueueEnabled()) {
+          addContentAuditTask(trimmedNickname, Number(targetUserId), 'nickname', Number(targetUserId));
+        } else {
+          // 同步审核
+          const auditResult = await auditNickname(trimmedNickname, Number(targetUserId));
+          let replacementNickname = null;
+          if (!auditResult?.passed) {
+            // AI审核不通过，生成随机昵称替换
+            replacementNickname = generateRandomNickname();
+            updateData.nickname = replacementNickname;
+          }
+          addAuditLogTask({
+            userId: Number(targetUserId),
+            type: AUDIT_TYPES.NICKNAME,
+            targetId: Number(targetUserId),
+            content: trimmedNickname,
+            auditResult: auditResult,
+            riskLevel: auditResult?.risk_level || 'low',
+            categories: auditResult?.categories || [],
+            reason: auditResult?.passed ? '[AI审核通过] 昵称审核通过' : `[AI审核拒绝] ${auditResult?.reason || '昵称审核未通过'}，已自动替换为随机昵称: ${replacementNickname}`,
+            status: auditResult?.passed ? AUDIT_STATUS.APPROVED : AUDIT_STATUS.REJECTED
+          });
+        }
+      }
+    }
+
+    // 检查个人简介违禁词
+    if (bioChanged && trimmedBio) {
+      const bioCheck = await checkBioBannedWords(prisma, trimmedBio);
+      if (bioCheck.matched) {
+        // 触发本地违禁词，设置简介为空并拒绝
+        updateData.bio = '';
+        updateData.bio_audit_status = AUDIT_STATUS.REJECTED;
+        addAuditLogTask({
+          userId: Number(targetUserId),
+          type: AUDIT_TYPES.BIO,
+          targetId: Number(targetUserId),
+          content: trimmedBio,
+          auditResult: getBannedWordAuditResult(bioCheck.matchedWords),
+          riskLevel: 'high',
+          categories: ['banned_word'],
+          reason: `[本地违禁词拒绝] 个人简介触发违禁词: ${bioCheck.matchedWords.join(', ')}，已自动清空简介`,
+          status: AUDIT_STATUS.REJECTED
+        });
+      } else if (isAuditEnabled()) {
+        // 需要审核，设置为待审核状态
+        updateData.bio_audit_status = AUDIT_STATUS.PENDING;
+        if (isQueueEnabled()) {
+          addContentAuditTask(trimmedBio, Number(targetUserId), 'bio', Number(targetUserId));
+        } else {
+          // 同步审核
+          const auditResult = await auditBio(trimmedBio, Number(targetUserId));
+          const passed = auditResult?.passed !== false;
+          updateData.bio_audit_status = passed ? AUDIT_STATUS.APPROVED : AUDIT_STATUS.REJECTED;
+          if (!passed) {
+            // AI审核不通过，清空简介
+            updateData.bio = '';
+          }
+          addAuditLogTask({
+            userId: Number(targetUserId),
+            type: AUDIT_TYPES.BIO,
+            targetId: Number(targetUserId),
+            content: trimmedBio,
+            auditResult: auditResult,
+            riskLevel: auditResult?.risk_level || 'low',
+            categories: auditResult?.categories || [],
+            reason: passed ? '[AI审核通过] 个人简介审核通过' : `[AI审核拒绝] ${auditResult?.reason || '个人简介不符合规范'}，已自动清空简介`,
+            status: passed ? AUDIT_STATUS.APPROVED : AUDIT_STATUS.REJECTED
+          });
+        }
+      } else {
+        // 未启用审核，直接通过
+        updateData.bio_audit_status = AUDIT_STATUS.APPROVED;
+      }
+    }
+
     await prisma.user.update({ where: { id: targetUserId }, data: updateData });
 
     const updatedUser = await prisma.user.findUnique({
       where: { id: targetUserId },
       select: {
-        id: true, user_id: true, nickname: true, avatar: true, bio: true, location: true, email: true,
-        gender: true, zodiac_sign: true, mbti: true, education: true, major: true, interests: true,
-        follow_count: true, fans_count: true, like_count: true
+        id: true, user_id: true, nickname: true, avatar: true, background: true, bio: true, bio_audit_status: true,
+        location: true, email: true, gender: true, zodiac_sign: true, mbti: true, education: true,
+        major: true, interests: true, follow_count: true, fans_count: true, like_count: true
       }
     });
 
@@ -1014,6 +1375,7 @@ router.get('/:id/posts', optionalAuth, async (req, res) => {
     const category = req.query.category;
     const keyword = req.query.keyword;
     const sort = req.query.sort || 'created_at';
+    const visibilityFilter = req.query.visibility;
 
     // 始终通过汐社号查找对应的数字ID
     const userRecord = await prisma.user.findUnique({
@@ -1026,8 +1388,35 @@ router.get('/:id/posts', optionalAuth, async (req, res) => {
     }
     const userId = userRecord.id;
 
+    // Check if current user is mutual follower with the target user
+    let isMutualFollower = false;
+    if (currentUserId && currentUserId !== userId) {
+      const [followsTarget, followedByTarget] = await Promise.all([
+        prisma.follow.findUnique({ where: { uk_follow: { follower_id: currentUserId, following_id: userId } } }),
+        prisma.follow.findUnique({ where: { uk_follow: { follower_id: userId, following_id: currentUserId } } })
+      ]);
+      isMutualFollower = !!(followsTarget && followedByTarget);
+    }
+
     // 构建查询条件
     const whereConditions = { user_id: userId, is_draft: false };
+    
+    // Add visibility filter based on viewer relationship
+    if (currentUserId && currentUserId === userId) {
+      // Author viewing their own posts
+      // If visibility filter is specified, apply it (for private tab)
+      if (visibilityFilter && ['public', 'private', 'friends_only'].includes(visibilityFilter)) {
+        whereConditions.visibility = visibilityFilter;
+      }
+      // Otherwise no visibility filter - show all
+    } else if (isMutualFollower) {
+      // Mutual follower can see public and friends_only posts
+      whereConditions.visibility = { in: ['public', 'friends_only'] };
+    } else {
+      // Others can only see public posts
+      whereConditions.visibility = 'public';
+    }
+    
     if (category) {
       whereConditions.category_id = parseInt(category);
     }
@@ -1085,6 +1474,7 @@ router.get('/:id/posts', optionalAuth, async (req, res) => {
         collect_count: post.collect_count,
         comment_count: post.comment_count,
         created_at: post.created_at,
+        visibility: post.visibility || 'public',
         nickname: post.user?.nickname,
         user_avatar: post.user?.avatar,
         avatar: post.user?.avatar,

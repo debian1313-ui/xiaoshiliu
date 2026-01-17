@@ -29,9 +29,14 @@ const { execSync } = require('child_process');
 const config = require('./config/config');
 const { HTTP_STATUS, RESPONSE_CODES } = require('./constants');
 const prisma = require('./utils/prisma');
+const { initQueueService, closeQueueService, cleanupExpiredBrowsingHistory } = require('./utils/queueService');
 
 // 加载环境变量
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
+
+// 定时清理过期浏览历史的间隔（1小时）
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+let cleanupTimer = null;
 
 // 默认管理员账户配置
 // 用户名: admin
@@ -51,10 +56,10 @@ const likesRoutes = require('./routes/likes');
 const tagsRoutes = require('./routes/tags');
 const searchRoutes = require('./routes/search');
 const notificationsRoutes = require('./routes/notifications');
+const systemNotificationsRoutes = require('./routes/systemNotifications');
 const uploadRoutes = require('./routes/upload');
 const statsRoutes = require('./routes/stats');
 const adminRoutes = require('./routes/admin');
-const categoriesRoutes = require('./routes/categories');
 const balanceRoutes = require('./routes/balance');
 
 const app = express();
@@ -98,10 +103,10 @@ app.use('/api/likes', likesRoutes);
 app.use('/api/tags', tagsRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/system-notifications', systemNotificationsRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/categories', categoriesRoutes);
 app.use('/api/balance', balanceRoutes);
 
 // 错误处理中间件
@@ -221,7 +226,23 @@ async function validatePrismaConnection() {
 const PORT = config.server.port;
 
 // 先验证 Prisma 连接，然后启动服务器
-validatePrismaConnection().then((connected) => {
+validatePrismaConnection().then(async (connected) => {
+  // 初始化异步队列服务
+  await initQueueService();
+  
+  // 启动定时清理过期浏览历史任务（每小时执行一次）
+  if (connected) {
+    // 首次启动时执行一次清理
+    cleanupExpiredBrowsingHistory();
+    
+    // 设置定时任务
+    cleanupTimer = setInterval(() => {
+      cleanupExpiredBrowsingHistory();
+    }, CLEANUP_INTERVAL_MS);
+    
+    console.log('● 浏览历史定时清理任务已启动（每小时执行）');
+  }
+  
   app.listen(PORT, () => {
     console.log(`● 服务器运行在端口 ${PORT}`);
     console.log(`● 环境: ${config.server.env}`);
@@ -231,8 +252,13 @@ validatePrismaConnection().then((connected) => {
   });
 });
 
-// 优雅关闭 - 断开 Prisma 连接
+// 优雅关闭 - 断开 Prisma 连接和队列服务
 process.on('beforeExit', async () => {
+  // 清除定时器
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+  }
+  await closeQueueService();
   await prisma.$disconnect();
 });
 

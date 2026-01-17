@@ -47,6 +47,36 @@ model Audit {
   @@map("audit")
 }
 
+// 违禁词表
+model BannedWord {
+  id          Int      @id @default(autoincrement())
+  word        String   @db.VarChar(100)
+  category_id Int?     // 分类ID，可为空（表示未分类）
+  is_regex    Boolean  @default(false) // 是否为正则表达式/通配符模式
+  enabled     Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  category BannedWordCategory? @relation(fields: [category_id], references: [id], onDelete: SetNull)
+
+  @@index([category_id], name: "idx_banned_word_category")
+  @@index([enabled], name: "idx_banned_word_enabled")
+  @@map("banned_words")
+}
+
+// 违禁词分类表
+model BannedWordCategory {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique @db.VarChar(50) // 分类名称
+  description String?  @db.VarChar(200)        // 分类描述
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  words BannedWord[]
+
+  @@map("banned_word_categories")
+}
+
 // 分类表
 model Category {
   id             Int      @id @default(autoincrement())
@@ -306,6 +336,7 @@ model Post {
   attachments     PostAttachment[]
   paymentSettings PostPaymentSetting?
   purchasedBy     UserPurchasedContent[]
+  browsingHistory BrowsingHistory[]
 
   @@index([user_id], name: "idx_user_id")
   @@index([category_id], name: "idx_category_id")
@@ -328,6 +359,51 @@ model SystemSetting {
 
   @@index([setting_group], name: "idx_setting_group")
   @@map("system_settings")
+}
+
+// 系统通知类型枚举
+enum SystemNotificationType {
+  system   // 系统消息
+  activity // 活动消息
+}
+
+// 系统通知表
+model SystemNotification {
+  id           BigInt                 @id @default(autoincrement())
+  title        String                 @db.VarChar(200)
+  content      String                 @db.Text
+  type         SystemNotificationType @default(system)
+  image_url    String?                @db.VarChar(500)
+  link_url     String?                @db.VarChar(500)
+  is_active    Boolean                @default(true)
+  start_time   DateTime?
+  end_time     DateTime?
+  created_at   DateTime               @default(now())
+  updated_at   DateTime               @updatedAt
+
+  // 用户确认记录关联
+  confirmations SystemNotificationConfirmation[]
+
+  @@index([is_active], name: "idx_system_notification_active")
+  @@index([type], name: "idx_system_notification_type")
+  @@index([start_time, end_time], name: "idx_system_notification_time")
+  @@map("system_notifications")
+}
+
+// 系统通知用户确认记录表
+model SystemNotificationConfirmation {
+  id              BigInt   @id @default(autoincrement())
+  notification_id BigInt
+  user_id         BigInt
+  confirmed_at    DateTime @default(now())
+
+  notification SystemNotification @relation(fields: [notification_id], references: [id], onDelete: Cascade)
+  user         User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([notification_id, user_id], name: "uk_notification_user")
+  @@index([notification_id], name: "idx_confirmation_notification")
+  @@index([user_id], name: "idx_confirmation_user")
+  @@map("system_notification_confirmations")
 }
 
 // 标签表
@@ -417,6 +493,24 @@ model UserSession {
   @@map("user_sessions")
 }
 
+// 浏览历史表
+model BrowsingHistory {
+  id         BigInt   @id @default(autoincrement())
+  user_id    BigInt
+  post_id    BigInt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, post_id], name: "uk_user_post_history")
+  @@index([user_id], name: "idx_browsing_history_user_id")
+  @@index([post_id], name: "idx_browsing_history_post_id")
+  @@index([updated_at], name: "idx_browsing_history_updated_at")
+  @@map("browsing_history")
+}
+
 // 用户表
 model User {
   id             BigInt    @id @default(autoincrement())
@@ -426,7 +520,9 @@ model User {
   nickname       String    @db.VarChar(100)
   email          String?   @db.VarChar(100)
   avatar         String?   @db.VarChar(500)
+  background     String?   @db.VarChar(500) // 用户个人主页背景图
   bio            String?   @db.Text
+  bio_audit_status Int     @default(1) @db.TinyInt // 0:待审核 1:已通过 2:已拒绝
   location       String?   @db.VarChar(100)
   follow_count   Int       @default(0)
   fans_count     Int       @default(0)
@@ -460,6 +556,8 @@ model User {
   subscriptionsAsAuthor   UserAuthorSubscription[] @relation("SubscriptionAuthor")
   purchasedContentAsUser  UserPurchasedContent[] @relation("PurchasedContentUser")
   purchasedContentAsAuthor UserPurchasedContent[] @relation("PurchasedContentAuthor")
+  browsingHistory         BrowsingHistory[]
+  systemNotificationConfirmations SystemNotificationConfirmation[]
 
   @@index([user_id], name: "idx_user_id")
   @@index([email], name: "idx_email")

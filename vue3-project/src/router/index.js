@@ -6,6 +6,7 @@ import notification from '@/views/notification/index.vue'
 import user from '@/views/user/index.vue'
 import userProfile from '@/views/user/UserProfile.vue'
 import FollowList from '@/views/user/FollowList.vue'
+import BrowsingHistory from '@/views/user/BrowsingHistory.vue'
 import ChannelPage from '@/views/explore/ChannelPage.vue'
 import FollowingPage from '@/views/explore/FollowingPage.vue'
 import PostDetail from '@/views/PostDetail.vue'
@@ -22,8 +23,8 @@ import ApiDocs from '@/views/admin/ApiDocs.vue'
 import AdminMonitor from '@/views/admin/AdminMonitor.vue'
 import UserManagement from '@/views/admin/UserManagement.vue'
 import PostManagement from '@/views/admin/PostManagement.vue'
+import BatchUploadManagement from '@/views/admin/BatchUploadManagement.vue'
 import CommentManagement from '@/views/admin/CommentManagement.vue'
-import CategoryManagement from '@/views/admin/CategoryManagement.vue'
 import TagManagement from '@/views/admin/TagManagement.vue'
 import LikeManagement from '@/views/admin/LikeManagement.vue'
 import CollectionManagement from '@/views/admin/CollectionManagement.vue'
@@ -33,6 +34,9 @@ import SessionManagement from '@/views/admin/SessionManagement.vue'
 import AdminManagement from '@/views/admin/AdminManagement.vue'
 import AuditManagement from '@/views/admin/AuditManagement.vue'
 import ContentReviewManagement from '@/views/admin/ContentReviewManagement.vue'
+import QueueManagement from '@/views/admin/QueueManagement.vue'
+import BannedWordsManagement from '@/views/admin/BannedWordsManagement.vue'
+import SystemNotificationManagement from '@/views/admin/SystemNotificationManagement.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -50,6 +54,11 @@ const router = createRouter({
             {
               path: '',
               name: 'recommend',
+              component: ChannelPage
+            },
+            {
+              path: '/explore/video',
+              name: 'video',
               component: ChannelPage
             },
             {
@@ -117,6 +126,11 @@ const router = createRouter({
               })
             }
           }
+        },
+        {
+          path: 'history',
+          name: 'browsing_history',
+          component: BrowsingHistory
         },
         {
           path: 'search_result',
@@ -208,14 +222,14 @@ const router = createRouter({
           component: PostManagement
         },
         {
+          path: 'batch-upload',
+          name: 'admin_batch_upload',
+          component: BatchUploadManagement
+        },
+        {
           path: 'comments',
           name: 'admin_comments',
           component: CommentManagement
-        },
-        {
-          path: 'categories',
-          name: 'admin_categories',
-          component: CategoryManagement
         },
         {
           path: 'tags',
@@ -261,6 +275,21 @@ const router = createRouter({
           path: 'content-review',
           name: 'admin_content_review',
           component: ContentReviewManagement
+        },
+        {
+          path: 'queues',
+          name: 'admin_queues',
+          component: QueueManagement
+        },
+        {
+          path: 'banned-words',
+          name: 'admin_banned_words',
+          component: BannedWordsManagement
+        },
+        {
+          path: 'system-notifications',
+          name: 'admin_system_notifications',
+          component: SystemNotificationManagement
         }
       ]
     }

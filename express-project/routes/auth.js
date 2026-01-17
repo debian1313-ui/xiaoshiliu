@@ -2,12 +2,14 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const { HTTP_STATUS, RESPONSE_CODES, ERROR_MESSAGES } = require('../constants');
-const { pool, prisma, email: emailConfig, oauth2: oauth2Config } = require('../config/config');
+const { pool, prisma, email: emailConfig, oauth2: oauth2Config, queue: queueConfig, geetest: geetestConfig } = require('../config/config');
 const { generateAccessToken, generateRefreshToken, verifyToken } = require('../utils/jwt');
 const { authenticateToken } = require('../middleware/auth');
 const { getIPLocation, getRealIP } = require('../utils/ipLocation');
 const { sendEmailCode } = require('../utils/email');
 const { auditNickname, isAuditEnabled } = require('../utils/contentAudit');
+const { addIPLocationTask, addContentAuditTask, isQueueEnabled } = require('../utils/queueService');
+const { checkUsernameBannedWords } = require('../utils/bannedWordsChecker');
 const svgCaptcha = require('svg-captcha');
 const path = require('path');
 const fs = require('fs');
@@ -19,6 +21,74 @@ const emailCodeStore = new Map();
 // 存储OAuth2 state参数（用于防止CSRF攻击）
 const oauth2StateStore = new Map();
 
+/**
+ * 极验验证码二次校验
+ * @param {Object} geetestData - 前端传来的极验验证数据
+ * @param {string} geetestData.lot_number - 验证流水号
+ * @param {string} geetestData.captcha_output - 验证输出信息
+ * @param {string} geetestData.pass_token - 验证通过标识
+ * @param {string} geetestData.gen_time - 验证通过时间戳
+ * @returns {Promise<{success: boolean, message: string}>}
+ */
+const verifyGeetestCaptcha = async (geetestData) => {
+  try {
+    const { lot_number, captcha_output, pass_token, gen_time } = geetestData;
+    
+    // 生成签名 sign_token = HMAC-SHA256(captcha_key, lot_number)
+    const sign_token = crypto
+      .createHmac('sha256', geetestConfig.captchaKey)
+      .update(lot_number)
+      .digest('hex');
+    
+    // 构建请求参数
+    const params = new URLSearchParams({
+      lot_number,
+      captcha_output,
+      pass_token,
+      gen_time,
+      sign_token
+    });
+    
+    // 调用极验二次校验接口
+    const response = await fetch(
+      `${geetestConfig.apiServer}/validate?captcha_id=${geetestConfig.captchaId}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params.toString()
+      }
+    );
+    
+    if (!response.ok) {
+      console.error('极验API请求失败:', `HTTP ${response.status} ${response.statusText}`);
+      return { success: false, message: '验证码服务暂时不可用，请稍后重试' };
+    }
+    
+    const result = await response.json();
+    
+    if (result.result === 'success') {
+      return { success: true, message: '验证通过' };
+    } else {
+      console.error('极验验证失败:', result.reason);
+      return { success: false, message: result.reason || '验证码校验失败' };
+    }
+  } catch (error) {
+    // 区分不同类型的错误
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      console.error('极验验证网络错误:', error.message);
+      return { success: false, message: '网络连接失败，请检查网络后重试' };
+    } else if (error.name === 'AbortError') {
+      console.error('极验验证请求超时');
+      return { success: false, message: '验证码服务响应超时，请稍后重试' };
+    } else {
+      console.error('极验验证异常:', error.name, error.message);
+      return { success: false, message: '验证码服务异常，请稍后重试' };
+    }
+  }
+};
+
 // 获取认证配置状态（包括邮件功能和OAuth2配置）
 router.get('/auth-config', (req, res) => {
   res.json({
@@ -28,7 +98,10 @@ router.get('/auth-config', (req, res) => {
       oauth2Enabled: oauth2Config.enabled,
       oauth2OnlyLogin: oauth2Config.onlyOAuth2,
       // 只返回必要的OAuth2配置，不返回敏感信息
-      oauth2LoginUrl: oauth2Config.enabled ? oauth2Config.loginUrl : ''
+      oauth2LoginUrl: oauth2Config.enabled ? oauth2Config.loginUrl : '',
+      // 极验验证码配置
+      geetestEnabled: geetestConfig.enabled,
+      geetestCaptchaId: geetestConfig.enabled ? geetestConfig.captchaId : ''
     },
     message: 'success'
   });
@@ -466,20 +539,38 @@ router.delete('/unbind-email', authenticateToken, async (req, res) => {
 // 用户注册
 router.post('/register', async (req, res) => {
   try {
-    const { user_id, nickname, password, captchaId, captchaText, email, emailCode } = req.body;
+    const { user_id, nickname, password, captchaId, captchaText, email, emailCode,
+      // 极验验证码参数
+      lot_number, captcha_output, pass_token, gen_time
+    } = req.body;
 
     // 根据邮件功能是否启用，决定必填参数
     const isEmailEnabled = emailConfig.enabled;
+    // 根据极验是否启用，决定验证方式
+    const isGeetestEnabled = geetestConfig.enabled;
 
-    if (isEmailEnabled) {
-      // 邮件功能启用时，邮箱和邮箱验证码必填
-      if (!user_id || !nickname || !password || !captchaId || !captchaText || !email || !emailCode) {
-        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '缺少必要参数' });
+    // 基本参数验证
+    if (!user_id || !nickname || !password) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '缺少必要参数' });
+    }
+
+    // 验证码参数验证（根据启用的验证码类型）
+    if (isGeetestEnabled) {
+      // 极验验证码启用时，需要极验相关参数
+      if (!lot_number || !captcha_output || !pass_token || !gen_time) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '缺少验证码参数' });
       }
     } else {
-      // 邮件功能未启用时，邮箱和邮箱验证码可选
-      if (!user_id || !nickname || !password || !captchaId || !captchaText) {
-        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '缺少必要参数' });
+      // 传统验证码启用时，需要captchaId和captchaText
+      if (!captchaId || !captchaText) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '缺少验证码参数' });
+      }
+    }
+
+    // 邮件功能启用时，邮箱和邮箱验证码必填
+    if (isEmailEnabled) {
+      if (!email || !emailCode) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '缺少邮箱验证参数' });
       }
     }
 
@@ -492,23 +583,38 @@ router.post('/register', async (req, res) => {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.CONFLICT, message: '用户ID已存在' });
     }
 
-    // 验证验证码
-    const storedCaptcha = captchaStore.get(captchaId);
-    if (!storedCaptcha) {
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '验证码已过期或不存在' });
-    }
+    // 验证验证码（根据启用的类型）
+    if (isGeetestEnabled) {
+      // 极验验证码二次校验
+      const geetestResult = await verifyGeetestCaptcha({
+        lot_number,
+        captcha_output,
+        pass_token,
+        gen_time
+      });
+      
+      if (!geetestResult.success) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: geetestResult.message || '验证码校验失败' });
+      }
+    } else {
+      // 传统验证码验证
+      const storedCaptcha = captchaStore.get(captchaId);
+      if (!storedCaptcha) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '验证码已过期或不存在' });
+      }
 
-    if (Date.now() > storedCaptcha.expires) {
+      if (Date.now() > storedCaptcha.expires) {
+        captchaStore.delete(captchaId);
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '验证码已过期' });
+      }
+
+      if (captchaText !== storedCaptcha.text) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '验证码错误' });
+      }
+
+      // 验证码验证成功，删除已使用的验证码
       captchaStore.delete(captchaId);
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '验证码已过期' });
     }
-
-    if (captchaText !== storedCaptcha.text) {
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '验证码错误' });
-    }
-
-    // 验证码验证成功，删除已使用的验证码
-    captchaStore.delete(captchaId);
 
     // 邮件功能启用时才验证邮箱
     if (isEmailEnabled) {
@@ -553,8 +659,23 @@ router.post('/register', async (req, res) => {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '密码长度必须在6-20位之间' });
     }
 
+    // 首先检查本地违禁词（不需要调用AI服务）
+    const nicknameCheck = await checkUsernameBannedWords(prisma, nickname);
+    if (nicknameCheck.matched) {
+      console.log(`⚠️ 注册昵称触发本地违禁词: ${nicknameCheck.matchedWords.join(', ')} - 用户ID: ${user_id}`);
+      
+      // 注意：因为用户尚未创建，无法写入审核日志表（外键约束）
+      // 拒绝注册并返回错误信息
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
+        code: RESPONSE_CODES.VALIDATION_ERROR, 
+        message: '昵称包含违禁词，请修改后重试'
+      });
+    }
+
     // 审核昵称（如果启用了内容审核）
-    if (isAuditEnabled()) {
+    // 如果队列启用，使用异步审核；否则使用同步审核
+    if (isAuditEnabled() && !isQueueEnabled()) {
+      // 同步审核（当队列未启用时使用，可能会阻塞）
       try {
         const nicknameAuditResult = await auditNickname(nickname, user_id);
         
@@ -574,19 +695,25 @@ router.post('/register', async (req, res) => {
         // 审核异常时不阻塞注册，继续流程
       }
     }
+    // 注意：如果队列启用，昵称审核将在注册完成后异步进行
 
-    // 获取用户IP属地
+    // 获取用户IP和User-Agent
     const userIP = getRealIP(req);
-    let ipLocation;
-    try {
-      ipLocation = await getIPLocation(userIP);
-    } catch (error) {
-      ipLocation = '未知';
-    }
-    // 获取用户User-Agent
     const userAgent = req.headers['user-agent'] || '';
     // 默认头像使用空字符串，前端会使用本地默认头像
     const defaultAvatar = '';
+
+    // 获取用户IP属地
+    // 如果启用了异步队列，使用队列处理；否则同步处理
+    let ipLocation = '未知';
+    if (!isQueueEnabled()) {
+      // 同步获取 IP 属地
+      try {
+        ipLocation = await getIPLocation(userIP);
+      } catch (error) {
+        ipLocation = '未知';
+      }
+    }
 
     // 插入新用户（密码使用SHA2哈希加密）
     // 邮件功能未启用时，email字段存储空字符串
@@ -605,6 +732,18 @@ router.post('/register', async (req, res) => {
     });
 
     const userId = newUser.id;
+
+    // 如果启用了异步队列，将 IP 属地更新任务加入队列
+    if (isQueueEnabled()) {
+      addIPLocationTask(Number(userId), userIP);
+    }
+
+    // 如果启用了内容审核和异步队列，将昵称审核任务加入队列
+    // 审核不通过时，队列处理器会自动将昵称修改为随机昵称
+    if (isAuditEnabled() && isQueueEnabled()) {
+      addContentAuditTask(nickname, Number(userId), 'nickname', Number(userId));
+      console.log(`📝 昵称审核任务已加入队列 - 用户ID: ${userId}`);
+    }
 
     // 生成JWT令牌
     const accessToken = generateAccessToken({ userId: Number(userId), user_id });
@@ -659,7 +798,7 @@ router.post('/login', async (req, res) => {
     // 查找用户
     const user = await prisma.user.findUnique({
       where: { user_id: user_id.toString() },
-      select: { id: true, user_id: true, nickname: true, password: true, avatar: true, bio: true, location: true, follow_count: true, fans_count: true, like_count: true, is_active: true, gender: true, zodiac_sign: true, mbti: true, education: true, major: true, interests: true }
+      select: { id: true, user_id: true, nickname: true, password: true, avatar: true, background: true, bio: true, location: true, follow_count: true, fans_count: true, like_count: true, is_active: true, gender: true, zodiac_sign: true, mbti: true, education: true, major: true, interests: true }
     });
 
     if (!user) {
@@ -685,11 +824,19 @@ router.post('/login', async (req, res) => {
     const userAgent = req.headers['user-agent'] || '';
 
     // 获取IP地理位置并更新用户location
-    const ipLocation = await getIPLocation(userIP);
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { location: ipLocation }
-    });
+    // 如果启用了异步队列，使用队列处理；否则同步处理
+    let ipLocation = user.location || '未知';
+    if (isQueueEnabled()) {
+      // 异步更新 IP 属地
+      addIPLocationTask(Number(user.id), userIP);
+    } else {
+      // 同步更新 IP 属地
+      ipLocation = await getIPLocation(userIP);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { location: ipLocation }
+      });
+    }
 
     // 清除旧会话并保存新会话
     await prisma.userSession.updateMany({
@@ -780,11 +927,18 @@ router.post('/refresh', async (req, res) => {
     const userAgent = req.headers['user-agent'] || '';
 
     // 获取IP地理位置并更新用户location
-    const ipLocation = await getIPLocation(userIP);
-    await prisma.user.update({
-      where: { id: BigInt(decoded.userId) },
-      data: { location: ipLocation }
-    });
+    // 如果启用了异步队列，使用队列处理；否则同步处理
+    if (isQueueEnabled()) {
+      // 异步更新 IP 属地
+      addIPLocationTask(decoded.userId, userIP);
+    } else {
+      // 同步更新 IP 属地
+      const ipLocation = await getIPLocation(userIP);
+      await prisma.user.update({
+        where: { id: BigInt(decoded.userId) },
+        data: { location: ipLocation }
+      });
+    }
 
     // 更新会话
     await prisma.userSession.update({
@@ -843,7 +997,7 @@ router.get('/me', authenticateToken, async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { id: BigInt(userId) },
-      select: { id: true, user_id: true, nickname: true, avatar: true, bio: true, location: true, email: true, follow_count: true, fans_count: true, like_count: true, is_active: true, created_at: true, gender: true, zodiac_sign: true, mbti: true, education: true, major: true, interests: true, verified: true }
+      select: { id: true, user_id: true, nickname: true, avatar: true, background: true, bio: true, location: true, email: true, follow_count: true, fans_count: true, like_count: true, is_active: true, created_at: true, gender: true, zodiac_sign: true, mbti: true, education: true, major: true, interests: true, verified: true }
     });
 
     if (!user) {
@@ -1183,7 +1337,7 @@ router.put('/admin/admins/:id/password', authenticateToken, async (req, res) => 
 // ========== OAuth2 登录相关 ==========
 
 // OAuth2用户信息查询字段（减少重复）
-const OAUTH2_USER_SELECT_FIELDS = { id: true, user_id: true, nickname: true, avatar: true, bio: true, location: true, follow_count: true, fans_count: true, like_count: true, is_active: true, gender: true, zodiac_sign: true, mbti: true, education: true, major: true, interests: true };
+const OAUTH2_USER_SELECT_FIELDS = { id: true, user_id: true, nickname: true, avatar: true, background: true, bio: true, location: true, follow_count: true, fans_count: true, like_count: true, is_active: true, gender: true, zodiac_sign: true, mbti: true, education: true, major: true, interests: true };
 
 // 生成OAuth2 state参数
 const generateOAuth2State = () => {
@@ -1396,12 +1550,15 @@ router.get('/oauth2/callback', async (req, res) => {
       }
 
       // 获取用户IP属地
+      // 如果启用了异步队列，使用队列处理；否则同步处理
       const userIP = getRealIP(req);
-      let ipLocation;
-      try {
-        ipLocation = await getIPLocation(userIP);
-      } catch (error) {
-        ipLocation = '未知';
+      let ipLocation = '未知';
+      if (!isQueueEnabled()) {
+        try {
+          ipLocation = await getIPLocation(userIP);
+        } catch (error) {
+          ipLocation = '未知';
+        }
       }
 
       // 创建新用户（不设置密码，通过OAuth2登录）
@@ -1418,6 +1575,16 @@ router.get('/oauth2/callback', async (req, res) => {
           oauth2_id: BigInt(oauth2UserId)
         }
       });
+
+      // 如果启用了异步队列，将 IP 属地更新任务加入队列
+      if (isQueueEnabled()) {
+        addIPLocationTask(Number(newUser.id), userIP);
+      }
+
+      // 如果启用了内容审核和异步队列，将昵称审核任务加入队列
+      if (isAuditEnabled() && isQueueEnabled()) {
+        addContentAuditTask(defaultNickname, Number(newUser.id), 'nickname', Number(newUser.id));
+      }
 
       // 获取新创建的用户信息
       user = await prisma.user.findUnique({
@@ -1476,7 +1643,8 @@ router.get('/oauth2/callback', async (req, res) => {
       is_new_user: isNewUser ? 'true' : 'false'
     });
 
-    res.redirect(`/?${redirectParams.toString()}`);
+    // 重定向到 /explore 页面
+    res.redirect(`/explore?${redirectParams.toString()}`);
   } catch (error) {
     console.error('OAuth2回调处理失败:', error.message);
     console.error('OAuth2回调错误堆栈:', error.stack);

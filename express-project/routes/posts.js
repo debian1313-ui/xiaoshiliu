@@ -15,10 +15,52 @@ const {
   protectPostListItem,
   protectPostDetail 
 } = require('../utils/paidContentHelper');
+const { getRecommendedPosts, getHotPosts } = require('../utils/recommendationService');
 
 // Post type constants
 const POST_TYPE_IMAGE = 1;
 const POST_TYPE_VIDEO = 2;
+
+// Visibility constants
+const VISIBILITY_PUBLIC = 'public';
+const VISIBILITY_PRIVATE = 'private';
+const VISIBILITY_FRIENDS_ONLY = 'friends_only';
+
+// Helper to check if two users mutually follow each other
+async function areMutualFollowers(userId1, userId2) {
+  if (!userId1 || !userId2 || userId1 === userId2) return false;
+  
+  const [follows1to2, follows2to1] = await Promise.all([
+    prisma.follow.findUnique({
+      where: { uk_follow: { follower_id: userId1, following_id: userId2 } }
+    }),
+    prisma.follow.findUnique({
+      where: { uk_follow: { follower_id: userId2, following_id: userId1 } }
+    })
+  ]);
+  
+  return !!(follows1to2 && follows2to1);
+}
+
+// Helper to check if user can view a post based on visibility
+async function canViewPost(post, currentUserId) {
+  // Author can always view their own posts
+  if (currentUserId && post.user_id === currentUserId) return true;
+  
+  const visibility = post.visibility || VISIBILITY_PUBLIC;
+  
+  switch (visibility) {
+    case VISIBILITY_PUBLIC:
+      return true;
+    case VISIBILITY_PRIVATE:
+      return false;
+    case VISIBILITY_FRIENDS_ONLY:
+      if (!currentUserId) return false;
+      return await areMutualFollowers(currentUserId, post.user_id);
+    default:
+      return true;
+  }
+}
 
 // Helper to normalize payment settings (support both camelCase and snake_case)
 function normalizePaymentSettings(settings) {
@@ -49,6 +91,7 @@ async function formatPost(post, currentUserId, prisma, options = {}) {
     comment_count: post.comment_count,
     created_at: post.created_at,
     is_draft: post.is_draft,
+    visibility: post.visibility || VISIBILITY_PUBLIC,
     nickname: post.user?.nickname,
     user_avatar: post.user?.avatar,
     author_account: post.user?.user_id,
@@ -80,6 +123,209 @@ async function formatPost(post, currentUserId, prisma, options = {}) {
   return formatted;
 }
 
+// 获取推荐笔记列表 - 精准推送算法
+router.get('/recommended', optionalAuth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const type = req.query.type ? parseInt(req.query.type) : null;
+    const debug = req.query.debug === 'true';
+    const currentUserId = req.user ? BigInt(req.user.id) : null;
+
+    console.log(`📊 [推荐算法] 开始计算推荐 - 用户ID: ${currentUserId || '未登录'}, 页码: ${page}`);
+
+    // 调用推荐算法服务
+    const result = await getRecommendedPosts({
+      userId: currentUserId,
+      page,
+      limit,
+      type
+    });
+
+    // 批量获取用户互动状态
+    let purchasedPostIds = new Set();
+    let likedPostIds = new Set();
+    let collectedPostIds = new Set();
+    if (currentUserId && result.posts.length > 0) {
+      const postIds = result.posts.map(p => p.id);
+      const [purchases, likes, collections] = await Promise.all([
+        prisma.userPurchasedContent.findMany({ where: { user_id: currentUserId, post_id: { in: postIds } }, select: { post_id: true } }),
+        prisma.like.findMany({ where: { user_id: currentUserId, target_type: 1, target_id: { in: postIds } }, select: { target_id: true } }),
+        prisma.collection.findMany({ where: { user_id: currentUserId, post_id: { in: postIds } }, select: { post_id: true } })
+      ]);
+      purchasedPostIds = new Set(purchases.map(p => p.post_id));
+      likedPostIds = new Set(likes.map(l => l.target_id));
+      collectedPostIds = new Set(collections.map(c => c.post_id));
+    }
+
+    // 格式化返回数据
+    const formattedPosts = result.posts.map(post => {
+      const formatted = {
+        id: Number(post.id),
+        user_id: Number(post.user_id),
+        title: post.title,
+        content: post.content,
+        category_id: post.category_id,
+        category: post.category?.name,
+        type: post.type,
+        view_count: Number(post.view_count),
+        like_count: post.like_count,
+        collect_count: post.collect_count,
+        comment_count: post.comment_count,
+        created_at: post.created_at,
+        is_draft: post.is_draft,
+        visibility: post.visibility || VISIBILITY_PUBLIC,
+        nickname: post.user?.nickname,
+        user_avatar: post.user?.avatar,
+        author_account: post.user?.user_id,
+        author_auto_id: post.user ? Number(post.user.id) : null,
+        location: post.user?.location,
+        verified: post.user?.verified,
+        avatar: post.user?.avatar,
+        author: post.user?.nickname,
+        // 推荐算法调试信息
+        _recommendationScore: post._recommendationScore,
+        _scoreBreakdown: post._scoreBreakdown
+      };
+
+      const isAuthor = currentUserId && post.user_id === currentUserId;
+      const hasPurchased = purchasedPostIds.has(post.id);
+      const paymentSetting = post.paymentSettings;
+      const imageUrls = post.images.map(img => ({ url: img.image_url, isFreePreview: img.is_free_preview }));
+      const videoData = post.videos[0] || null;
+
+      protectPostListItem(formatted, {
+        paymentSetting: paymentSetting ? { enabled: paymentSetting.enabled ? 1 : 0, free_preview_count: paymentSetting.free_preview_count, preview_duration: paymentSetting.preview_duration, price: Number(paymentSetting.price), hide_all: paymentSetting.hide_all } : null,
+        isAuthor,
+        hasPurchased,
+        videoData: videoData ? { video_url: videoData.video_url, cover_url: videoData.cover_url, preview_video_url: videoData.preview_video_url } : null,
+        imageUrls
+      });
+
+      formatted.tags = post.tags.map(pt => ({ id: pt.tag.id, name: pt.tag.name }));
+      formatted.liked = likedPostIds.has(post.id);
+      formatted.collected = collectedPostIds.has(post.id);
+      return formatted;
+    });
+
+    console.log(`📊 [推荐算法] 计算完成 - 返回 ${formattedPosts.length} 条推荐, 执行时间: ${result.debug?.statistics?.executionTimeMs || 0}ms`);
+
+    const responseData = {
+      code: RESPONSE_CODES.SUCCESS,
+      message: 'success',
+      data: {
+        posts: formattedPosts,
+        pagination: result.pagination
+      }
+    };
+
+    // 如果开启调试模式，返回详细的推荐算法信息
+    if (debug && result.debug) {
+      responseData.data._recommendationDebug = result.debug;
+    }
+
+    res.json(responseData);
+  } catch (error) {
+    console.error('获取推荐笔记列表失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR });
+  }
+});
+
+// 获取热门笔记列表
+router.get('/hot', optionalAuth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const category = req.query.category || null;
+    const type = req.query.type ? parseInt(req.query.type) : null;
+    const timeRange = parseInt(req.query.timeRange) || 7; // 默认7天内
+    const currentUserId = req.user ? BigInt(req.user.id) : null;
+
+    console.log(`🔥 [热门算法] 获取热门笔记 - 页码: ${page}, 时间范围: ${timeRange}天`);
+
+    // 调用热门算法服务
+    const result = await getHotPosts({
+      page,
+      limit,
+      timeRange,
+      category,
+      type
+    });
+
+    // 批量获取用户互动状态
+    let likedPostIds = new Set();
+    let collectedPostIds = new Set();
+    if (currentUserId && result.posts.length > 0) {
+      const postIds = result.posts.map(p => p.id);
+      const [likes, collections] = await Promise.all([
+        prisma.like.findMany({ where: { user_id: currentUserId, target_type: 1, target_id: { in: postIds } }, select: { target_id: true } }),
+        prisma.collection.findMany({ where: { user_id: currentUserId, post_id: { in: postIds } }, select: { post_id: true } })
+      ]);
+      likedPostIds = new Set(likes.map(l => l.target_id));
+      collectedPostIds = new Set(collections.map(c => c.post_id));
+    }
+
+    // 格式化返回数据
+    const formattedPosts = result.posts.map(post => {
+      const formatted = {
+        id: Number(post.id),
+        user_id: Number(post.user_id),
+        title: post.title,
+        content: post.content,
+        category_id: post.category_id,
+        category: post.category?.name,
+        type: post.type,
+        view_count: Number(post.view_count),
+        like_count: post.like_count,
+        collect_count: post.collect_count,
+        comment_count: post.comment_count,
+        created_at: post.created_at,
+        is_draft: post.is_draft,
+        visibility: post.visibility || VISIBILITY_PUBLIC,
+        nickname: post.user?.nickname,
+        user_avatar: post.user?.avatar,
+        author_account: post.user?.user_id,
+        author_auto_id: post.user ? Number(post.user.id) : null,
+        location: post.user?.location,
+        verified: post.user?.verified,
+        avatar: post.user?.avatar,
+        author: post.user?.nickname
+      };
+
+      const imageUrls = post.images.map(img => ({ url: img.image_url, isFreePreview: img.is_free_preview }));
+      const videoData = post.videos[0] || null;
+      const paymentSetting = post.paymentSettings;
+
+      protectPostListItem(formatted, {
+        paymentSetting: paymentSetting ? { enabled: paymentSetting.enabled ? 1 : 0, free_preview_count: paymentSetting.free_preview_count, preview_duration: paymentSetting.preview_duration, price: Number(paymentSetting.price), hide_all: paymentSetting.hide_all } : null,
+        isAuthor: false,
+        hasPurchased: false,
+        videoData: videoData ? { video_url: videoData.video_url, cover_url: videoData.cover_url, preview_video_url: videoData.preview_video_url } : null,
+        imageUrls
+      });
+
+      formatted.tags = post.tags.map(pt => ({ id: pt.tag.id, name: pt.tag.name }));
+      formatted.liked = likedPostIds.has(post.id);
+      formatted.collected = collectedPostIds.has(post.id);
+      return formatted;
+    });
+
+    console.log(`🔥 [热门算法] 计算完成 - 返回 ${formattedPosts.length} 条热门笔记`);
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      message: 'success',
+      data: {
+        posts: formattedPosts,
+        pagination: result.pagination
+      }
+    });
+  } catch (error) {
+    console.error('获取热门笔记列表失败:', error);
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: ERROR_MESSAGES.INTERNAL_SERVER_ERROR });
+  }
+});
+
 // 获取笔记列表
 router.get('/', optionalAuth, async (req, res) => {
   try {
@@ -108,6 +354,30 @@ router.get('/', optionalAuth, async (req, res) => {
 
     const where = {};
     where.is_draft = isDraft;
+    
+    // Get mutual followers for friends_only visibility filtering
+    let mutualFollowerIds = new Set();
+    if (currentUserId) {
+      // Get users who the current user follows
+      const following = await prisma.follow.findMany({
+        where: { follower_id: currentUserId },
+        select: { following_id: true }
+      });
+      const followingIds = following.map(f => f.following_id);
+      
+      // Get users who follow the current user back (mutual followers)
+      if (followingIds.length > 0) {
+        const mutualFollows = await prisma.follow.findMany({
+          where: {
+            follower_id: { in: followingIds },
+            following_id: currentUserId
+          },
+          select: { follower_id: true }
+        });
+        mutualFollowerIds = new Set(mutualFollows.map(f => f.follower_id));
+      }
+    }
+    
     if (isDraft) {
       if (!currentUserId) {
         return res.status(HTTP_STATUS.UNAUTHORIZED).json({ code: RESPONSE_CODES.UNAUTHORIZED, message: '查看草稿需要登录' });
@@ -115,6 +385,33 @@ router.get('/', optionalAuth, async (req, res) => {
       where.user_id = currentUserId;
     } else if (userId) {
       where.user_id = userId;
+      // When viewing specific user's posts
+      if (currentUserId && currentUserId === userId) {
+        // Author can see all their own posts (no visibility filter)
+      } else if (currentUserId && mutualFollowerIds.has(userId)) {
+        // Mutual follower can see public and friends_only posts
+        where.visibility = { in: [VISIBILITY_PUBLIC, VISIBILITY_FRIENDS_ONLY] };
+      } else {
+        // Others can only see public posts
+        where.visibility = VISIBILITY_PUBLIC;
+      }
+    } else {
+      // When browsing all posts (no specific user)
+      // Show public posts + friends_only posts from mutual followers
+      if (currentUserId && mutualFollowerIds.size > 0) {
+        where.OR = [
+          { visibility: VISIBILITY_PUBLIC },
+          { visibility: VISIBILITY_FRIENDS_ONLY, user_id: { in: Array.from(mutualFollowerIds) } },
+          { user_id: currentUserId } // User's own posts
+        ];
+      } else if (currentUserId) {
+        where.OR = [
+          { visibility: VISIBILITY_PUBLIC },
+          { user_id: currentUserId } // User's own posts
+        ];
+      } else {
+        where.visibility = VISIBILITY_PUBLIC;
+      }
     }
     if (category) where.category_id = category;
     if (type) where.type = type;
@@ -165,6 +462,7 @@ router.get('/', optionalAuth, async (req, res) => {
         comment_count: post.comment_count,
         created_at: post.created_at,
         is_draft: post.is_draft,
+        visibility: post.visibility || VISIBILITY_PUBLIC,
         nickname: post.user?.nickname,
         user_avatar: post.user?.avatar,
         author_account: post.user?.user_id,
@@ -324,6 +622,19 @@ router.get('/:id', optionalAuth, async (req, res) => {
       return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '笔记不存在' });
     }
 
+    // Check visibility permissions
+    const canView = await canViewPost(post, currentUserId);
+    if (!canView) {
+      const visibility = post.visibility || VISIBILITY_PUBLIC;
+      let message = '无权查看该笔记';
+      if (visibility === VISIBILITY_PRIVATE) {
+        message = '该笔记为私密笔记';
+      } else if (visibility === VISIBILITY_FRIENDS_ONLY) {
+        message = '该笔记仅互关好友可见';
+      }
+      return res.status(HTTP_STATUS.FORBIDDEN).json({ code: RESPONSE_CODES.FORBIDDEN, message });
+    }
+
     // Increment view count
     await prisma.post.update({ where: { id: postId }, data: { view_count: { increment: 1 } } });
 
@@ -341,6 +652,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
       comment_count: post.comment_count,
       created_at: post.created_at,
       is_draft: post.is_draft,
+      visibility: post.visibility || VISIBILITY_PUBLIC,
       nickname: post.user?.nickname,
       user_avatar: post.user?.avatar,
       author_account: post.user?.user_id,
@@ -418,12 +730,15 @@ router.get('/:id', optionalAuth, async (req, res) => {
 // 创建笔记
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { title, content, category_id, type = 1, images = [], video, tags = [], is_draft = false, paymentSettings, attachment } = req.body;
+    const { title, content, category_id, type = 1, images = [], video, tags = [], is_draft = false, paymentSettings, attachment, visibility = VISIBILITY_PUBLIC } = req.body;
     const userId = BigInt(req.user.id);
 
     if (!title || !content) {
       return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '标题和内容不能为空' });
     }
+
+    // Validate visibility value
+    const validVisibility = [VISIBILITY_PUBLIC, VISIBILITY_PRIVATE, VISIBILITY_FRIENDS_ONLY].includes(visibility) ? visibility : VISIBILITY_PUBLIC;
 
     const sanitizedContent = sanitizeContent(content);
 
@@ -435,7 +750,8 @@ router.post('/', authenticateToken, async (req, res) => {
         content: sanitizedContent,
         category_id: category_id ? parseInt(category_id) : null,
         type: parseInt(type),
-        is_draft
+        is_draft,
+        visibility: validVisibility
       }
     });
 
@@ -558,7 +874,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const postId = BigInt(req.params.id);
     const userId = BigInt(req.user.id);
-    const { title, content, category_id, type, images = [], video, tags = [], is_draft, paymentSettings, attachment } = req.body;
+    const { title, content, category_id, type, images = [], video, tags = [], is_draft, paymentSettings, attachment, visibility } = req.body;
 
     const post = await prisma.post.findUnique({ where: { id: postId }, select: { user_id: true } });
     if (!post) {
@@ -574,6 +890,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (category_id !== undefined) updateData.category_id = category_id ? parseInt(category_id) : null;
     if (type !== undefined) updateData.type = parseInt(type);
     if (is_draft !== undefined) updateData.is_draft = is_draft;
+    if (visibility !== undefined) {
+      // Validate visibility value
+      updateData.visibility = [VISIBILITY_PUBLIC, VISIBILITY_PRIVATE, VISIBILITY_FRIENDS_ONLY].includes(visibility) ? visibility : VISIBILITY_PUBLIC;
+    }
 
     await prisma.post.update({ where: { id: postId }, data: updateData });
 

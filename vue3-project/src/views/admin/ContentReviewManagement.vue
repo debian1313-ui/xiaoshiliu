@@ -21,6 +21,23 @@
     <ConfirmDialog v-model:visible="showDeleteModal" title="确认删除"
       :message="`确定要删除此审核记录吗？此操作不可撤销。`" type="warning"
       confirm-text="删除" cancel-text="取消" @confirm="handleConfirmDelete" @cancel="showDeleteModal = false" />
+
+    <!-- JSON详情弹窗 -->
+    <div v-if="showJsonModal" class="modal-overlay" @click="showJsonModal = false">
+      <div class="json-modal" @click.stop>
+        <div class="modal-header">
+          <h3>审核结果详情 (audit_result)</h3>
+          <button class="close-btn" @click="showJsonModal = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <pre class="json-content">{{ formatJson(selectedAuditResult) }}</pre>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="copyToClipboard">复制JSON</button>
+          <button class="btn btn-primary" @click="showJsonModal = false">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -71,6 +88,10 @@ const toastType = ref('success')
 const showDeleteModal = ref(false)
 const selectedItem = ref(null)
 
+// JSON详情弹窗状态
+const showJsonModal = ref(false)
+const selectedAuditResult = ref(null)
+
 // 消息提示方法
 const showMessage = (message, type = 'success') => {
   toastMessage.value = message
@@ -80,6 +101,28 @@ const showMessage = (message, type = 'success') => {
 
 const handleToastClose = () => {
   showToast.value = false
+}
+
+// 格式化JSON
+const formatJson = (obj) => {
+  if (!obj) return '无数据'
+  try {
+    return JSON.stringify(obj, null, 2)
+  } catch (e) {
+    return String(obj)
+  }
+}
+
+// 复制到剪贴板
+const copyToClipboard = async () => {
+  try {
+    const text = formatJson(selectedAuditResult.value)
+    await navigator.clipboard.writeText(text)
+    showMessage('已复制到剪贴板')
+  } catch (error) {
+    console.error('复制失败:', error)
+    showMessage('复制失败', 'error')
+  }
 }
 
 // 处理删除确认
@@ -132,7 +175,8 @@ const columns = [
     sortable: false,
     statusMap: {
       3: { text: '评论审核', class: 'type-comment' },
-      4: { text: '昵称审核', class: 'type-nickname' }
+      4: { text: '昵称审核', class: 'type-nickname' },
+      5: { text: '简介审核', class: 'type-bio' }
     }
   },
   { key: 'content', label: '审核内容', type: 'content', sortable: false },
@@ -167,7 +211,8 @@ const formFields = computed(() => [
     required: true,
     options: [
       { value: 3, label: '评论审核' },
-      { value: 4, label: '昵称审核' }
+      { value: 4, label: '昵称审核' },
+      { value: 5, label: '简介审核' }
     ]
   },
   { key: 'content', label: '审核内容', type: 'textarea', required: true, placeholder: '请输入审核相关内容' },
@@ -195,7 +240,8 @@ const searchFields = [
     options: [
       { value: '', label: '全部类型' },
       { value: '3', label: '评论审核' },
-      { value: '4', label: '昵称审核' }
+      { value: '4', label: '昵称审核' },
+      { value: '5', label: '简介审核' }
     ]
   },
   {
@@ -214,6 +260,7 @@ const searchFields = [
 
 // 自定义操作按钮
 const customActions = [
+  { key: 'detail', icon: 'info', title: '查看详情', class: 'btn-info' },
   { key: 'retry', icon: 'refresh', title: '重试AI审核', class: 'btn-primary' },
   { key: 'approve', icon: 'passed', title: '审核通过', class: 'btn-success' },
   { key: 'reject', icon: 'unpassed', title: '拒绝', class: 'btn-danger' },
@@ -223,7 +270,25 @@ const customActions = [
 // 处理自定义操作
 const handleCustomAction = async ({ action, item }) => {
   try {
-    if (action === 'retry') {
+    if (action === 'detail') {
+      // 获取详情并显示audit_result
+      try {
+        const response = await fetch(`${apiConfig.baseURL}/admin/content-review/${item.id}`, {
+          method: 'GET',
+          headers: getAuthHeaders()
+        })
+        const result = await response.json()
+        if (result.code === 200 && result.data) {
+          selectedAuditResult.value = result.data.audit_result || { message: '无审核结果数据' }
+          showJsonModal.value = true
+        } else {
+          showMessage('获取详情失败: ' + result.message, 'error')
+        }
+      } catch (e) {
+        console.error('获取详情失败:', e)
+        showMessage('获取详情失败', 'error')
+      }
+    } else if (action === 'retry') {
       // 重试AI审核（仅待审核状态可用）
       if (item.status !== 0) {
         showMessage('只有待审核状态的记录可以重试', 'error')
@@ -375,5 +440,128 @@ const handleCustomAction = async ({ action, item }) => {
 .toggle-hint {
   font-size: 13px;
   color: var(--text-color-secondary);
+}
+
+/* 简介审核类型样式 */
+:deep(.type-bio) {
+  color: #9b59b6;
+}
+
+/* JSON弹窗样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.json-modal {
+  background: var(--bg-color-primary);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 700px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color-primary);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-color-primary);
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--text-color-secondary);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.close-btn:hover {
+  color: var(--text-color-primary);
+}
+
+.modal-body {
+  flex: 1;
+  padding: 20px;
+  overflow: auto;
+}
+
+.json-content {
+  margin: 0;
+  padding: 16px;
+  background: var(--bg-color-secondary);
+  border-radius: 8px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-color-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: auto;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color-primary);
+}
+
+.btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background: var(--primary-color);
+  color: white;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-secondary {
+  background: var(--bg-color-secondary);
+  color: var(--text-color-primary);
+  border: 1px solid var(--border-color-primary);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-color-tertiary);
+}
+
+.btn-info {
+  background: #17a2b8;
+  color: white;
+}
+
+.btn-info:hover {
+  background: #138496;
 }
 </style>

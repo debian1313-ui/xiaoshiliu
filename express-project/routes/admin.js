@@ -5,6 +5,7 @@ const { prisma } = require('../config/config')
 const { adminAuth } = require('../utils/uploadHelper')
 const { auditComment } = require('../utils/contentAudit')
 const { batchCleanupFiles } = require('../utils/fileCleanup')
+const { getQueueStats, getQueueJobs, getJobDetails, retryJob, cleanQueue, isQueueEnabled, QUEUE_NAMES } = require('../utils/queueService')
 const crypto = require('crypto')
 
 // ===================== AI审核设置 =====================
@@ -139,10 +140,10 @@ router.get('/posts/:id', adminAuth, async (req, res) => {
 
 router.post('/posts', adminAuth, async (req, res) => {
   try {
-    const { user_id, title, content, category_id, images, image_urls, tags, type, is_draft } = req.body
+    const { user_id, title, content, category_id, images, image_urls, tags, type, is_draft, video_url, cover_url } = req.body
 
-    if (!user_id || !title || !content) {
-      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '缺少必填字段' })
+    if (!user_id) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '缺少用户ID' })
     }
 
     const user = await prisma.user.findUnique({ where: { id: BigInt(user_id) } })
@@ -153,8 +154,8 @@ router.post('/posts', adminAuth, async (req, res) => {
     const post = await prisma.post.create({
       data: {
         user_id: BigInt(user_id),
-        title,
-        content,
+        title: title || '',
+        content: content || '',
         category_id: category_id ? parseInt(category_id) : null,
         type: type || 1,
         is_draft: is_draft !== undefined ? Boolean(is_draft) : true
@@ -206,6 +207,17 @@ router.post('/posts', adminAuth, async (req, res) => {
         await prisma.postTag.create({ data: { post_id: post.id, tag_id: tagId } })
         await prisma.tag.update({ where: { id: tagId }, data: { use_count: { increment: 1 } } })
       }
+    }
+
+    // Handle video for video posts
+    if (video_url && video_url.trim() !== '') {
+      await prisma.postVideo.create({
+        data: {
+          post_id: post.id,
+          video_url: video_url.trim(),
+          cover_url: cover_url || ''
+        }
+      })
     }
 
     res.json({ code: RESPONSE_CODES.SUCCESS, data: { id: Number(post.id) }, message: '笔记创建成功' })
@@ -2575,6 +2587,938 @@ router.get('/stats/overview', adminAuth, async (req, res) => {
   } catch (error) {
     console.error('获取统计信息失败:', error)
     res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取失败' })
+  }
+})
+
+// ===================== 队列管理 =====================
+
+// 获取队列统计信息
+router.get('/queues', adminAuth, async (req, res) => {
+  try {
+    const stats = await getQueueStats()
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: stats,
+      message: 'success'
+    })
+  } catch (error) {
+    console.error('获取队列统计失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取队列统计失败' })
+  }
+})
+
+// 获取队列任务列表
+router.get('/queues/:name/jobs', adminAuth, async (req, res) => {
+  try {
+    const { name } = req.params
+    const { status = 'waiting', start = 0, end = 20 } = req.query
+
+    const result = await getQueueJobs(name, status, parseInt(start), parseInt(end))
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: result,
+      message: 'success'
+    })
+  } catch (error) {
+    console.error('获取队列任务列表失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取队列任务列表失败' })
+  }
+})
+
+// 获取单个任务详情（包含完整的返回结果数据）
+router.get('/queues/:name/jobs/:jobId', adminAuth, async (req, res) => {
+  try {
+    const { name, jobId } = req.params
+
+    const result = await getJobDetails(name, jobId)
+    if (result.error) {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.ERROR, message: result.error })
+    } else {
+      res.json({
+        code: RESPONSE_CODES.SUCCESS,
+        data: result,
+        message: 'success'
+      })
+    }
+  } catch (error) {
+    console.error('获取任务详情失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取任务详情失败' })
+  }
+})
+
+// 重试失败的任务
+router.post('/queues/:name/jobs/:jobId/retry', adminAuth, async (req, res) => {
+  try {
+    const { name, jobId } = req.params
+
+    const result = await retryJob(name, jobId)
+    if (result.success) {
+      res.json({ code: RESPONSE_CODES.SUCCESS, message: result.message })
+    } else {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.ERROR, message: result.message })
+    }
+  } catch (error) {
+    console.error('重试任务失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '重试任务失败' })
+  }
+})
+
+// 清空队列
+router.delete('/queues/:name', adminAuth, async (req, res) => {
+  try {
+    const { name } = req.params
+
+    const result = await cleanQueue(name)
+    if (result.success) {
+      res.json({ code: RESPONSE_CODES.SUCCESS, message: result.message })
+    } else {
+      res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.ERROR, message: result.message })
+    }
+  } catch (error) {
+    console.error('清空队列失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '清空队列失败' })
+  }
+})
+
+// 获取队列名称列表
+router.get('/queue-names', adminAuth, (req, res) => {
+  res.json({
+    code: RESPONSE_CODES.SUCCESS,
+    data: {
+      enabled: isQueueEnabled(),
+      names: Object.values(QUEUE_NAMES)
+    },
+    message: 'success'
+  })
+})
+
+// ===================== 违禁词管理 =====================
+const { forceRefreshCache } = require('../utils/bannedWordsChecker')
+
+// 获取违禁词列表
+router.get('/banned-words', adminAuth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 50
+    const skip = (page - 1) * limit
+    const { word, category_id, enabled, sortField = 'created_at', sortOrder = 'desc' } = req.query
+
+    const where = {}
+    if (word) where.word = { contains: word }
+    if (category_id !== undefined && category_id !== '' && category_id !== 'all') {
+      where.category_id = category_id === 'null' ? null : parseInt(category_id)
+    }
+    if (enabled !== undefined && enabled !== '') where.enabled = enabled === 'true' || enabled === '1'
+
+    const [total, words] = await Promise.all([
+      prisma.bannedWord.count({ where }),
+      prisma.bannedWord.findMany({
+        where,
+        include: {
+          category: {
+            select: { id: true, name: true }
+          }
+        },
+        orderBy: { [sortField]: sortOrder.toLowerCase() },
+        take: limit,
+        skip: skip
+      })
+    ])
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: { data: words, pagination: { page, limit, total, pages: Math.ceil(total / limit) } },
+      message: 'success'
+    })
+  } catch (error) {
+    console.error('获取违禁词列表失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取失败' })
+  }
+})
+
+// 获取单个违禁词
+router.get('/banned-words/:id', adminAuth, async (req, res) => {
+  try {
+    const wordId = parseInt(req.params.id)
+    const word = await prisma.bannedWord.findUnique({ 
+      where: { id: wordId },
+      include: {
+        category: {
+          select: { id: true, name: true }
+        }
+      }
+    })
+
+    if (!word) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '违禁词不存在' })
+    }
+
+    res.json({ code: RESPONSE_CODES.SUCCESS, data: word, message: 'success' })
+  } catch (error) {
+    console.error('获取违禁词详情失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取失败' })
+  }
+})
+
+// 创建违禁词
+router.post('/banned-words', adminAuth, async (req, res) => {
+  try {
+    const { word, category_id, is_regex, enabled } = req.body
+
+    if (!word || !word.trim()) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '违禁词不能为空' })
+    }
+
+    const newWord = await prisma.bannedWord.create({
+      data: {
+        word: word.trim(),
+        category_id: category_id ? parseInt(category_id) : null,
+        is_regex: !!is_regex,
+        enabled: enabled !== false
+      }
+    })
+
+    // 刷新缓存
+    await forceRefreshCache(prisma)
+
+    res.json({ code: RESPONSE_CODES.SUCCESS, data: { id: newWord.id }, message: '创建成功' })
+  } catch (error) {
+    console.error('创建违禁词失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '创建失败' })
+  }
+})
+
+// 更新违禁词
+router.put('/banned-words/:id', adminAuth, async (req, res) => {
+  try {
+    const wordId = parseInt(req.params.id)
+    const { word, category_id, is_regex, enabled } = req.body
+
+    const existing = await prisma.bannedWord.findUnique({ where: { id: wordId } })
+    if (!existing) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '违禁词不存在' })
+    }
+
+    const updateData = {}
+    if (word !== undefined) updateData.word = word.trim()
+    if (category_id !== undefined) updateData.category_id = category_id ? parseInt(category_id) : null
+    if (is_regex !== undefined) updateData.is_regex = !!is_regex
+    if (enabled !== undefined) updateData.enabled = !!enabled
+
+    await prisma.bannedWord.update({ where: { id: wordId }, data: updateData })
+
+    // 刷新缓存
+    await forceRefreshCache(prisma)
+
+    res.json({ code: RESPONSE_CODES.SUCCESS, message: '更新成功' })
+  } catch (error) {
+    console.error('更新违禁词失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '更新失败' })
+  }
+})
+
+// 删除违禁词
+router.delete('/banned-words/:id', adminAuth, async (req, res) => {
+  try {
+    const wordId = parseInt(req.params.id)
+    await prisma.bannedWord.delete({ where: { id: wordId } })
+
+    // 刷新缓存
+    await forceRefreshCache(prisma)
+
+    res.json({ code: RESPONSE_CODES.SUCCESS, message: '删除成功' })
+  } catch (error) {
+    console.error('删除违禁词失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '删除失败' })
+  }
+})
+
+// 批量删除违禁词
+router.delete('/banned-words', adminAuth, async (req, res) => {
+  try {
+    const { ids } = req.body
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '请提供要删除的ID列表' })
+    }
+
+    await prisma.bannedWord.deleteMany({ where: { id: { in: ids.map(id => parseInt(id)) } } })
+
+    // 刷新缓存
+    await forceRefreshCache(prisma)
+
+    res.json({ code: RESPONSE_CODES.SUCCESS, message: '成功删除 ' + ids.length + ' 条记录' })
+  } catch (error) {
+    console.error('批量删除违禁词失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '删除失败' })
+  }
+})
+
+// 批量导入违禁词
+router.post('/banned-words/import', adminAuth, async (req, res) => {
+  try {
+    const { words, category_id, isRegex } = req.body
+
+    if (!words || !Array.isArray(words) || words.length === 0) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '请提供要导入的违禁词列表' })
+    }
+
+    // 过滤空值和重复值
+    const uniqueWords = [...new Set(words.filter(w => w && w.trim()).map(w => w.trim()))]
+
+    // 批量创建，如果指定了isRegex则使用该值，否则自动检测通配符
+    const created = await prisma.bannedWord.createMany({
+      data: uniqueWords.map(word => ({
+        word,
+        category_id: category_id ? parseInt(category_id) : null,
+        is_regex: isRegex || word.includes('*') || word.includes('?'),
+        enabled: true
+      })),
+      skipDuplicates: true
+    })
+
+    // 刷新缓存
+    await forceRefreshCache(prisma)
+
+    res.json({ code: RESPONSE_CODES.SUCCESS, data: { count: created.count }, message: `成功导入 ${created.count} 个违禁词` })
+  } catch (error) {
+    console.error('批量导入违禁词失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '导入失败' })
+  }
+})
+
+// 导出违禁词
+router.get('/banned-words/export', adminAuth, async (req, res) => {
+  try {
+    const { category_id } = req.query
+
+    const where = { enabled: true }
+    if (category_id && category_id !== 'all') {
+      where.category_id = category_id === 'null' ? null : parseInt(category_id)
+    }
+
+    const words = await prisma.bannedWord.findMany({
+      where,
+      select: { word: true, is_regex: true },
+      orderBy: { word: 'asc' }
+    })
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: {
+        category_id: category_id || 'all',
+        words: words.map(w => w.word),
+        count: words.length
+      },
+      message: 'success'
+    })
+  } catch (error) {
+    console.error('导出违禁词失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '导出失败' })
+  }
+})
+
+// ===================== 违禁词分类管理 =====================
+
+// 获取违禁词分类列表
+router.get('/banned-word-categories', adminAuth, async (req, res) => {
+  try {
+    const categories = await prisma.bannedWordCategory.findMany({
+      orderBy: { name: 'asc' },
+      include: {
+        _count: {
+          select: { words: true }
+        }
+      }
+    })
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: categories.map(c => ({
+        id: c.id,
+        name: c.name,
+        description: c.description,
+        word_count: c._count.words,
+        created_at: c.created_at,
+        updated_at: c.updated_at
+      })),
+      message: 'success'
+    })
+  } catch (error) {
+    console.error('获取违禁词分类列表失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取失败' })
+  }
+})
+
+// 创建违禁词分类
+router.post('/banned-word-categories', adminAuth, async (req, res) => {
+  try {
+    const { name, description } = req.body
+
+    if (!name || !name.trim()) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '分类名称不能为空' })
+    }
+
+    // 检查名称是否已存在
+    const existing = await prisma.bannedWordCategory.findUnique({ where: { name: name.trim() } })
+    if (existing) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.CONFLICT, message: '分类名称已存在' })
+    }
+
+    const newCategory = await prisma.bannedWordCategory.create({
+      data: {
+        name: name.trim(),
+        description: description?.trim() || null
+      }
+    })
+
+    res.json({ code: RESPONSE_CODES.SUCCESS, data: { id: newCategory.id }, message: '创建成功' })
+  } catch (error) {
+    console.error('创建违禁词分类失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '创建失败' })
+  }
+})
+
+// 更新违禁词分类
+router.put('/banned-word-categories/:id', adminAuth, async (req, res) => {
+  try {
+    const categoryId = parseInt(req.params.id)
+    const { name, description } = req.body
+
+    const existing = await prisma.bannedWordCategory.findUnique({ where: { id: categoryId } })
+    if (!existing) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '分类不存在' })
+    }
+
+    const updateData = {}
+    if (name !== undefined) {
+      if (!name.trim()) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '分类名称不能为空' })
+      }
+      // 检查名称是否与其他分类冲突
+      const nameConflict = await prisma.bannedWordCategory.findFirst({
+        where: { name: name.trim(), id: { not: categoryId } }
+      })
+      if (nameConflict) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.CONFLICT, message: '分类名称已存在' })
+      }
+      updateData.name = name.trim()
+    }
+    if (description !== undefined) updateData.description = description?.trim() || null
+
+    await prisma.bannedWordCategory.update({ where: { id: categoryId }, data: updateData })
+
+    res.json({ code: RESPONSE_CODES.SUCCESS, message: '更新成功' })
+  } catch (error) {
+    console.error('更新违禁词分类失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '更新失败' })
+  }
+})
+
+// 删除违禁词分类
+router.delete('/banned-word-categories/:id', adminAuth, async (req, res) => {
+  try {
+    const categoryId = parseInt(req.params.id)
+
+    const existing = await prisma.bannedWordCategory.findUnique({ where: { id: categoryId } })
+    if (!existing) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '分类不存在' })
+    }
+
+    // 删除分类（关联的违禁词的category_id会被设为null）
+    await prisma.bannedWordCategory.delete({ where: { id: categoryId } })
+
+    // 刷新缓存
+    await forceRefreshCache(prisma)
+
+    res.json({ code: RESPONSE_CODES.SUCCESS, message: '删除成功' })
+  } catch (error) {
+    console.error('删除违禁词分类失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '删除失败' })
+  }
+})
+
+// ===================== 批量上传管理 =====================
+const fs = require('fs')
+const pathModule = require('path')
+
+// 支持的文件扩展名常量
+const SUPPORTED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']
+const SUPPORTED_VIDEO_EXTENSIONS = ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.mkv']
+
+// 获取 /uploads/plsc 目录下的所有图片和视频文件
+router.get('/batch-upload/files', adminAuth, async (req, res) => {
+  try {
+    const plscDir = pathModule.join(process.cwd(), 'uploads', 'plsc')
+    
+    // 检查目录是否存在
+    if (!fs.existsSync(plscDir)) {
+      // 创建目录
+      fs.mkdirSync(plscDir, { recursive: true })
+      return res.json({
+        code: RESPONSE_CODES.SUCCESS,
+        data: { images: [], videos: [] },
+        message: '目录为空'
+      })
+    }
+    
+    const files = fs.readdirSync(plscDir)
+    const images = []
+    const videos = []
+    
+    for (const file of files) {
+      const ext = pathModule.extname(file).toLowerCase()
+      const filePath = pathModule.join(plscDir, file)
+      const stat = fs.statSync(filePath)
+      
+      if (stat.isFile()) {
+        const fileInfo = {
+          name: file,
+          size: stat.size,
+          path: `/uploads/plsc/${file}`,
+          createdAt: stat.birthtime
+        }
+        
+        if (SUPPORTED_IMAGE_EXTENSIONS.includes(ext)) {
+          images.push(fileInfo)
+        } else if (SUPPORTED_VIDEO_EXTENSIONS.includes(ext)) {
+          videos.push(fileInfo)
+        }
+      }
+    }
+    
+    // 按创建时间排序
+    images.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    videos.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: { images, videos },
+      message: '获取成功'
+    })
+  } catch (error) {
+    console.error('获取批量上传文件列表失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取文件列表失败' })
+  }
+})
+
+// 批量创建笔记（从plsc目录）
+router.post('/batch-upload/create', adminAuth, async (req, res) => {
+  try {
+    const { user_id, type, images_per_note, title, content, tags, is_draft, files } = req.body
+    
+    if (!user_id) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '缺少用户ID' })
+    }
+    
+    if (!files || !Array.isArray(files) || files.length === 0) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '没有选择文件' })
+    }
+    
+    const user = await prisma.user.findUnique({ where: { id: BigInt(user_id) } })
+    if (!user) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '用户不存在' })
+    }
+    
+    const config = require('../config/config')
+    const baseUrl = config?.upload?.image?.local?.baseUrl || config?.api?.baseUrl || 'http://localhost:3001'
+    const imagesPerNote = parseInt(images_per_note) || 4
+    const postType = parseInt(type) || 1
+    const createdPosts = []
+    
+    if (postType === 1) {
+      // 图文笔记：按images_per_note分组
+      for (let i = 0; i < files.length; i += imagesPerNote) {
+        const groupFiles = files.slice(i, i + imagesPerNote)
+        
+        // 创建笔记
+        const post = await prisma.post.create({
+          data: {
+            user_id: BigInt(user_id),
+            title: title || '',
+            content: content || '',
+            type: 1,
+            is_draft: is_draft !== undefined ? Boolean(is_draft) : false
+          }
+        })
+        
+        // 添加图片
+        const imageUrls = groupFiles.map(file => `${baseUrl}${file.path}`)
+        if (imageUrls.length > 0) {
+          await prisma.postImage.createMany({
+            data: imageUrls.map(url => ({
+              post_id: post.id,
+              image_url: url
+            }))
+          })
+        }
+        
+        // 添加标签
+        if (tags && tags.length > 0) {
+          for (const tag of tags) {
+            let tagId
+            let tagName = typeof tag === 'string' ? tag : tag.name
+            
+            const existingTag = await prisma.tag.findUnique({ where: { name: tagName } })
+            if (existingTag) {
+              tagId = existingTag.id
+            } else {
+              const newTag = await prisma.tag.create({ data: { name: tagName } })
+              tagId = newTag.id
+            }
+            
+            await prisma.postTag.create({ data: { post_id: post.id, tag_id: tagId } })
+            await prisma.tag.update({ where: { id: tagId }, data: { use_count: { increment: 1 } } })
+          }
+        }
+        
+        createdPosts.push({ id: Number(post.id), imageCount: groupFiles.length })
+      }
+    } else {
+      // 视频笔记：每个视频一个笔记
+      for (const file of files) {
+        const post = await prisma.post.create({
+          data: {
+            user_id: BigInt(user_id),
+            title: title || '',
+            content: content || '',
+            type: 2,
+            is_draft: is_draft !== undefined ? Boolean(is_draft) : false
+          }
+        })
+        
+        // 添加视频
+        await prisma.postVideo.create({
+          data: {
+            post_id: post.id,
+            video_url: `${baseUrl}${file.path}`,
+            cover_url: ''
+          }
+        })
+        
+        // 添加标签
+        if (tags && tags.length > 0) {
+          for (const tag of tags) {
+            let tagId
+            let tagName = typeof tag === 'string' ? tag : tag.name
+            
+            const existingTag = await prisma.tag.findUnique({ where: { name: tagName } })
+            if (existingTag) {
+              tagId = existingTag.id
+            } else {
+              const newTag = await prisma.tag.create({ data: { name: tagName } })
+              tagId = newTag.id
+            }
+            
+            await prisma.postTag.create({ data: { post_id: post.id, tag_id: tagId } })
+            await prisma.tag.update({ where: { id: tagId }, data: { use_count: { increment: 1 } } })
+          }
+        }
+        
+        createdPosts.push({ id: Number(post.id) })
+      }
+    }
+    
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: { posts: createdPosts, count: createdPosts.length },
+      message: `成功创建 ${createdPosts.length} 条笔记`
+    })
+  } catch (error) {
+    console.error('批量创建笔记失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '批量创建失败' })
+  }
+})
+
+// 删除plsc目录中的文件
+router.delete('/batch-upload/files', adminAuth, async (req, res) => {
+  try {
+    const { files } = req.body
+    
+    if (!files || !Array.isArray(files) || files.length === 0) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '没有选择文件' })
+    }
+    
+    const plscDir = pathModule.join(process.cwd(), 'uploads', 'plsc')
+    let deletedCount = 0
+    
+    for (const file of files) {
+      const fileName = pathModule.basename(file.path || file.name || file)
+      const filePath = pathModule.join(plscDir, fileName)
+      
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath)
+        deletedCount++
+      }
+    }
+    
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: { deletedCount },
+      message: `成功删除 ${deletedCount} 个文件`
+    })
+  } catch (error) {
+    console.error('删除文件失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '删除文件失败' })
+  }
+})
+
+// ===================== 系统通知管理 =====================
+
+// 系统通知类型映射
+const SYSTEM_NOTIFICATION_TYPES = ['system', 'activity']
+
+// 获取系统通知列表
+router.get('/system-notifications', adminAuth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 20
+    const skip = (page - 1) * limit
+    const { title, type, is_active, sortField = 'created_at', sortOrder = 'desc' } = req.query
+
+    const where = {}
+    if (title) where.title = { contains: title }
+    if (type && SYSTEM_NOTIFICATION_TYPES.includes(type)) where.type = type
+    if (is_active !== undefined && is_active !== '') where.is_active = is_active === 'true' || is_active === '1'
+
+    const [total, notifications] = await Promise.all([
+      prisma.systemNotification.count({ where }),
+      prisma.systemNotification.findMany({
+        where,
+        include: {
+          _count: {
+            select: { confirmations: true }
+          }
+        },
+        orderBy: { [sortField]: sortOrder.toLowerCase() },
+        take: limit,
+        skip: skip
+      })
+    ])
+
+    const formattedNotifications = notifications.map(n => ({
+      id: Number(n.id),
+      title: n.title,
+      content: n.content,
+      type: n.type,
+      image_url: n.image_url,
+      images: n.image_url ? [n.image_url] : [], // 为MultiImageUpload组件提供images数组
+      link_url: n.link_url,
+      is_active: n.is_active,
+      start_time: n.start_time,
+      end_time: n.end_time,
+      created_at: n.created_at,
+      updated_at: n.updated_at,
+      confirmation_count: n._count.confirmations
+    }))
+
+    res.json({
+      code: RESPONSE_CODES.SUCCESS,
+      data: { data: formattedNotifications, pagination: { page, limit, total, pages: Math.ceil(total / limit) } },
+      message: 'success'
+    })
+  } catch (error) {
+    console.error('获取系统通知列表失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取失败' })
+  }
+})
+
+// 获取单个系统通知详情
+router.get('/system-notifications/:id', adminAuth, async (req, res) => {
+  try {
+    const notificationId = BigInt(req.params.id)
+    const notification = await prisma.systemNotification.findUnique({
+      where: { id: notificationId },
+      include: {
+        _count: {
+          select: { confirmations: true }
+        }
+      }
+    })
+
+    if (!notification) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '系统通知不存在' })
+    }
+
+    const result = {
+      id: Number(notification.id),
+      title: notification.title,
+      content: notification.content,
+      type: notification.type,
+      image_url: notification.image_url,
+      images: notification.image_url ? [notification.image_url] : [], // 为MultiImageUpload组件提供images数组
+      link_url: notification.link_url,
+      is_active: notification.is_active,
+      start_time: notification.start_time,
+      end_time: notification.end_time,
+      created_at: notification.created_at,
+      updated_at: notification.updated_at,
+      confirmation_count: notification._count.confirmations
+    }
+
+    res.json({ code: RESPONSE_CODES.SUCCESS, data: result, message: 'success' })
+  } catch (error) {
+    console.error('获取系统通知详情失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '获取失败' })
+  }
+})
+
+// 创建系统通知
+router.post('/system-notifications', adminAuth, async (req, res) => {
+  try {
+    const { title, content, type, image_url, images, link_url, is_active, start_time, end_time } = req.body
+
+    if (!title || !title.trim()) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '标题不能为空' })
+    }
+
+    if (!content || !content.trim()) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '内容不能为空' })
+    }
+
+    // 验证通知类型，如果提供了无效类型则返回错误
+    if (type && !SYSTEM_NOTIFICATION_TYPES.includes(type)) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '无效的通知类型，必须是 system 或 activity' })
+    }
+
+    const notificationType = type || 'system'
+    
+    // 支持images数组（优先）或image_url字符串
+    let finalImageUrl = null
+    if (images && Array.isArray(images) && images.length > 0) {
+      finalImageUrl = images[0] // 取第一张图片
+    } else if (image_url) {
+      finalImageUrl = image_url.trim()
+    }
+
+    const notification = await prisma.systemNotification.create({
+      data: {
+        title: title.trim(),
+        content: content.trim(),
+        type: notificationType,
+        image_url: finalImageUrl || null,
+        link_url: link_url?.trim() || null,
+        is_active: is_active !== false,
+        start_time: start_time ? new Date(start_time) : null,
+        end_time: end_time ? new Date(end_time) : null
+      }
+    })
+
+    res.json({ code: RESPONSE_CODES.SUCCESS, data: { id: Number(notification.id) }, message: '创建成功' })
+  } catch (error) {
+    console.error('创建系统通知失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '创建失败' })
+  }
+})
+
+// 更新系统通知
+router.put('/system-notifications/:id', adminAuth, async (req, res) => {
+  try {
+    const notificationId = BigInt(req.params.id)
+    const { title, content, type, image_url, images, link_url, is_active, start_time, end_time } = req.body
+
+    const notification = await prisma.systemNotification.findUnique({ where: { id: notificationId } })
+    if (!notification) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '系统通知不存在' })
+    }
+
+    const updateData = {}
+    if (title !== undefined) {
+      if (!title.trim()) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '标题不能为空' })
+      }
+      updateData.title = title.trim()
+    }
+    if (content !== undefined) {
+      if (!content.trim()) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '内容不能为空' })
+      }
+      updateData.content = content.trim()
+    }
+    if (type !== undefined && SYSTEM_NOTIFICATION_TYPES.includes(type)) updateData.type = type
+    
+    // 支持images数组（优先）或image_url字符串
+    if (images !== undefined) {
+      if (Array.isArray(images) && images.length > 0) {
+        updateData.image_url = images[0]
+      } else {
+        updateData.image_url = null
+      }
+    } else if (image_url !== undefined) {
+      updateData.image_url = image_url?.trim() || null
+    }
+    
+    if (link_url !== undefined) updateData.link_url = link_url?.trim() || null
+    if (is_active !== undefined) updateData.is_active = !!is_active
+    if (start_time !== undefined) updateData.start_time = start_time ? new Date(start_time) : null
+    if (end_time !== undefined) updateData.end_time = end_time ? new Date(end_time) : null
+
+    await prisma.systemNotification.update({ where: { id: notificationId }, data: updateData })
+    res.json({ code: RESPONSE_CODES.SUCCESS, message: '更新成功' })
+  } catch (error) {
+    console.error('更新系统通知失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '更新失败' })
+  }
+})
+
+// 删除系统通知
+router.delete('/system-notifications/:id', adminAuth, async (req, res) => {
+  try {
+    const notificationId = BigInt(req.params.id)
+    
+    const notification = await prisma.systemNotification.findUnique({ where: { id: notificationId } })
+    if (!notification) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '系统通知不存在' })
+    }
+
+    await prisma.systemNotification.delete({ where: { id: notificationId } })
+    res.json({ code: RESPONSE_CODES.SUCCESS, message: '删除成功' })
+  } catch (error) {
+    console.error('删除系统通知失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '删除失败' })
+  }
+})
+
+// 批量删除系统通知
+router.delete('/system-notifications', adminAuth, async (req, res) => {
+  try {
+    const { ids } = req.body
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ code: RESPONSE_CODES.VALIDATION_ERROR, message: '请提供要删除的ID列表' })
+    }
+
+    const notificationIds = ids.map(id => BigInt(id))
+    await prisma.systemNotification.deleteMany({ where: { id: { in: notificationIds } } })
+
+    res.json({ code: RESPONSE_CODES.SUCCESS, message: '成功删除 ' + ids.length + ' 条记录' })
+  } catch (error) {
+    console.error('批量删除系统通知失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '删除失败' })
+  }
+})
+
+// 切换系统通知启用状态
+router.put('/system-notifications/:id/toggle-active', adminAuth, async (req, res) => {
+  try {
+    const notificationId = BigInt(req.params.id)
+    
+    const notification = await prisma.systemNotification.findUnique({ where: { id: notificationId } })
+    if (!notification) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ code: RESPONSE_CODES.NOT_FOUND, message: '系统通知不存在' })
+    }
+
+    await prisma.systemNotification.update({
+      where: { id: notificationId },
+      data: { is_active: !notification.is_active }
+    })
+
+    res.json({ 
+      code: RESPONSE_CODES.SUCCESS, 
+      message: notification.is_active ? '已禁用' : '已启用',
+      data: { is_active: !notification.is_active }
+    })
+  } catch (error) {
+    console.error('切换系统通知状态失败:', error)
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ code: RESPONSE_CODES.ERROR, message: '操作失败' })
   }
 })
 

@@ -4,33 +4,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { getCategories } from '@/api/categories'
 import CrudTable from '@/views/admin/components/CrudTable.vue'
-
-// 分类数据
-const categories = ref([])
-
-// 加载分类列表
-const loadCategories = async () => {
-  try {
-    const response = await getCategories()
-    categories.value = response.data
-  } catch (error) {
-    console.error('加载分类失败:', error)
-  }
-}
-
-// 组件挂载时加载分类
-onMounted(() => {
-  loadCategories()
-})
 
 const columns = [
   { key: 'id', label: 'ID', type: 'post-link', sortable: true },
   { key: 'title', label: '标题', type: 'content', sortable: false },
   { key: 'user_display_id', label: '汐社号', type: 'user-link', sortable: false },
-  { key: 'category', label: '分类', sortable: false },
   { key: 'type', label: '类型', type: 'mapped', map: { 1: '图文', 2: '视频' }, sortable: false },
   { key: 'is_draft', label: '草稿', sortable: false, type: 'boolean', trueText: '是', falseText: '否' },
   { key: 'content', label: '内容', type: 'content', sortable: false },
@@ -43,55 +22,29 @@ const columns = [
   { key: 'created_at', label: '发布时间', type: 'date', sortable: true }
 ]
 
-const formFields = computed(() => {
-  const baseFields = [
-    { key: 'user_id', label: '作者ID', type: 'number', required: true, placeholder: '请输入用户ID' },
-    { key: 'title', label: '标题', type: 'text', required: true, placeholder: '请输入笔记标题' },
-    { key: 'content', label: '内容', type: 'textarea', required: true, placeholder: '请输入笔记内容' },
-    {
-      key: 'category_id',
-      label: '分类',
-      type: 'select',
-      required: true,
-      options: categories.value.map(cat => ({ value: cat.id, label: cat.name }))
-    },
-    {
-      key: 'type',
-      label: '笔记类型',
-      type: 'select',
-      required: true,
-      options: [
-        { value: 1, label: '图文笔记' },
-        { value: 2, label: '视频笔记' }
-      ]
-    },
-    { key: 'is_draft', label: '草稿', type: 'checkbox', required: false, description: '勾选表示保存为草稿，不勾选表示发布' },
-    { key: 'view_count', label: '浏览量', type: 'number', required: false, placeholder: '请输入浏览量', min: 0 },
-    { key: 'tags', label: '标签', type: 'tags', maxTags: 10 }
-  ]
-
-  // 根据笔记类型添加不同的媒体上传字段
-  baseFields.push(
-    { key: 'images', label: '图片上传', type: 'multi-image-upload', maxImages: 9, condition: { field: 'type', value: 1 } },
-    { key: 'video_upload', label: '视频上传', type: 'video-upload', condition: { field: 'type', value: 2 } }
-  )
-
-  return baseFields
-})
-
-const searchFields = computed(() => [
-  { key: 'title', label: '标题', placeholder: '搜索标题' },
+const formFields = [
+  { key: 'user_id', label: '作者ID', type: 'number', required: true, placeholder: '请输入用户ID' },
+  { key: 'title', label: '标题', type: 'text', required: false, placeholder: '请输入笔记标题（可选）' },
+  { key: 'content', label: '内容', type: 'textarea', required: false, placeholder: '请输入笔记内容（可选）' },
   {
-    key: 'category_id',
-    label: '分类',
+    key: 'type',
+    label: '笔记类型',
     type: 'select',
-    placeholder: '选择分类',
+    required: true,
     options: [
-      { value: '', label: '全部分类' },
-      { value: 'null', label: '未知' },
-      ...categories.value.map(cat => ({ value: cat.id, label: cat.name }))
+      { value: 1, label: '图文笔记' },
+      { value: 2, label: '视频笔记' }
     ]
   },
+  { key: 'is_draft', label: '草稿', type: 'checkbox', required: false, description: '勾选表示保存为草稿，不勾选表示发布' },
+  { key: 'view_count', label: '浏览量', type: 'number', required: false, placeholder: '请输入浏览量', min: 0 },
+  { key: 'tags', label: '标签', type: 'tags', maxTags: 10 },
+  { key: 'images', label: '图片上传', type: 'multi-image-upload', maxImages: 9, condition: { field: 'type', value: 1 } },
+  { key: 'video_upload', label: '视频上传', type: 'video-upload', condition: { field: 'type', value: 2 } }
+]
+
+const searchFields = [
+  { key: 'title', label: '标题', placeholder: '搜索标题' },
   {
     key: 'type',
     label: '类型',
@@ -115,5 +68,5 @@ const searchFields = computed(() => [
     ]
   },
   { key: 'user_display_id', label: '作者汐社号', placeholder: '搜索作者汐社号' }
-])
+]
 </script>

@@ -3,7 +3,6 @@ import { ref, onMounted, watch, computed, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useNavigationStore } from '@/stores/navigation'
 import { useEventStore } from '@/stores/event'
-import TabContainer from '@/components/TabContainer.vue'
 import TagContainer from './components/TagContainer.vue'
 import UserList from './components/UserList.vue'
 import WaterfallFlow from '@/components/WaterfallFlow.vue'
@@ -20,13 +19,6 @@ const keyword = ref('')
 const selectedTag = ref('')
 const activeTab = ref('all')
 
-
-const searchTabs = [
-    { id: 'all', label: '全部' },
-    { id: 'posts', label: '图文' },
-    { id: 'videos', label: '视频' },
-    { id: 'users', label: '用户' }
-]
 
 const searchResults = ref({})
 const userResults = ref([])
@@ -329,58 +321,6 @@ function handlePostResults(postsData) {
     }
 }
 
-function handleTabChange(item) {
-    const previousTab = activeTab.value
-    activeTab.value = item.id
-    navigationStore.scrollToTop('instant')
-
-    // 切换tab时，重置标签选择为空并更新URL
-    // 这样确保第二个tab-container恢复到默认的"全部"状态
-    if (item.id !== 'users') {
-        selectedTag.value = ''
-        // 更新路由，移除tag参数
-        if (route.query.tag) {
-            const newQuery = { ...route.query }
-            delete newQuery.tag
-            router.replace({ query: newQuery })
-        }
-    }
-
-    if (item.id === 'users') {
-        searchContent(activeTab.value)
-    } else if (item.id === 'videos') {
-        // 视频tab：检查是否有视频缓存数据
-        if (cachedVideosData.value.length > 0 && cachedKeyword.value === keyword.value) {
-            postResults.value = [...cachedVideosData.value]
-            // 更新标签统计显示
-            tagStats.value = cachedVideosTagStats.value
-        } else {
-            // 没有视频缓存或关键词不匹配，重新搜索
-            searchContent('videos')
-        }
-    } else if (item.id === 'posts') {
-        // 图文tab：检查是否有图文缓存数据
-        if (cachedPostsData.value.length > 0 && cachedKeyword.value === keyword.value) {
-            postResults.value = [...cachedPostsData.value]
-            // 更新标签统计显示
-            tagStats.value = cachedPostsTagStats.value
-        } else {
-            // 没有图文缓存或关键词不匹配，重新搜索
-            searchContent('posts')
-        }
-    } else {
-        // 全部tab
-        if (cachedAllPosts.value.length > 0 && cachedKeyword.value === keyword.value) {
-            postResults.value = [...cachedAllPosts.value] // 使用数组复制触发变化检测
-            // 更新标签统计显示
-            tagStats.value = cachedAllTagStats.value
-        } else {
-            // 全部tab使用all类型
-            searchContent('all')
-        }
-    }
-}
-
 function handleTagReload() {
     isTagLoading.value = true
 
@@ -476,10 +416,56 @@ watch(() => route.query, (newQuery, oldQuery) => {
     }
 }, { immediate: true })
 
-watch(() => route.params.tab, (newTab) => {
+watch(() => route.params.tab, (newTab, oldTab) => {
     if (newTab && ['all', 'posts', 'videos', 'users'].includes(newTab)) {
-        // 只更新activeTab，不触发搜索，避免与handleTabChange重复
-        activeTab.value = newTab
+        // 只有在tab真正变化时才执行操作
+        if (newTab !== oldTab && oldTab !== undefined) {
+            const previousTab = activeTab.value
+            activeTab.value = newTab
+            navigationStore.scrollToTop('instant')
+
+            // 切换tab时，重置标签选择为空并更新URL
+            if (newTab !== 'users') {
+                selectedTag.value = ''
+                // 更新路由，移除tag参数
+                if (route.query.tag) {
+                    const newQuery = { ...route.query }
+                    delete newQuery.tag
+                    router.replace({ query: newQuery })
+                }
+            }
+
+            if (newTab === 'users') {
+                searchContent(activeTab.value)
+            } else if (newTab === 'videos') {
+                // 视频tab：检查是否有视频缓存数据
+                if (cachedVideosData.value.length > 0 && cachedKeyword.value === keyword.value) {
+                    postResults.value = [...cachedVideosData.value]
+                    tagStats.value = cachedVideosTagStats.value
+                } else {
+                    searchContent('videos')
+                }
+            } else if (newTab === 'posts') {
+                // 图文tab：检查是否有图文缓存数据
+                if (cachedPostsData.value.length > 0 && cachedKeyword.value === keyword.value) {
+                    postResults.value = [...cachedPostsData.value]
+                    tagStats.value = cachedPostsTagStats.value
+                } else {
+                    searchContent('posts')
+                }
+            } else {
+                // 全部tab
+                if (cachedAllPosts.value.length > 0 && cachedKeyword.value === keyword.value) {
+                    postResults.value = [...cachedAllPosts.value]
+                    tagStats.value = cachedAllTagStats.value
+                } else {
+                    searchContent('all')
+                }
+            }
+        } else {
+            // 初次加载时只更新activeTab
+            activeTab.value = newTab
+        }
     }
 }, { immediate: true })
 
@@ -523,9 +509,6 @@ onUnmounted(() => {
 
 <template>
     <div class="search-container">
-
-        <TabContainer :tabs="searchTabs" :activeTab="activeTab" @tab-change="handleTabChange" />
-
 
         <TagContainer v-if="shouldShowTagContainer" :tagStats="currentTagStats" :activeTag="selectedTag" :activeTab="activeTab"
             @tag-reload="handleTagReload" />

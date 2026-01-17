@@ -1,5 +1,4 @@
 <script setup>
-import ChannelContainer from './components/ChannelContainer.vue';
 import LoadingSpinner from '@/components/spinner/LoadingSpinner.vue';
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useEventStore } from '@/stores/event'
@@ -7,13 +6,6 @@ import { useEventStore } from '@/stores/event'
 const eventStore = useEventStore()
 const isChannelLoading = ref(false)
 let eventListenerKey = null
-
-function handleChannelReload() {
-  isChannelLoading.value = true
-  setTimeout(() => {
-    isChannelLoading.value = false
-  }, 700)
-}
 
 function handleFloatingBtnReload() {
   // 刷新按钮点击时也显示加载动画
@@ -38,7 +30,6 @@ onUnmounted(() => {
 
 <template>
   <div class="explore-container">
-    <ChannelContainer @channel-reload="handleChannelReload" />
     <LoadingSpinner v-if="isChannelLoading" />
     <div class="explore-main" :class="{ 'with-loading': isChannelLoading }">
       <RouterView />

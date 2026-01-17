@@ -255,6 +255,17 @@ onMounted(async () => {
   <div class="content-container">
 
     <div class="user-info" v-if="userInfo.nickname">
+      <!-- 背景图 - 覆盖整个用户信息区域 -->
+      <div class="background-image-container">
+        <img 
+          v-if="userInfo.background" 
+          :src="userInfo.background" 
+          alt="背景图" 
+          class="background-image"
+        />
+        <div v-else class="background-placeholder"></div>
+        <div class="background-overlay"></div>
+      </div>
       <div class="basic-info">
         <img :src="userInfo.avatar || defaultAvatar" :alt="userInfo.nickname || '用户头像'" class="avatar"
           @click="previewAvatar" @error="handleAvatarError">
@@ -390,11 +401,52 @@ onMounted(async () => {
   height: auto;
   min-height: 196px;
   padding: 16px 0;
+  padding-top: 88px; /* 为导航栏留出空间 */
+  margin-top: -72px; /* 延伸到导航栏区域 */
   width: 100%;
   max-width: 1200px;
-  overflow-x: hidden;
-  background: var(--bg-color-primary);
-  transition: background-color 0.2s ease;
+  overflow: hidden;
+  position: relative;
+  border-radius: 0 0 12px 12px; /* 只有底部圆角 */
+  margin-left: 16px;
+  margin-right: 16px;
+  max-width: calc(100% - 32px);
+}
+
+/* 背景图容器 - 覆盖整个用户信息区域 */
+.background-image-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: 0 0 12px 12px; /* 只有底部圆角 */
+}
+
+.background-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.background-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, var(--bg-color-secondary) 0%, var(--bg-color-tertiary) 100%);
+}
+
+.background-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.4) 50%, rgba(0, 0, 0, 0.6) 100%);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  pointer-events: none;
 }
 
 .basic-info {
@@ -405,14 +457,18 @@ onMounted(async () => {
   width: 100%;
   padding: 0 16px;
   position: relative;
+  z-index: 1;
 }
 
 .avatar {
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  border: 1px solid var(--border-color-primary);
+  border: 3px solid rgba(255, 255, 255, 0.9);
   cursor: pointer;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .user-basic {
@@ -421,25 +477,29 @@ onMounted(async () => {
   flex: 1;
   margin-left: 16px;
   gap: 6px;
+  position: relative;
+  z-index: 1;
 }
 
 
 .user-nickname {
-  color: var(--text-color-primary);
+  color: #ffffff;
   font-size: 18px;
   font-weight: bold;
   gap: 6px;
   align-items: center;
   display: flex;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .user-content {
   display: flex;
   flex-direction: column;
-  color: var(--text-color-quaternary);
+  color: rgba(255, 255, 255, 0.85);
   font-size: 12px;
   gap: 4px;
   max-width: 100%;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 /* 大屏幕下恢复横向布局 */
@@ -492,9 +552,12 @@ onMounted(async () => {
 
 .user-desc {
   margin: 17px 0px 0px;
-  color: var(--text-color-primary);
+  color: #ffffff;
   font-size: 14px;
   padding: 0 16px;
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .user-interactions {
@@ -502,6 +565,8 @@ onMounted(async () => {
   padding: 0 16px;
   flex-wrap: wrap;
   width: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .user-interactions div {
@@ -519,7 +584,7 @@ onMounted(async () => {
 }
 
 .interaction-item:hover {
-  background-color: var(--bg-color-secondary);
+  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .interaction-item:last-child {
@@ -531,17 +596,36 @@ onMounted(async () => {
 }
 
 .count {
-  color: var(--text-color-primary);
+  color: #ffffff;
   margin-right: 4px;
   font-size: 14px;
   text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .shows {
-  color: var(--text-color-quaternary);
+  color: rgba(255, 255, 255, 0.85);
   margin: 4px 0 0;
   font-size: 14px;
   text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* 用户信息区域内的个性标签样式覆盖 */
+.user-info :deep(.personality-tags) {
+  position: relative;
+  z-index: 1;
+}
+
+.user-info :deep(.tag) {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(4px);
+}
+
+.user-info :deep(.tag .gender-icon) {
+  color: #ffffff;
 }
 
 /* ---------- 3.5. 关注按钮样式 ---------- */
@@ -550,6 +634,7 @@ onMounted(async () => {
   right: 16px;
   top: 50%;
   transform: translateY(-50%);
+  z-index: 1;
 }
 
 /* ---------- 3.6. 加载和错误状态样式 ---------- */
@@ -777,7 +862,12 @@ onMounted(async () => {
   }
 
   /* 内边距调整 */
-  .basic-info,
+  .basic-info {
+    padding: 0 16px;
+    margin: 0;
+    max-width: 100%;
+  }
+
   .user-desc,
   .user-interactions {
     padding: 0;
@@ -785,7 +875,7 @@ onMounted(async () => {
 
   /* 关注按钮在大屏下的位置调整 */
   .follow-button-wrapper {
-    right: 0;
+    right: 16px;
   }
 
   /* Tab栏响应式 */

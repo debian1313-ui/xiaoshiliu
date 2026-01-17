@@ -6,9 +6,8 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { updatePost, getPostDetail } from '@/api/posts'
-import { getCategories } from '@/api/categories'
 import FormModal from '@/views/admin/components/FormModal.vue'
 import MessageToast from '@/components/MessageToast.vue'
 
@@ -33,7 +32,6 @@ const formModalRef = ref(null) // 添加FormModal引用
 const formData = ref({
   title: '',
   content: '',
-  category: '',
   tags: [],
   images: [],
   image_urls: [],
@@ -44,28 +42,6 @@ const formData = ref({
 const showToast = ref(false)
 const toastMessage = ref('')
 const toastType = ref('success')
-
-// 分类数据从API动态获取
-const categories = ref([])
-
-// 获取分类数据
-const fetchCategories = async () => {
-  try {
-    const response = await getCategories()
-    if (response.success) {
-      categories.value = response.data.map(cat => ({
-        value: cat.id,
-        label: cat.name
-      }))
-    } else {
-      console.error('获取分类数据失败')
-      categories.value = []
-    }
-  } catch (error) {
-    console.error('获取分类失败:', error)
-    categories.value = []
-  }
-}
 
 // 表单字段配置
 const formFields = computed(() => {
@@ -85,14 +61,6 @@ const formFields = computed(() => {
       placeholder: '请输入内容',
       required: true,
       maxLength: 2000
-    },
-    {
-      key: 'category',
-      label: '分类',
-      type: 'select',
-      placeholder: '请选择分类',
-      options: categories.value,
-      required: true
     },
     {
       key: 'tags',
@@ -153,7 +121,6 @@ const processPostData = (data) => {
   const newData = {
     title: data.title || '',
     content: data.content || '',
-    category: data.category || '',
     tags: data.tags || [],
     images: [],
     image_urls: [],
@@ -161,12 +128,6 @@ const processPostData = (data) => {
     cover_url: data.cover_url || '',
     video_upload: null,
     type: data.type || 1
-  }
-
-  // 处理分类数据 - 根据分类名称查找分类ID
-  if (data.category && categories.value.length > 0) {
-    const categoryItem = categories.value.find(cat => cat.label === data.category)
-    newData.category = categoryItem ? categoryItem.value : ''
   }
 
   // 处理标签数据
@@ -199,11 +160,6 @@ const processPostData = (data) => {
 
 // 初始化表单数据
 const initializeForm = async (postData) => {
-  // 确保分类数据已加载
-  if (categories.value.length === 0) {
-    await fetchCategories()
-  }
-
   if (postData && postData.id) {
     try {
       // 先设置type字段，确保modalTitle能正确计算
@@ -219,7 +175,6 @@ const initializeForm = async (postData) => {
         let processedData = processPostData({
           title: fullPost.title,
           content: originalData.content || fullPost.content,
-          category: fullPost.category,
           tags: originalData.tags,
           images: originalData.images,
           type: fullPost.type  // 添加type字段
@@ -294,11 +249,6 @@ const handleUploadError = (error) => {
   showMessage(error, 'error')
 }
 
-// 组件挂载时获取分类数据
-onMounted(() => {
-  fetchCategories()
-})
-
 // 保存笔记
 const handleSave = async (processedData) => {
   if (!canSave.value) {
@@ -323,7 +273,6 @@ const savePost = async (processedData) => {
     const postData = {
       title: (processedData.title || '').trim(),
       content: (processedData.content || '').trim(),
-      category_id: processedData.category,
       tags: processedData.tags || []
     }
 

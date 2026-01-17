@@ -1,8 +1,7 @@
-import { getCategories } from '@/api/categories'
-
-// 默认频道配置（推荐和关注频道始终存在）
+// 默认频道配置（推荐、视频、关注频道始终存在）
 const DEFAULT_CHANNELS = [
   { id: 'recommend', label: '推荐', path: '/recommend' },
+  { id: 'video', label: '视频', path: '/video' },
   { id: 'following', label: '关注', path: '/following' }
 ]
 
@@ -10,25 +9,9 @@ const DEFAULT_CHANNELS = [
 let dynamicChannels = [...DEFAULT_CHANNELS]
 
 // 从API加载分类数据并转换为频道格式
+// Note: Categories have been removed, so this function now just returns default channels
 export const loadChannelsFromAPI = async () => {
-  try {
-    const response = await getCategories()
-    if (response.success !== false && response.data) {
-      const categoryChannels = response.data.map(category => ({
-        id: category.id,
-        label: category.name,
-        path: `/${category.category_title}` // 使用英文标题作为路径
-      }))
-      
-      // 合并默认频道和分类频道
-      dynamicChannels = [...DEFAULT_CHANNELS, ...categoryChannels]
-      return dynamicChannels
-    }
-  } catch (error) {
-    console.error('加载分类数据失败:', error)
-  }
-  
-  // 如果加载失败，返回默认频道
+  // Categories are no longer used, return default channels only
   return DEFAULT_CHANNELS
 }
 

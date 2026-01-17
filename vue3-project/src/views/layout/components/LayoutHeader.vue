@@ -5,11 +5,16 @@ import SvgIcon from '@/components/SvgIcon.vue'
 import DropdownMenu from '@/components/menu/DropdownMenu.vue'
 import CommonMenu from '@/components/menu/CommonMenu.vue'
 import SearchDropdown from './SearchDropdown.vue'
+import TabContainer from '@/components/TabContainer.vue'
 import { useSearchHistoryStore } from '@/stores/searchHistory'
+import { useChannelStore } from '@/stores/channel'
+import { useNavigationStore } from '@/stores/navigation'
 import router from '@/router'
 
 const route = useRoute()
 const searchHistoryStore = useSearchHistoryStore()
+const channelStore = useChannelStore()
+const navigationStore = useNavigationStore()
 
 // 静态资源URL
 const logoUrl = new URL('@/assets/imgs/汐社.png', import.meta.url).href
@@ -17,11 +22,74 @@ const logoUrl = new URL('@/assets/imgs/汐社.png', import.meta.url).href
 const isLargeScreen = ref(window.innerWidth > 695)
 const showSidebar = ref(window.innerWidth > 960)
 
+// 检查是否在用户页面（需要透明导航栏）
+const isUserPage = computed(() => {
+    return route.path === '/user' || route.name === 'user'
+})
+
+// 检查是否在探索页面（需要显示频道标签）
+const isExplorePage = computed(() => {
+    return route.path === '/explore' || 
+           route.path.startsWith('/explore/') || 
+           route.name === 'explore' || 
+           route.name === 'recommend' || 
+           route.name === 'video' ||
+           route.name === 'following' ||
+           route.name === 'channel'
+})
+
+// 检查是否在搜索结果页面
+const isSearchResultPage = computed(() => {
+    return route.path.startsWith('/search_result')
+})
+
+// 搜索结果页面的tabs
+const searchTabs = [
+    { id: 'all', label: '全部', path: '/all' },
+    { id: 'posts', label: '图文', path: '/posts' },
+    { id: 'videos', label: '视频', path: '/videos' },
+    { id: 'users', label: '用户', path: '/users' }
+]
+
+// 当前搜索tab
+const activeSearchTab = computed(() => {
+    return route.params.tab || 'all'
+})
+
+// 搜索tab切换处理
+function handleSearchTabChange(item) {
+    if (activeSearchTab.value === item.id) return
+    
+    navigationStore.scrollToTop('instant')
+    
+    router.push({
+        name: 'search_result_tab',
+        params: { tab: item.id },
+        query: route.query
+    })
+}
+
 const showSearch = ref(false)
 const searchText = ref('')
 const showSearchDropdown = ref(false)
 const isSearchEditMode = ref(false)
 
+// 频道切换处理
+function handleTabChange(item) {
+    // 如果切换到相同频道，不执行任何操作
+    if (channelStore.activeChannelId === item.id) return
+
+    // 更新 store 中的活跃频道（UI立即响应）
+    channelStore.setActiveChannel(item.id)
+
+    // 立即返回顶部
+    navigationStore.scrollToTop('instant')
+
+    // 执行路由跳转
+    router.push(`/explore${item.path}`)
+}
+
+// 监听路由变化，更新活跃频道
 watch(() => route.path, (newPath, oldPath) => {
     const isInSearchPage = newPath.startsWith('/search_result')
     const wasInSearchPage = oldPath?.startsWith('/search_result')
@@ -35,6 +103,12 @@ watch(() => route.path, (newPath, oldPath) => {
         if (isLargeScreen.value) {
             searchText.value = ''
         }
+    }
+    
+    // 更新频道状态
+    if (newPath.startsWith('/explore')) {
+        const channelId = channelStore.getChannelIdByPath(newPath)
+        channelStore.setActiveChannel(channelId)
     }
 }, { immediate: true })
 
@@ -171,13 +245,30 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <header>
+    <header :class="{ 'transparent-header': isUserPage }">
         <div class="header-container">
+            <!-- 居中显示的频道标签 - 仅在探索页面显示 -->
+            <div v-if="isExplorePage && isLargeScreen" class="channel-tabs-center">
+                <TabContainer 
+                    :tabs="channelStore.channels" 
+                    :activeTab="channelStore.activeChannelId" 
+                    :enableDrag="false"
+                    @tab-change="handleTabChange" 
+                />
+            </div>
+            
+            <!-- 居中显示的搜索结果标签 - 仅在搜索结果页面显示 -->
+            <div v-if="isSearchResultPage && isLargeScreen" class="channel-tabs-center">
+                <TabContainer 
+                    :tabs="searchTabs" 
+                    :activeTab="activeSearchTab" 
+                    :enableDrag="false"
+                    @tab-change="handleSearchTabChange" 
+                />
+            </div>
+            
             <template v-if="displaySearch">
-                <div v-if="isLargeScreen" class="logo" @click="router.push('/')">
-                    <img :src="logoUrl" alt="汐社" />
-                </div>
-                <div class="search-row" :class="{ 'large-screen': isLargeScreen, 'small-screen': !isLargeScreen }">
+                <div class="search-row" :class="{ 'large-screen': isLargeScreen, 'small-screen': !isLargeScreen, 'with-channel-tabs': (isExplorePage || isSearchResultPage) && isLargeScreen }">
                     <div class="search-bar-container">
                         <div class="search-bar">
                             <input v-model="searchText" type="text" placeholder="搜索汐社" @keypress="handleKeyPress"
@@ -214,8 +305,23 @@ onUnmounted(() => {
             </template>
 
             <template v-else>
-                <div class="logo" @click="router.push('/')">
-                    <img :src="logoUrl" alt="汐社" />
+                <!-- 小屏幕下在探索页面显示频道标签 -->
+                <div v-if="isExplorePage" class="channel-tabs-mobile">
+                    <TabContainer 
+                        :tabs="channelStore.channels" 
+                        :activeTab="channelStore.activeChannelId" 
+                        :enableDrag="false"
+                        @tab-change="handleTabChange" 
+                    />
+                </div>
+                <!-- 小屏幕下在搜索结果页面显示搜索标签 -->
+                <div v-else-if="isSearchResultPage" class="channel-tabs-mobile">
+                    <TabContainer 
+                        :tabs="searchTabs" 
+                        :activeTab="activeSearchTab" 
+                        :enableDrag="false"
+                        @tab-change="handleSearchTabChange" 
+                    />
                 </div>
                 <div class="header-right">
                     <div @click="openSearch" class="circle-btn">
@@ -250,6 +356,11 @@ header {
     transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
+/* 用户页面透明导航栏 */
+header.transparent-header {
+    background: transparent;
+}
+
 .header-container {
     max-width: 1500px;
     margin: 0 auto;
@@ -262,25 +373,10 @@ header {
     width: 100%;
 }
 
-.logo {
-    width: 68.32px;
-    height: 32px;
-    color: var(--button-text-color);
-    background: var(--primary-color);
-    border-radius: 999px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-img {
-    width: 68.32px;
-    height: 32px;
-}
-
 .header-right {
     display: flex;
     align-items: center;
+    margin-left: auto;
 }
 
 /* 按钮基础样式 */
@@ -445,5 +541,66 @@ img {
 :deep(.header-dropdown) {
     right: 0;
     left: auto;
+}
+
+/* 居中的频道标签容器 */
+.channel-tabs-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
+}
+
+.channel-tabs-center :deep(.tab-container) {
+    height: 72px;
+    margin-left: 0;
+    padding: 0;
+    justify-content: center;
+}
+
+.channel-tabs-center :deep(.tab-item) {
+    height: 36px;
+    line-height: 36px;
+    font-size: 15px;
+    padding: 0 14px;
+}
+
+.channel-tabs-center :deep(.tab-slider) {
+    height: 36px;
+    bottom: 18px;
+}
+
+/* 小屏幕频道标签 */
+.channel-tabs-mobile {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    margin-right: auto;
+}
+
+.channel-tabs-mobile :deep(.tab-container) {
+    height: 72px;
+    margin-left: 0;
+    padding: 0;
+    justify-content: center;
+}
+
+.channel-tabs-mobile :deep(.tab-item) {
+    height: 36px;
+    line-height: 36px;
+    font-size: 15px;
+    padding: 0 14px;
+}
+
+.channel-tabs-mobile :deep(.tab-slider) {
+    height: 36px;
+    bottom: 18px;
+}
+
+/* 当有频道标签时，搜索栏靠左 */
+.search-row.with-channel-tabs {
+    position: static !important;
+    transform: none !important;
+    margin: 0 !important;
 }
 </style>

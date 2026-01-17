@@ -19,10 +19,6 @@
         <SvgIcon name="search" width="16" height="16" class="search-icon" />
         <input v-model="searchKeyword" type="text" placeholder="搜索笔记标题或内容" @input="handleSearch" />
       </div>
-      <div class="filter-options">
-        <DropdownSelect v-model="selectedCategory" :options="categoryOptions" placeholder="全部分类" label-key="label"
-          value-key="value" min-width="120px" max-width="150px" @change="handleCategoryChange" />
-      </div>
     </div>
 
 
@@ -88,13 +84,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getUserPosts, deletePost, updatePost } from '@/api/posts'
-import { getCategories } from '@/api/categories'
 import SvgIcon from '@/components/SvgIcon.vue'
-import DropdownSelect from '@/components/DropdownSelect.vue'
 import PostItem from '@/components/PostItem.vue'
 import EditPostModal from './components/EditPostModal.vue'
 import ConfirmModal from '@/components/ConfirmDialog.vue'
@@ -108,12 +102,10 @@ const userStore = useUserStore()
 const posts = ref([])
 const loading = ref(false)
 const searchKeyword = ref('')
-const selectedCategory = ref('')
 const currentPage = ref(1)
 const totalPages = ref(1)
 const totalPosts = ref(0)
 const pageSize = 10
-const categories = ref([])
 
 // 模态框状态
 const showEditModal = ref(false)
@@ -129,15 +121,6 @@ const clickPosition = ref({ x: 0, y: 0 })
 const showToast = ref(false)
 const toastMessage = ref('')
 const toastType = ref('success')
-
-// 下拉选择器选项
-const categoryOptions = computed(() => {
-  const options = [{ label: '全部分类', value: '' }]
-  categories.value.forEach(category => {
-    options.push({ label: category.name, value: category.id })
-  })
-  return options
-})
 
 
 
@@ -179,7 +162,6 @@ const loadPosts = async () => {
       page: currentPage.value,
       limit: pageSize,
       keyword: searchKeyword.value,
-      category: selectedCategory.value,
       sort: 'created_at',
       user_id: userStore.userInfo.user_id // 只获取当前用户的笔记
     }
@@ -202,13 +184,6 @@ const loadPosts = async () => {
 
 // 搜索处理
 const handleSearch = () => {
-  currentPage.value = 1
-  loadPosts()
-}
-
-// 分类筛选处理
-const handleCategoryChange = (event) => {
-  selectedCategory.value = event.value
   currentPage.value = 1
   loadPosts()
 }
@@ -305,23 +280,10 @@ const closeDetailCard = () => {
   }
 }
 
-// 加载分类数据
-const loadCategories = async () => {
-  try {
-    const response = await getCategories()
-    if (response.success && response.data) {
-      categories.value = response.data
-    }
-  } catch (error) {
-    console.error('加载分类失败:', error)
-  }
-}
-
 // 组件挂载时加载数据
 onMounted(() => {
   // 初始化用户信息
   userStore.initUserInfo()
-  loadCategories()
   loadPosts()
 })
 </script>
@@ -439,12 +401,6 @@ onMounted(() => {
 
 .search-box input::placeholder {
   color: var(--text-color-secondary);
-}
-
-.filter-options {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
 }
 
 
@@ -576,11 +532,6 @@ onMounted(() => {
 
   .search-box {
     max-width: none;
-  }
-
-  .filter-options {
-    justify-content: flex-start;
-    gap: 0.75rem;
   }
 
   .posts-section {

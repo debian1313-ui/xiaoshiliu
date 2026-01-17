@@ -301,11 +301,14 @@
               </div>
             </div>
             <div class="post-content">
-              <h2 class="post-title">{{ postData.title }}</h2>
-              <p class="post-text">
+              <h2 v-if="postData.title" class="post-title">{{ postData.title }}</h2>
+              <p v-if="postData.content || (showPaymentOverlay && isContentHidden)" class="post-text">
                 <ContentRenderer :text="displayContent" />
                 <span v-if="showPaymentOverlay && (postData.content.length > 50 || isContentHidden)" class="content-locked-hint">
                   （内容已隐藏，解锁后查看完整内容）
+                </span>
+                <span v-if="shouldShowExpandButton" class="content-expand-btn" @click="toggleContentExpand">
+                  {{ isContentExpanded ? '收起' : '展开' }}
                 </span>
               </p>
               <!-- 附件下载区域 - 付费内容时隐藏 -->
@@ -699,6 +702,7 @@ const likeButtonRef = ref(null)
 const isAnimating = ref(true)
 const showContent = ref(false) // 新增：控制内容显示
 const isClosing = ref(false) // 新增：控制关闭动画状态
+const isContentExpanded = ref(false) // 控制长文本内容展开/收起
 
 // 付费设置相关状态
 const isUnlocking = ref(false) // 解锁中状态
@@ -1139,8 +1143,8 @@ const isCurrentUserPost = computed(() => {
 
 const postData = computed(() => {
   const data = {
-    title: props.item.title || '无标题',
-    content: props.item.originalData?.content || props.item.content || '暂无内容',
+    title: props.item.title || '',
+    content: props.item.originalData?.content || props.item.content || '',
     tags: props.item.originalData?.tags ?
       (Array.isArray(props.item.originalData.tags) ?
         props.item.originalData.tags.map(tag => typeof tag === 'object' ? tag.name : tag) :
@@ -1157,15 +1161,35 @@ const postData = computed(() => {
   return data
 })
 
+// 内容字符限制常量
+const CONTENT_CHAR_LIMIT = 200
+const PAID_CONTENT_CHAR_LIMIT = 50
+
+// 判断内容是否需要展开功能
+const shouldShowExpandButton = computed(() => {
+  if (showPaymentOverlay.value) return false
+  const fullContent = postData.value?.content
+  return fullContent && fullContent.length > CONTENT_CHAR_LIMIT
+})
+
+// 切换内容展开/收起
+const toggleContentExpand = () => {
+  isContentExpanded.value = !isContentExpanded.value
+}
+
 // 付费内容时显示的截断内容
 const displayContent = computed(() => {
-  const fullContent = postData.value.content
-  if (!showPaymentOverlay.value) {
+  const fullContent = postData.value?.content || ''
+  // 付费内容只显示前50个字符
+  if (showPaymentOverlay.value) {
+    if (fullContent.length > PAID_CONTENT_CHAR_LIMIT) {
+      return fullContent.substring(0, PAID_CONTENT_CHAR_LIMIT) + '...'
+    }
     return fullContent
   }
-  // 付费内容只显示前50个字符
-  if (fullContent.length > 50) {
-    return fullContent.substring(0, 50) + '...'
+  // 非付费内容：超过200字符时根据展开状态显示
+  if (fullContent.length > CONTENT_CHAR_LIMIT && !isContentExpanded.value) {
+    return fullContent.substring(0, CONTENT_CHAR_LIMIT) + '...'
   }
   return fullContent
 })
@@ -3025,6 +3049,14 @@ onUnmounted(() => {
     window.visualViewport.removeEventListener('resize', adjustMobilePadding)
     window.visualViewport.removeEventListener('scroll', adjustMobilePadding)
   }
+  
+  // 确保视频在组件卸载时暂停播放
+  if (videoPlayer.value?.pause) {
+    videoPlayer.value.pause()
+  }
+  if (mobileVideoPlayer.value?.pause) {
+    mobileVideoPlayer.value.pause()
+  }
 })
 
 watch(isInputFocused, async (newValue) => {
@@ -3804,6 +3836,21 @@ function handleAvatarError(event) {
   color: var(--text-color-tertiary);
   font-size: 13px;
   font-style: italic;
+}
+
+/* 内容展开/收起按钮 */
+.content-expand-btn {
+  display: inline;
+  color: var(--primary-color);
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: 500;
+  margin-left: 4px;
+  transition: opacity 0.2s ease;
+}
+
+.content-expand-btn:hover {
+  opacity: 0.8;
 }
 
 /* 图片区域付费遮罩 */

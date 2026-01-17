@@ -15,7 +15,7 @@ import BackToTopButton from '@/components/BackToTopButton.vue'
 import VerifiedBadge from '@/components/VerifiedBadge.vue'
 import { getCommentNotifications, getLikeNotifications, getFollowNotifications, getCollectionNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '@/api/notification.js'
 import { getPostDetail } from '@/api/posts.js'
-import { postApi, userApi, commentApi } from '@/api/index.js'
+import { postApi, userApi, commentApi, systemNotificationApi } from '@/api/index.js'
 import { useUserStore } from '@/stores/user'
 import { useAuthStore } from '@/stores/auth'
 import { useFollowStore } from '@/stores/follow'
@@ -41,6 +41,7 @@ const themeStore = useThemeStore()
 
 // 常量定义
 const TABS = [
+  { key: 'system', label: '系统消息' },
   { key: 'comments', label: '评论和@' },
   { key: 'likes', label: '点赞' },
   { key: 'collections', label: '收藏' },
@@ -48,13 +49,14 @@ const TABS = [
 ]
 
 // 响应式数据
-const activeTab = ref('comments')
+const activeTab = ref('system')
 const isLoading = ref(true)
 const notificationTabRef = ref(null)
 const commentsData = ref([])
 const likesData = ref([])
 const collectionsData = ref([])
 const followsData = ref([])
+const systemData = ref([]) // 系统消息数据
 
 // 详情卡片相关状态
 const showDetailCard = ref(false)
@@ -71,7 +73,8 @@ const pagination = ref({
   comments: { page: 1, hasMore: true, loading: false },
   likes: { page: 1, hasMore: true, loading: false },
   collections: { page: 1, hasMore: true, loading: false },
-  follows: { page: 1, hasMore: true, loading: false }
+  follows: { page: 1, hasMore: true, loading: false },
+  system: { page: 1, hasMore: true, loading: false }
 })
 
 const PAGE_SIZE = 20 // 每页加载数量
@@ -81,7 +84,8 @@ const loadMoreTriggers = ref({
   comments: null,
   likes: null,
   collections: null,
-  follows: null
+  follows: null,
+  system: null
 })
 const observer = ref(null)
 
@@ -429,6 +433,58 @@ async function loadCollectionsData(isLoadMore = false) {
   }
 }
 
+// 加载系统消息数据
+async function loadSystemData(isLoadMore = false) {
+  const tabPagination = pagination.value.system
+
+  if (!isLoggedIn.value || tabPagination.loading) return
+  if (!isLoadMore && loadedTabs.value.has('system')) return
+  if (isLoadMore && !tabPagination.hasMore) return
+
+  tabPagination.loading = true
+
+  try {
+    const params = {
+      page: isLoadMore ? tabPagination.page : 1,
+      limit: PAGE_SIZE
+    }
+
+    const response = await systemNotificationApi.getHistory(params)
+
+    // 转换后端数据格式为前端期望的格式
+    const transformedData = (response.data?.notifications || []).map(item => ({
+      id: item.id,
+      title: item.title,
+      content: item.content,
+      type: item.type, // 'system' 或 'activity'
+      typeLabel: item.type === 'system' ? '系统消息' : '活动消息',
+      image_url: item.image_url,
+      link_url: item.link_url,
+      time: formatTime(item.created_at)
+    }))
+
+    if (isLoadMore) {
+      systemData.value.push(...transformedData)
+      tabPagination.page++
+    } else {
+      systemData.value = transformedData
+      tabPagination.page = 2
+      loadedTabs.value.add('system')
+    }
+
+    // 检查是否还有更多数据
+    tabPagination.hasMore = transformedData.length === PAGE_SIZE
+
+  } catch (error) {
+    console.error('加载系统消息失败:', error)
+    if (!isLoadMore) {
+      systemData.value = []
+    }
+  } finally {
+    tabPagination.loading = false
+  }
+}
+
 
 
 // 根据当前tab加载对应数据
@@ -462,6 +518,9 @@ async function loadCurrentTabData() {
         break
       case 'follows':
         await loadFollowsData()
+        break
+      case 'system':
+        await loadSystemData()
         break
     }
 
@@ -904,9 +963,9 @@ const handlePopState = (event) => {
 // 组件挂载
 onMounted(async () => {
   scrollToTop()
-  // 获取按类型的未读通知数量
+  // 获取按类型的未读通知数量（包括系统消息）
   if (isLoggedIn.value) {
-    await notificationStore.fetchUnreadCountByType()
+    await notificationStore.fetchAllUnreadCounts()
   }
   await loadCurrentTabData()
   setupLazyLoading()
@@ -1179,7 +1238,7 @@ watch(isLoggedIn, async (newValue, oldValue) => {
   if (newValue && !oldValue) {
     // 用户刚登录，清除已加载标记并重新加载数据
     loadedTabs.value.clear()
-    await notificationStore.fetchUnreadCountByType()
+    await notificationStore.fetchAllUnreadCounts()
     await loadCurrentTabData()
     setupLazyLoading()
     nextTick(() => notificationTabRef.value?.updateSlider())
@@ -1189,6 +1248,7 @@ watch(isLoggedIn, async (newValue, oldValue) => {
     likesData.value = []
     collectionsData.value = []
     followsData.value = []
+    systemData.value = []
 
     // 清空已加载记录
     loadedTabs.value.clear()
@@ -1458,6 +1518,35 @@ watch(isLoggedIn, async (newValue, oldValue) => {
               </div>
 
               <div v-if="pagination.follows.hasMore" :ref="el => loadMoreTriggers.follows = el"
+                class="load-more-trigger"></div>
+            </template>
+
+
+            <template v-else-if="activeTab === 'system'">
+
+              <div v-if="systemData.length === 0 && !isLoading && loadedTabs.has('system')" class="empty-state">
+                <SvgIcon name="notification" width="48" height="48" class="empty-icon" />
+                <h3>暂无系统消息</h3>
+                <p>系统公告和活动消息会显示在这里</p>
+              </div>
+              <div v-for="item in systemData" :key="item.id" class="notification-item system-notification-item">
+                <div class="system-notification-content">
+                  <div class="system-notification-header">
+                    <span class="system-type-badge" :class="item.type">{{ item.typeLabel }}</span>
+                    <span class="system-time">{{ item.time }}</span>
+                  </div>
+                  <h3 class="system-title">{{ item.title }}</h3>
+                  <p class="system-text">{{ item.content }}</p>
+                  <div v-if="item.image_url" class="system-image">
+                    <img v-img-lazy="item.image_url" :alt="item.title" class="lazy-image" @error="handleImageError" />
+                  </div>
+                  <a v-if="item.link_url" :href="item.link_url" target="_blank" rel="noopener noreferrer" class="system-link">
+                    查看详情 →
+                  </a>
+                </div>
+              </div>
+
+              <div v-if="pagination.system.hasMore" :ref="el => loadMoreTriggers.system = el"
                 class="load-more-trigger"></div>
             </template>
           </div>
@@ -2165,5 +2254,98 @@ watch(isLoggedIn, async (newValue, oldValue) => {
   .interaction-hint .time {
     font-size: 12px;
   }
+}
+
+/* 系统消息样式 */
+.system-notification-item {
+  display: block;
+  padding: 16px;
+}
+
+.system-notification-content {
+  width: 100%;
+}
+
+.system-notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.system-type-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.system-type-badge.system {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.system-type-badge.activity {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+[data-theme="dark"] .system-type-badge.system {
+  background: rgba(33, 150, 243, 0.2);
+  color: #64b5f6;
+}
+
+[data-theme="dark"] .system-type-badge.activity {
+  background: rgba(255, 152, 0, 0.2);
+  color: #ffb74d;
+}
+
+.system-time {
+  font-size: 12px;
+  color: var(--text-color-tertiary);
+}
+
+.system-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-color-primary);
+  margin: 0 0 8px 0;
+  line-height: 1.4;
+}
+
+.system-text {
+  font-size: 14px;
+  color: var(--text-color-secondary);
+  line-height: 1.6;
+  margin: 0 0 12px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.system-image {
+  margin-bottom: 12px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.system-image img {
+  width: 100%;
+  max-height: 300px;
+  object-fit: cover;
+  display: block;
+}
+
+.system-link {
+  display: inline-block;
+  color: var(--primary-color);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.system-link:hover {
+  opacity: 0.8;
 }
 </style>

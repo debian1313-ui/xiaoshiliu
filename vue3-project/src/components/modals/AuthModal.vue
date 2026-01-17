@@ -131,6 +131,7 @@ import MessageToast from '@/components/MessageToast.vue'
 import CaptchaModal from '@/components/modals/CaptchaModal.vue'
 import { useUserStore } from '@/stores/user.js'
 import { useScrollLock } from '@/composables/useScrollLock'
+import { useGeetest } from '@/composables/useGeetest'
 import { authApi } from '@/api/index.js'
 
 const props = defineProps({
@@ -147,12 +148,27 @@ const userStore = useUserStore()
 
 const { lock, unlock } = useScrollLock()
 
+// 极验验证码 composable
+const { 
+  initCaptcha: initGeetest, 
+  showCaptcha: showGeetestCaptcha, 
+  reset: resetGeetest,
+  isReady: geetestReady,
+  isLoading: geetestLoading,
+  error: geetestError,
+  isGeetestEnabledLocal 
+} = useGeetest({ product: 'bind' })
+
 // 邮件功能是否启用
 const emailEnabled = ref(false)
 // OAuth2是否启用
 const oauth2Enabled = ref(false)
 // 是否仅允许OAuth2登录
 const oauth2OnlyLogin = ref(false)
+// 极验验证码是否启用（来自后端配置）
+const geetestEnabled = ref(isGeetestEnabledLocal) // 使用本地配置作为初始值，避免闪烁
+// 极验验证码ID
+const geetestCaptchaId = ref('')
 
 const isAnimating = ref(false)
 const isLoginMode = ref(props.initialMode === 'login')
@@ -474,10 +490,43 @@ const handleSubmit = async () => {
       return
     }
 
-    // 表单验证通过，打开验证码模态框
-    openCaptchaModal()
+    // 根据验证码类型选择验证方式
+    if (geetestEnabled.value) {
+      // 使用极验验证码
+      await handleGeetestVerify()
+    } else {
+      // 使用传统验证码模态框
+      openCaptchaModal()
+    }
   }
 }
+
+// 处理极验验证
+const handleGeetestVerify = async () => {
+  if (!geetestReady.value) {
+    unifiedMessage.value = '验证码未就绪，请稍后再试'
+    return
+  }
+
+  try {
+    const geetestResult = await showGeetestCaptcha()
+    if (geetestResult) {
+      // 存储极验验证结果用于提交
+      geetestVerifyResult.value = geetestResult
+      await performSubmit()
+    }
+  } catch (error) {
+    if (error.message === '用户取消验证') {
+      // 用户取消，不显示错误
+      return
+    }
+    console.error('极验验证失败:', error)
+    unifiedMessage.value = error.message || '验证失败，请重试'
+  }
+}
+
+// 极验验证结果
+const geetestVerifyResult = ref(null)
 
 // 执行实际的提交操作
 const performSubmit = async () => {
@@ -496,12 +545,24 @@ const performSubmit = async () => {
         user_id: formData.user_id,
         nickname: formData.nickname,
         password: formData.password,
-        captchaId: captchaId.value,
-        captchaText: formData.captchaText,
         avatar: new URL('@/assets/imgs/avatar.png', import.meta.url).href,
         bio: '用户没有任何简介',
         location: '未知'
       }
+      
+      // 根据验证码类型添加不同的验证参数
+      if (geetestEnabled.value && geetestVerifyResult.value) {
+        // 极验验证码参数
+        registerData.lot_number = geetestVerifyResult.value.lot_number
+        registerData.captcha_output = geetestVerifyResult.value.captcha_output
+        registerData.pass_token = geetestVerifyResult.value.pass_token
+        registerData.gen_time = geetestVerifyResult.value.gen_time
+      } else {
+        // 传统验证码参数
+        registerData.captchaId = captchaId.value
+        registerData.captchaText = formData.captchaText
+      }
+      
       // 邮件功能启用时才传邮箱相关参数
       if (emailEnabled.value) {
         registerData.email = formData.email
@@ -517,6 +578,8 @@ const performSubmit = async () => {
       )
       if (!isLoginMode.value) {
         closeCaptchaModal()
+        // 清除极验验证结果
+        geetestVerifyResult.value = null
       }
       setTimeout(() => {
         emit('success')
@@ -524,8 +587,8 @@ const performSubmit = async () => {
         window.location.reload()
       }, 1000)
     } else {
-      // 如果是图形验证码相关错误，刷新验证码
-      if (!isLoginMode.value && showCaptchaModal.value &&
+      // 如果是图形验证码相关错误
+      if (!isLoginMode.value && !geetestEnabled.value && showCaptchaModal.value &&
         (result.message.includes('验证码已过期') || result.message.includes('验证码错误') || result.message.includes('captcha')) &&
         !result.message.includes('邮箱验证码')) {
         refreshCaptcha()
@@ -534,10 +597,27 @@ const performSubmit = async () => {
         errors.emailCode = result.message
         showErrors.value = true
         closeCaptchaModal()
+        // 重置极验验证
+        if (geetestEnabled.value) {
+          resetGeetest()
+          geetestVerifyResult.value = null
+        }
       } else if (result.message.includes('用户ID已存在')) {
         // 用户ID重复错误，设置到对应字段
         errors.user_id = result.message
         closeCaptchaModal()
+        // 重置极验验证
+        if (geetestEnabled.value) {
+          resetGeetest()
+          geetestVerifyResult.value = null
+        }
+      } else if (result.message.includes('验证码校验失败') || result.message.includes('验证码')) {
+        // 极验验证码错误
+        unifiedMessage.value = result.message
+        if (geetestEnabled.value) {
+          resetGeetest()
+          geetestVerifyResult.value = null
+        }
       } else {
         unifiedMessage.value = result.message
       }
@@ -584,7 +664,7 @@ const handleOAuth2Login = () => {
   window.location.href = oauth2LoginUrl
 }
 
-// 获取认证配置（包括邮件和OAuth2）
+// 获取认证配置（包括邮件、OAuth2和极验验证码）
 const fetchAuthConfig = async () => {
   try {
     const response = await fetch('/api/auth/auth-config')
@@ -593,6 +673,20 @@ const fetchAuthConfig = async () => {
       emailEnabled.value = result.data.emailEnabled
       oauth2Enabled.value = result.data.oauth2Enabled
       oauth2OnlyLogin.value = result.data.oauth2OnlyLogin
+      // 极验验证码配置
+      geetestEnabled.value = result.data.geetestEnabled
+      geetestCaptchaId.value = result.data.geetestCaptchaId || ''
+      
+      // 如果极验验证码启用，初始化极验
+      if (geetestEnabled.value && geetestCaptchaId.value) {
+        try {
+          await initGeetest(geetestCaptchaId.value)
+        } catch (err) {
+          console.error('初始化极验验证码失败:', err)
+          // 初始化失败时回退到传统验证码
+          geetestEnabled.value = false
+        }
+      }
     }
   } catch (error) {
     console.error('获取认证配置失败:', error)

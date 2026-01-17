@@ -65,6 +65,26 @@ export const userApi = {
   // 删除账号
   deleteAccount(userId) {
     return request.delete(`/users/${userId}`)
+  },
+
+  // 记录浏览历史
+  recordHistory(postId) {
+    return request.post('/users/history', { post_id: postId })
+  },
+
+  // 获取浏览历史列表
+  getHistory(params = {}) {
+    return request.get('/users/history', { params })
+  },
+
+  // 删除单条浏览历史
+  deleteHistoryItem(postId) {
+    return request.delete(`/users/history/${postId}`)
+  },
+
+  // 清空所有浏览历史
+  clearHistory() {
+    return request.delete('/users/history')
   }
 }
 
@@ -791,6 +811,68 @@ export const adminApi = {
   // 获取动态
   getMonitorActivities() {
     return request.get('/admin/monitor/activities')
+  },
+
+  // ========== 队列管理 ==========
+  // 获取队列统计信息
+  getQueueStats() {
+    return request.get('/admin/queues')
+  },
+
+  // 获取队列名称列表
+  getQueueNames() {
+    return request.get('/admin/queue-names')
+  },
+
+  // 获取队列任务列表
+  getQueueJobs(queueName, params = {}) {
+    return request.get(`/admin/queues/${queueName}/jobs`, { params })
+  },
+
+  // 重试失败的任务
+  retryJob(queueName, jobId) {
+    return request.post(`/admin/queues/${queueName}/jobs/${jobId}/retry`)
+  },
+
+  // 清空队列
+  clearQueue(queueName) {
+    return request.delete(`/admin/queues/${queueName}`)
+  },
+
+  // ========== 系统通知管理 ==========
+  // 获取系统通知列表
+  getSystemNotifications(params = {}) {
+    return request.get('/admin/system-notifications', { params })
+  },
+
+  // 创建系统通知
+  createSystemNotification(data) {
+    return request.post('/admin/system-notifications', data)
+  },
+
+  // 更新系统通知
+  updateSystemNotification(notificationId, data) {
+    return request.put(`/admin/system-notifications/${notificationId}`, data)
+  },
+
+  // 删除系统通知
+  deleteSystemNotification(notificationId) {
+    return request.delete(`/admin/system-notifications/${notificationId}`)
+  },
+
+  // 批量删除系统通知
+  batchDeleteSystemNotifications(ids) {
+    return request.delete('/admin/system-notifications', { data: { ids } })
+  },
+
+  // 获取单个系统通知详情
+  getSystemNotificationDetail(notificationId) {
+    return request.get(`/admin/system-notifications/${notificationId}`)
+  },
+
+  // 切换系统通知启用状态
+  toggleSystemNotificationActive(notificationId) {
+    return request.put(`/admin/system-notifications/${notificationId}/toggle-active`)
   }
 }
 
@@ -826,5 +908,28 @@ export const balanceApi = {
   checkPurchase(postId) {
     console.log('🔍 [API] 检查购买状态, postId:', postId)
     return request.get(`/balance/check-purchase/${postId}`)
+  }
+}
+
+// 系统通知API（用户端）
+export const systemNotificationApi = {
+  // 获取未确认的系统通知
+  getPendingNotifications() {
+    return request.get('/system-notifications/pending')
+  },
+
+  // 获取未确认系统通知的数量
+  getPendingCount() {
+    return request.get('/system-notifications/pending-count')
+  },
+
+  // 确认系统通知
+  confirmNotification(notificationId) {
+    return request.post(`/system-notifications/${notificationId}/confirm`)
+  },
+
+  // 获取系统通知历史
+  getHistory(params = {}) {
+    return request.get('/system-notifications/history', { params })
   }
 }

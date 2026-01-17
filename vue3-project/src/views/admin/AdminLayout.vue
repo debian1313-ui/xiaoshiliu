@@ -269,16 +269,19 @@ const menuItems = [
   { path: '/admin/monitor', title: '动态监控', icon: 'monitor' },
   { path: '/admin/users', title: '用户管理', icon: 'user' },
   { path: '/admin/posts', title: '笔记管理', icon: 'post' },
+  { path: '/admin/batch-upload', title: '批量上传', icon: 'publish' },
   { path: '/admin/comments', title: '评论管理', icon: 'chat' },
-  { path: '/admin/categories', title: '分类管理', icon: 'category' },
   { path: '/admin/tags', title: '标签管理', icon: 'hash' },
   { path: '/admin/likes', title: '点赞管理', icon: 'like' },
   { path: '/admin/collections', title: '收藏管理', icon: 'collect' },
   { path: '/admin/follows', title: '关注管理', icon: 'follow' },
   { path: '/admin/notifications', title: '通知管理', icon: 'notification' },
+  { path: '/admin/system-notifications', title: '系统通知', icon: 'setting' },
   { path: '/admin/sessions', title: '会话管理', icon: 'setting' },
   { path: '/admin/audit', title: '认证管理', icon: 'verified' },
   { path: '/admin/content-review', title: '审核管理', icon: 'warning' },
+  { path: '/admin/banned-words', title: '违禁词管理', icon: 'unpassed' },
+  { path: '/admin/queues', title: '队列管理', icon: 'data' },
   { path: '/admin/admins', title: '管理员管理', icon: 'admin' }
 ]
 
@@ -295,16 +298,18 @@ const currentPageDescription = computed(() => {
     '/admin/monitor': '查看系统最近动态和活动监控',
     '/admin/users': '管理用户账户和权限',
     '/admin/posts': '管理用户发布的笔记内容',
+    '/admin/batch-upload': '批量上传图片或视频发布笔记',
     '/admin/comments': '管理用户评论和回复',
-    '/admin/categories': '管理笔记分类和分类信息',
     '/admin/tags': '管理笔记标签分类',
     '/admin/likes': '管理用户点赞记录',
     '/admin/collections': '管理用户收藏记录',
     '/admin/follows': '管理用户关注关系',
     '/admin/notifications': '管理系统通知消息',
+    '/admin/system-notifications': '管理系统公告和活动通知',
     '/admin/sessions': '管理用户登录会话',
     '/admin/audit': '管理用户认证申请和审核',
     '/admin/content-review': '审核评论和昵称等内容',
+    '/admin/banned-words': '管理本地违禁词，支持通配符',
     '/admin/admins': '管理系统管理员账号'
   }
   return descriptions[route.path]

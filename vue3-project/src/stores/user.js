@@ -132,7 +132,14 @@ export const useUserStore = defineStore('user', () => {
     const savedUserInfo = localStorage.getItem('userInfo')
     if (savedUserInfo && token.value) {
       try {
-        userInfo.value = JSON.parse(savedUserInfo)
+        const parsedUserInfo = JSON.parse(savedUserInfo)
+        // 验证userInfo格式有效性（必须有id字段）
+        if (parsedUserInfo && parsedUserInfo.id) {
+          userInfo.value = parsedUserInfo
+        } else {
+          console.warn('缓存的用户信息格式无效，清除缓存')
+          localStorage.removeItem('userInfo')
+        }
       } catch (error) {
         console.error('解析用户信息失败:', error)
         // 清除无效数据
@@ -142,6 +149,10 @@ export const useUserStore = defineStore('user', () => {
         token.value = ''
         refreshToken.value = ''
       }
+    } else if (savedUserInfo && !token.value) {
+      // 有userInfo但没有token，说明状态不一致，清除userInfo
+      console.warn('检测到userInfo和token状态不一致，清除userInfo缓存')
+      localStorage.removeItem('userInfo')
     }
   }
 
@@ -170,6 +181,11 @@ export const useUserStore = defineStore('user', () => {
       const response = await authApi.getCurrentUser()
 
       if (response.success && response.data) {
+        // 检查是否与缓存的用户ID不一致（可能存在token/userInfo不匹配的情况）
+        if (userInfo.value && userInfo.value.id && response.data.id !== userInfo.value.id) {
+          console.warn('检测到用户信息不一致，服务端用户ID:', response.data.id, '缓存用户ID:', userInfo.value.id)
+          console.warn('使用服务端返回的用户信息覆盖缓存')
+        }
         userInfo.value = response.data
         // 更新localStorage中的用户信息
         localStorage.setItem('userInfo', JSON.stringify(response.data))
