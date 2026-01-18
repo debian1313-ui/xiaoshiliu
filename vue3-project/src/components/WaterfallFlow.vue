@@ -65,6 +65,10 @@ const pageSize = 20
 // 添加初次加载标识
 const isInitialLoad = ref(true)
 
+// 加载重试控制
+const loadRetryCount = ref(0)
+const MAX_LOAD_RETRIES = 3  // 最大重试次数
+
 // DetailCard 相关状态
 const showDetailCard = ref(false)
 const selectedItem = ref(null)
@@ -248,8 +252,10 @@ async function initContent() {
 
     currentPage.value = 1
     hasMore.value = true
+    loadRetryCount.value = 0  // 重置重试计数
     try {
         let content = []
+        let result = null
 
         // 优先使用预加载的笔记数据（来自搜索页面的筛选结果）
         if (props.preloadedPosts && props.preloadedPosts.length > 0) {
@@ -258,17 +264,22 @@ async function initContent() {
         } else if (!props.searchKeyword && !props.searchTag && !props.userId) {
             // 无搜索条件时使用推荐算法
             console.log('📊 [WaterfallFlow] 使用推荐算法获取笔记')
-            const result = await getRecommendedPosts({
+            result = await getRecommendedPosts({
                 page: 1,
                 limit: pageSize,
                 type: props.type
             })
             content = result.posts || []
-            hasMore.value = result.hasMore !== false
+            // 使用分页信息判断是否还有更多
+            if (result.pagination) {
+                hasMore.value = result.pagination.page < result.pagination.pages
+                console.log(`📊 [WaterfallFlow] 初始化完成 - 总数: ${result.pagination.total}, 总页数: ${result.pagination.pages}, 还有更多: ${hasMore.value}`)
+            } else {
+                hasMore.value = result.hasMore !== false
+            }
         } else {
             // 使用笔记API服务
-            // 调用参数已准备完成
-            const result = await getPostList({
+            result = await getPostList({
                 page: 1,
                 limit: pageSize,
                 category: props.category,
@@ -278,7 +289,12 @@ async function initContent() {
                 type: props.type
             })
             content = result.posts || []
-            hasMore.value = result.hasMore !== false // 默认为true，除非明确返回false
+            // 使用分页信息判断是否还有更多
+            if (result.pagination) {
+                hasMore.value = result.pagination.page < result.pagination.pages
+            } else {
+                hasMore.value = result.hasMore !== false // 默认为true，除非明确返回false
+            }
         }
 
         // 如果不是初次加载，为新内容添加淡入动画
@@ -336,6 +352,8 @@ async function initContent() {
 
     } catch (error) {
         console.error('加载内容失败:', error)
+        // 网络错误时保持 hasMore 为 true，允许用户下拉刷新重试
+        hasMore.value = true
     } finally {
         if (isInitialLoad.value) {
             loading.value = false
@@ -362,7 +380,7 @@ async function loadMoreContent() {
         
         // 无搜索条件时使用推荐算法
         if (!props.searchKeyword && !props.searchTag && !props.userId) {
-            console.log('📊 [WaterfallFlow] 加载更多推荐笔记')
+            console.log(`📊 [WaterfallFlow] 加载更多推荐笔记 - 页码: ${currentPage.value}`)
             result = await getRecommendedPosts({
                 page: currentPage.value,
                 limit: pageSize,
@@ -382,7 +400,13 @@ async function loadMoreContent() {
         }
 
         const newContent = result.posts || []
-        hasMore.value = result.hasMore !== false
+        
+        // 根据分页信息判断是否还有更多数据
+        if (result.pagination) {
+            hasMore.value = result.pagination.page < result.pagination.pages
+        } else {
+            hasMore.value = result.hasMore !== false
+        }
 
         // 如果没有新内容，说明没有更多数据了
         if (newContent.length === 0) {
@@ -433,12 +457,28 @@ async function loadMoreContent() {
             }, 100) // 100ms延迟确保DOM已渲染
         })
 
-        // 加载完成
+        console.log(`📊 [WaterfallFlow] 加载完成 - 当前页: ${currentPage.value}, 总数: ${contentList.value.length}, 还有更多: ${hasMore.value}`)
+        
+        // 成功加载后重置重试计数
+        loadRetryCount.value = 0
 
     } catch (error) {
         console.error('加载更多内容失败:', error)
         // 发生错误时回退页码
         currentPage.value--
+        
+        // 增加重试计数
+        loadRetryCount.value++
+        
+        // 如果未超过最大重试次数，保持 hasMore 为 true 允许重试
+        if (loadRetryCount.value < MAX_LOAD_RETRIES) {
+            hasMore.value = true
+            console.log(`📊 [WaterfallFlow] 加载失败，将在下次滚动时重试 (${loadRetryCount.value}/${MAX_LOAD_RETRIES})`)
+        } else {
+            // 超过最大重试次数，停止尝试加载更多
+            hasMore.value = false
+            console.log(`📊 [WaterfallFlow] 已达到最大重试次数，停止加载更多`)
+        }
     } finally {
         loadingMore.value = false
     }
@@ -449,6 +489,10 @@ let scrollTimer = null
 let resizeTimer = null
 // 是否正在处理滚动事件
 let isScrollHandling = ref(false)
+// 滚动触发阈值（距离底部多少像素时开始加载）
+// 设置为300px以便在用户滚动接近底部时提前开始加载，提供更流畅的体验
+// 这个值需要在响应速度和减少不必要请求之间取得平衡
+const SCROLL_THRESHOLD = 300
 
 // 滚动监听函数
 function handleScroll() {
@@ -456,29 +500,18 @@ function handleScroll() {
     const windowHeight = window.innerHeight
     const documentHeight = document.documentElement.scrollHeight
 
-    // 如果没有更多内容，严格限制滚动范围
-    if (!hasMore.value && contentList.value.length > 0) {
-        // 计算最大允许的滚动位置，确保底部不会有多余空间
-        const maxScrollTop = Math.max(0, documentHeight - windowHeight - 10)
-        if (scrollTop > maxScrollTop) {
-            // 立即滚动到最大允许位置
-            window.scrollTo({
-                top: maxScrollTop,
-                behavior: 'auto'
-            })
-            return
-        }
-    }
-
-    // 如果正在加载更多、没有更多数据或正在处理滚动事件，直接返回
-    if (loadingMore.value || !hasMore.value || isScrollHandling.value) return
+    // 如果正在加载更多或正在处理滚动事件，直接返回
+    if (loadingMore.value || isScrollHandling.value) return
+    
+    // 如果没有更多内容，不再处理滚动
+    if (!hasMore.value) return
 
     // 清除之前的定时器
     if (scrollTimer) {
         clearTimeout(scrollTimer)
     }
 
-    // 设置防抖，200ms 内只执行一次（减少延迟）
+    // 设置防抖，150ms 内只执行一次（减少延迟以提高响应速度）
     scrollTimer = setTimeout(() => {
         // 再次检查状态，确保不会重复执行
         if (loadingMore.value || !hasMore.value || isScrollHandling.value) return
@@ -487,8 +520,8 @@ function handleScroll() {
         const currentWindowHeight = window.innerHeight
         const currentDocumentHeight = document.documentElement.scrollHeight
 
-        // 当滚动到距离底部200px时开始加载
-        if (currentScrollTop + currentWindowHeight >= currentDocumentHeight - 200) {
+        // 当滚动到距离底部 SCROLL_THRESHOLD 像素时开始加载
+        if (currentScrollTop + currentWindowHeight >= currentDocumentHeight - SCROLL_THRESHOLD) {
             if (hasMore.value) {
                 isScrollHandling.value = true
                 loadMoreContent().finally(() => {
@@ -496,7 +529,7 @@ function handleScroll() {
                 })
             }
         }
-    }, 200)
+    }, 150)
 }
 
 // 窗口大小变化监听

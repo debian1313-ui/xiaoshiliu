@@ -1,12 +1,22 @@
-// This is your Prisma schema file,
+// This is your Prisma schema file for PostgreSQL,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
+// This schema is fully compatible with the MySQL version (schema.prisma)
+// To use PostgreSQL:
+// 1. Rename this file to schema.prisma (backup original if needed)
+// 2. Update DATABASE_URL in .env to PostgreSQL format:
+//    DATABASE_URL="postgresql://user:password@host:5432/database?schema=public"
+//
+// Key differences from MySQL schema:
+// - Provider: postgresql instead of mysql
+// - @db.TinyInt → @db.SmallInt (PostgreSQL doesn't have TinyInt)
+// - Index names are globally unique (prefixed with table name)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -25,7 +35,7 @@ model Admin {
 model Audit {
   id           BigInt    @id @default(autoincrement())
   user_id      BigInt
-  type         Int       @db.TinyInt
+  type         Int       @db.SmallInt
   target_id    BigInt?
   content      String    @db.Text
   audit_result Json?
@@ -35,15 +45,15 @@ model Audit {
   retry_count  Int       @default(0)
   created_at   DateTime  @default(now())
   audit_time   DateTime?
-  status       Int?      @default(0) @db.TinyInt
+  status       Int?      @default(0) @db.SmallInt
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@index([user_id], name: "idx_user_id")
-  @@index([type], name: "idx_type")
-  @@index([status], name: "idx_status")
-  @@index([created_at], name: "idx_created_at")
-  @@index([target_id], name: "idx_target_id")
+  @@index([user_id], name: "idx_audit_user_id")
+  @@index([type], name: "idx_audit_type")
+  @@index([status], name: "idx_audit_status")
+  @@index([created_at], name: "idx_audit_created_at")
+  @@index([target_id], name: "idx_audit_target_id")
   @@map("audit")
 }
 
@@ -99,9 +109,9 @@ model Collection {
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
   post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
 
-  @@unique([user_id, post_id], name: "uk_user_post")
-  @@index([user_id], name: "idx_user_id")
-  @@index([post_id], name: "idx_post_id")
+  @@unique([user_id, post_id], name: "uk_collection_user_post")
+  @@index([user_id], name: "idx_collection_user_id")
+  @@index([post_id], name: "idx_collection_post_id")
   @@map("collections")
 }
 
@@ -113,7 +123,7 @@ model Comment {
   parent_id    BigInt?
   content      String   @db.Text
   like_count   Int      @default(0)
-  audit_status Int      @default(1) @db.TinyInt
+  audit_status Int      @default(1) @db.SmallInt
   is_public    Boolean  @default(true)
   audit_result Json?
   created_at   DateTime @default(now())
@@ -124,12 +134,12 @@ model Comment {
   replies       Comment[]      @relation("CommentReplies")
   notifications Notification[]
 
-  @@index([post_id], name: "idx_post_id")
-  @@index([user_id], name: "idx_user_id")
-  @@index([parent_id], name: "idx_parent_id")
-  @@index([created_at], name: "idx_created_at")
-  @@index([audit_status], name: "idx_audit_status")
-  @@index([is_public], name: "idx_is_public")
+  @@index([post_id], name: "idx_comment_post_id")
+  @@index([user_id], name: "idx_comment_user_id")
+  @@index([parent_id], name: "idx_comment_parent_id")
+  @@index([created_at], name: "idx_comment_created_at")
+  @@index([audit_status], name: "idx_comment_audit_status")
+  @@index([is_public], name: "idx_comment_is_public")
   @@map("comments")
 }
 
@@ -144,9 +154,9 @@ model Follow {
   following User @relation("Following", fields: [following_id], references: [id], onDelete: Cascade)
 
   @@unique([follower_id, following_id], name: "uk_follow")
-  @@index([follower_id], name: "idx_follower_id")
-  @@index([following_id], name: "idx_following_id")
-  @@index([follower_id, following_id], name: "idx_follower_following")
+  @@index([follower_id], name: "idx_follow_follower_id")
+  @@index([following_id], name: "idx_follow_following_id")
+  @@index([follower_id, following_id], name: "idx_follow_follower_following")
   @@map("follows")
 }
 
@@ -154,16 +164,16 @@ model Follow {
 model Like {
   id          BigInt   @id @default(autoincrement())
   user_id     BigInt
-  target_type Int      @db.TinyInt
+  target_type Int      @db.SmallInt
   target_id   BigInt
   created_at  DateTime @default(now())
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@unique([user_id, target_type, target_id], name: "uk_user_target")
-  @@index([user_id], name: "idx_user_id")
-  @@index([target_type, target_id], name: "idx_target")
-  @@index([user_id, target_type, target_id], name: "idx_user_target_type")
+  @@unique([user_id, target_type, target_id], name: "uk_like_user_target")
+  @@index([user_id], name: "idx_like_user_id")
+  @@index([target_type, target_id], name: "idx_like_target")
+  @@index([user_id, target_type, target_id], name: "idx_like_user_target_type")
   @@map("likes")
 }
 
@@ -172,7 +182,7 @@ model Notification {
   id         BigInt   @id @default(autoincrement())
   user_id    BigInt
   sender_id  BigInt
-  type       Int      @db.TinyInt
+  type       Int      @db.SmallInt
   title      String   @db.VarChar(200)
   target_id  BigInt?
   comment_id BigInt?
@@ -183,13 +193,13 @@ model Notification {
   sender  User     @relation("NotificationSender", fields: [sender_id], references: [id], onDelete: Cascade)
   comment Comment? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
 
-  @@index([user_id], name: "idx_user_id")
-  @@index([sender_id], name: "idx_sender_id")
-  @@index([type], name: "idx_type")
-  @@index([is_read], name: "idx_is_read")
-  @@index([user_id, is_read], name: "idx_user_read")
-  @@index([created_at], name: "idx_created_at")
-  @@index([comment_id], name: "idx_notifications_comment_id")
+  @@index([user_id], name: "idx_notification_user_id")
+  @@index([sender_id], name: "idx_notification_sender_id")
+  @@index([type], name: "idx_notification_type")
+  @@index([is_read], name: "idx_notification_is_read")
+  @@index([user_id, is_read], name: "idx_notification_user_read")
+  @@index([created_at], name: "idx_notification_created_at")
+  @@index([comment_id], name: "idx_notification_comment_id")
   @@map("notifications")
 }
 
@@ -205,9 +215,9 @@ model PointsLog {
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@index([user_id], name: "idx_user_id")
-  @@index([type], name: "idx_type")
-  @@index([created_at], name: "idx_created_at")
+  @@index([user_id], name: "idx_points_log_user_id")
+  @@index([type], name: "idx_points_log_type")
+  @@index([created_at], name: "idx_points_log_created_at")
   @@map("points_log")
 }
 
@@ -222,7 +232,7 @@ model PostAttachment {
 
   post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
 
-  @@index([post_id], name: "idx_post_id")
+  @@index([post_id], name: "idx_post_attachment_post_id")
   @@map("post_attachments")
 }
 
@@ -235,8 +245,8 @@ model PostImage {
 
   post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
 
-  @@index([post_id], name: "idx_post_id")
-  @@index([is_free_preview], name: "idx_is_free_preview")
+  @@index([post_id], name: "idx_post_image_post_id")
+  @@index([is_free_preview], name: "idx_post_image_is_free_preview")
   @@map("post_images")
 }
 
@@ -255,7 +265,7 @@ model PostPaymentSetting {
 
   post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
 
-  @@index([post_id], name: "idx_post_id")
+  @@index([post_id], name: "idx_post_payment_setting_post_id")
   @@map("post_payment_settings")
 }
 
@@ -270,8 +280,8 @@ model PostTag {
   tag  Tag  @relation(fields: [tag_id], references: [id], onDelete: Cascade)
 
   @@unique([post_id, tag_id], name: "uk_post_tag")
-  @@index([post_id], name: "idx_post_id")
-  @@index([tag_id], name: "idx_tag_id")
+  @@index([post_id], name: "idx_post_tag_post_id")
+  @@index([tag_id], name: "idx_post_tag_tag_id")
   @@map("post_tags")
 }
 
@@ -289,9 +299,9 @@ model PostVideo {
 
   post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
 
-  @@index([post_id], name: "idx_post_id")
-  @@index([transcode_status], name: "idx_transcode_status")
-  @@index([dash_url], name: "idx_dash_url")
+  @@index([post_id], name: "idx_post_video_post_id")
+  @@index([transcode_status], name: "idx_post_video_transcode_status")
+  @@index([dash_url], name: "idx_post_video_dash_url")
   @@map("post_videos")
 }
 
@@ -338,12 +348,12 @@ model Post {
   purchasedBy     UserPurchasedContent[]
   browsingHistory BrowsingHistory[]
 
-  @@index([user_id], name: "idx_user_id")
-  @@index([category_id], name: "idx_category_id")
-  @@index([created_at], name: "idx_created_at")
-  @@index([like_count], name: "idx_like_count")
-  @@index([category_id, created_at], name: "idx_category_id_created_at")
-  @@index([visibility], name: "idx_visibility")
+  @@index([user_id], name: "idx_post_user_id")
+  @@index([category_id], name: "idx_post_category_id")
+  @@index([created_at], name: "idx_post_created_at")
+  @@index([like_count], name: "idx_post_like_count")
+  @@index([category_id, created_at], name: "idx_post_category_id_created_at")
+  @@index([visibility], name: "idx_post_visibility")
   @@map("posts")
 }
 
@@ -357,7 +367,7 @@ model SystemSetting {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  @@index([setting_group], name: "idx_setting_group")
+  @@index([setting_group], name: "idx_system_setting_group")
   @@map("system_settings")
 }
 
@@ -401,8 +411,8 @@ model SystemNotificationConfirmation {
   user         User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@unique([notification_id, user_id], name: "uk_notification_user")
-  @@index([notification_id], name: "idx_confirmation_notification")
-  @@index([user_id], name: "idx_confirmation_user")
+  @@index([notification_id], name: "idx_sys_notif_confirm_notification")
+  @@index([user_id], name: "idx_sys_notif_confirm_user")
   @@map("system_notification_confirmations")
 }
 
@@ -415,8 +425,8 @@ model Tag {
 
   posts PostTag[]
 
-  @@index([name], name: "idx_name")
-  @@index([use_count], name: "idx_use_count")
+  @@index([name], name: "idx_tag_name")
+  @@index([use_count], name: "idx_tag_use_count")
   @@map("tags")
 }
 
@@ -431,9 +441,9 @@ model UserAuthorSubscription {
   user   User @relation("SubscriptionUser", fields: [user_id], references: [id], onDelete: Cascade)
   author User @relation("SubscriptionAuthor", fields: [author_id], references: [id], onDelete: Cascade)
 
-  @@unique([user_id, author_id], name: "uk_user_author")
-  @@index([user_id], name: "idx_user_id")
-  @@index([author_id], name: "idx_author_id")
+  @@unique([user_id, author_id], name: "uk_user_author_subscription")
+  @@index([user_id], name: "idx_user_author_subscription_user_id")
+  @@index([author_id], name: "idx_user_author_subscription_author_id")
   @@map("user_author_subscriptions")
 }
 
@@ -447,7 +457,7 @@ model UserPoints {
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@index([user_id], name: "idx_user_id")
+  @@index([user_id], name: "idx_user_points_user_id")
   @@map("user_points")
 }
 
@@ -466,10 +476,10 @@ model UserPurchasedContent {
   post   Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
   author User @relation("PurchasedContentAuthor", fields: [author_id], references: [id], onDelete: Cascade)
 
-  @@unique([user_id, post_id], name: "uk_user_post")
-  @@index([user_id], name: "idx_user_id")
-  @@index([post_id], name: "idx_post_id")
-  @@index([author_id], name: "idx_author_id")
+  @@unique([user_id, post_id], name: "uk_user_purchased_content")
+  @@index([user_id], name: "idx_user_purchased_content_user_id")
+  @@index([post_id], name: "idx_user_purchased_content_post_id")
+  @@index([author_id], name: "idx_user_purchased_content_author_id")
   @@map("user_purchased_content")
 }
 
@@ -487,9 +497,9 @@ model UserSession {
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@index([user_id], name: "idx_user_id")
-  @@index([token], name: "idx_token")
-  @@index([expires_at], name: "idx_expires_at")
+  @@index([user_id], name: "idx_user_session_user_id")
+  @@index([token], name: "idx_user_session_token")
+  @@index([expires_at], name: "idx_user_session_expires_at")
   @@map("user_sessions")
 }
 
@@ -504,7 +514,7 @@ model BrowsingHistory {
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
   post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
 
-  @@unique([user_id, post_id], name: "uk_user_post_history")
+  @@unique([user_id, post_id], name: "uk_browsing_history_user_post")
   @@index([user_id], name: "idx_browsing_history_user_id")
   @@index([post_id], name: "idx_browsing_history_post_id")
   @@index([updated_at], name: "idx_browsing_history_updated_at")
@@ -522,7 +532,7 @@ model User {
   avatar           String?   @db.VarChar(500)
   background       String?   @db.VarChar(500) // 用户个人主页背景图
   bio              String?   @db.Text
-  bio_audit_status Int       @default(1) @db.TinyInt // 0:待审核 1:已通过 2:已拒绝
+  bio_audit_status Int       @default(1) @db.SmallInt // 0:待审核 1:已通过 2:已拒绝
   location         String?   @db.VarChar(100)
   follow_count     Int       @default(0)
   fans_count       Int       @default(0)
@@ -559,9 +569,9 @@ model User {
   browsingHistory                 BrowsingHistory[]
   systemNotificationConfirmations SystemNotificationConfirmation[]
 
-  @@index([user_id], name: "idx_user_id")
-  @@index([email], name: "idx_email")
-  @@index([created_at], name: "idx_created_at")
-  @@index([oauth2_id], name: "idx_oauth2_id")
+  @@index([user_id], name: "idx_user_user_id")
+  @@index([email], name: "idx_user_email")
+  @@index([created_at], name: "idx_user_created_at")
+  @@index([oauth2_id], name: "idx_user_oauth2_id")
   @@map("users")
 }

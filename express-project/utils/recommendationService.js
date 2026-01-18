@@ -404,10 +404,8 @@ async function getRecommendedPosts(options = {}) {
 
     addDebugPhase(debugLog, 'QUERY_CONDITION', whereCondition);
 
-    // 获取候选笔记（获取更多以便排序）
-    const candidateLimit = Math.min(limit * 5, 200);
-    const skip = 0; // 我们会在排序后进行分页
-
+    // 获取所有符合条件的笔记，用于推荐算法排序
+    // 所有数据都使用推荐算法智能排序
     const candidatePosts = await prisma.post.findMany({
       where: whereCondition,
       include: {
@@ -418,11 +416,15 @@ async function getRecommendedPosts(options = {}) {
         tags: { include: { tag: { select: { id: true, name: true } } } },
         paymentSettings: true
       },
-      orderBy: { created_at: 'desc' },
-      take: candidateLimit
+      orderBy: { created_at: 'desc' }
     });
 
-    addDebugPhase(debugLog, 'CANDIDATES_FETCHED', { count: candidatePosts.length });
+    const totalCount = candidatePosts.length;
+
+    addDebugPhase(debugLog, 'CANDIDATES_FETCHED', { 
+      count: candidatePosts.length,
+      totalCount
+    });
     debugLog.statistics.totalCandidates = candidatePosts.length;
 
     // 计算每个笔记的推荐分数
@@ -449,8 +451,12 @@ async function getRecommendedPosts(options = {}) {
       return true; // 暂时不过滤，让用户可以再次看到喜欢的内容
     }) : scoredPosts;
 
-    // 按分数排序
+    // 按推荐分数排序（所有数据都使用推荐算法智能排序）
     filteredPosts.sort((a, b) => b.score - a.score);
+    
+    // 分页
+    const startIndex = (page - 1) * limit;
+    const paginatedPosts = filteredPosts.slice(startIndex, startIndex + limit);
 
     debugLog.statistics.scoredPosts = filteredPosts.length;
 
@@ -471,10 +477,6 @@ async function getRecommendedPosts(options = {}) {
       author: sp.post.user?.nickname || 'Unknown'
     }));
 
-    // 分页
-    const startIndex = (page - 1) * limit;
-    const paginatedPosts = filteredPosts.slice(startIndex, startIndex + limit);
-
     debugLog.statistics.returnedPosts = paginatedPosts.length;
     debugLog.statistics.executionTimeMs = Date.now() - startTime;
 
@@ -482,7 +484,9 @@ async function getRecommendedPosts(options = {}) {
       page, 
       limit, 
       startIndex, 
-      returnedCount: paginatedPosts.length 
+      returnedCount: paginatedPosts.length,
+      totalCount,
+      totalPages: Math.ceil(totalCount / limit)
     });
 
     // 记录最终排名
@@ -506,8 +510,8 @@ async function getRecommendedPosts(options = {}) {
       pagination: {
         page,
         limit,
-        total: filteredPosts.length,
-        pages: Math.ceil(filteredPosts.length / limit)
+        total: totalCount,
+        pages: Math.ceil(totalCount / limit)
       },
       debug: debugLog
     };
@@ -551,6 +555,8 @@ async function getHotPosts(options = {}) {
     whereCondition.type = parseInt(type);
   }
 
+  // 获取所有符合条件的笔记，用于热门算法排序
+  // 所有数据都使用热门算法智能排序
   const posts = await prisma.post.findMany({
     where: whereCondition,
     include: {
@@ -565,12 +571,12 @@ async function getHotPosts(options = {}) {
       { like_count: 'desc' },
       { collect_count: 'desc' },
       { comment_count: 'desc' }
-    ],
-    take: limit * 3,
-    skip: 0
+    ]
   });
 
-  // 计算综合热门分数
+  const totalCount = posts.length;
+
+  // 计算综合热门分数（所有数据都使用热门算法智能排序）
   const scoredPosts = posts.map(post => ({
     post,
     hotScore: calculatePopularityScore(post) * calculateTimeDecay(post.created_at)
@@ -578,6 +584,7 @@ async function getHotPosts(options = {}) {
 
   scoredPosts.sort((a, b) => b.hotScore - a.hotScore);
 
+  // 分页
   const startIndex = (page - 1) * limit;
   const paginatedPosts = scoredPosts.slice(startIndex, startIndex + limit);
 
@@ -586,8 +593,8 @@ async function getHotPosts(options = {}) {
     pagination: {
       page,
       limit,
-      total: scoredPosts.length,
-      pages: Math.ceil(scoredPosts.length / limit)
+      total: totalCount,
+      pages: Math.ceil(totalCount / limit)
     }
   };
 }
